@@ -20,7 +20,6 @@ export default function EventsLibrary() {
       title: 'Untitled event',
       serveAt: undefined,
       notes: '',
-      sessions: [],
       dishes: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),

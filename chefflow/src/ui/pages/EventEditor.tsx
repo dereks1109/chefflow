@@ -1,21 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Calendar, StickyNote } from 'lucide-react';
-import SessionRow, { blankSession, sessionHasValidRange } from '../components/SessionRow';
+import DishForm, { blankDish } from '../components/DishForm';
+import DishRow from '../components/DishRow';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
-import type { KitchenEvent, Session } from '../../core/types';
+import type { KitchenEvent, Dish } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'not-found' }
   | { kind: 'ready'; event: KitchenEvent };
 
+type DishUiState =
+  | { mode: 'none' }
+  | { mode: 'adding'; draft: Dish }
+  | { mode: 'editing'; index: number; draft: Dish };
+
 export default function EventEditor() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [dirty, setDirty] = useState(false);
+  const [dishUi, setDishUi] = useState<DishUiState>({ mode: 'none' });
 
   useEffect(() => {
     let cancelled = false;
@@ -26,11 +33,6 @@ export default function EventEditor() {
     });
     return () => { cancelled = true; };
   }, [id]);
-
-  const sessionsValid = useMemo(() => {
-    if (state.kind !== 'ready') return true;
-    return state.event.sessions.every(sessionHasValidRange);
-  }, [state]);
 
   if (state.kind === 'loading') return <div className="p-6 text-slate-500">Loading…</div>;
   if (state.kind === 'not-found') {
@@ -51,22 +53,34 @@ export default function EventEditor() {
     setDirty(true);
   }
 
-  function updateSession(idx: number, next: Session) {
-    const nextList = e.sessions.slice();
-    nextList[idx] = next;
-    update('sessions', nextList);
+  function startAdding() {
+    setDishUi({ mode: 'adding', draft: blankDish(e.serveAt) });
   }
 
-  function addSession() {
-    update('sessions', [...e.sessions, blankSession(e.serveAt)]);
+  function startEditing(idx: number) {
+    setDishUi({ mode: 'editing', index: idx, draft: e.dishes[idx] });
   }
 
-  function removeSession(idx: number) {
-    update('sessions', e.sessions.filter((_, i) => i !== idx));
+  function confirmDish(next: Dish) {
+    if (dishUi.mode === 'adding') {
+      update('dishes', [...e.dishes, next]);
+    } else if (dishUi.mode === 'editing') {
+      const nextList = e.dishes.slice();
+      nextList[dishUi.index] = next;
+      update('dishes', nextList);
+    }
+    setDishUi({ mode: 'none' });
+  }
+
+  function cancelDish() {
+    setDishUi({ mode: 'none' });
+  }
+
+  function removeDish(idx: number) {
+    update('dishes', e.dishes.filter((_, i) => i !== idx));
   }
 
   async function handleSave() {
-    if (!sessionsValid) return;
     await saveEvent({ ...e, updatedAt: Date.now() });
     setDirty(false);
     navigate(`/events/${e.id}`);
@@ -88,15 +102,14 @@ export default function EventEditor() {
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={!sessionsValid}
-            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary"
           >
             Save
           </button>
         </div>
       </header>
 
-      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-6" onSubmit={(ev) => ev.preventDefault()}>
         <label className="block">
           <span className="text-sm font-medium">Event title</span>
           <input
@@ -138,37 +151,55 @@ export default function EventEditor() {
 
         <fieldset>
           <div className="flex items-center justify-between mb-3">
-            <legend className="text-sm font-medium">Sessions</legend>
-            <button
-              type="button"
-              onClick={addSession}
-              className="btn-secondary text-sm inline-flex items-center gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              Add session
-            </button>
+            <legend className="text-sm font-medium">Dishes</legend>
+            {dishUi.mode === 'none' && (
+              <button
+                type="button"
+                onClick={startAdding}
+                className="btn-secondary text-sm inline-flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Add dish
+              </button>
+            )}
           </div>
-          {e.sessions.length === 0 ? (
-            <p className="text-sm text-slate-500 dark:text-slate-500 italic">
-              No sessions yet. Sessions are time-bounded steps within the event (e.g. Prep, Cook, Plate).
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {e.sessions.map((s, i) => (
-                <SessionRow
-                  key={s.id}
+
+          <ul className="space-y-3">
+            {e.dishes.map((d, i) => (
+              dishUi.mode === 'editing' && dishUi.index === i ? (
+                <li key={d.id}>
+                  <DishForm
+                    initial={dishUi.draft}
+                    eventServeAt={e.serveAt}
+                    onConfirm={confirmDish}
+                    onCancel={cancelDish}
+                  />
+                </li>
+              ) : (
+                <DishRow
+                  key={d.id}
                   index={i}
-                  value={s}
-                  eventServeAt={e.serveAt}
-                  onChange={(next) => updateSession(i, next)}
-                  onRemove={() => removeSession(i)}
+                  value={d}
+                  onEdit={() => startEditing(i)}
+                  onRemove={() => removeDish(i)}
                 />
-              ))}
-            </ul>
-          )}
-          {!sessionsValid && (
-            <p className="mt-3 text-sm text-danger">
-              Fix the invalid session time(s) before saving.
+              )
+            ))}
+            {dishUi.mode === 'adding' && (
+              <li>
+                <DishForm
+                  initial={dishUi.draft}
+                  eventServeAt={e.serveAt}
+                  onConfirm={confirmDish}
+                  onCancel={cancelDish}
+                />
+              </li>
+            )}
+          </ul>
+
+          {e.dishes.length === 0 && dishUi.mode === 'none' && (
+            <p className="text-sm text-slate-500 dark:text-slate-500 italic">
+              No dishes yet. Add the things you're cooking or bringing to the event.
             </p>
           )}
         </fieldset>

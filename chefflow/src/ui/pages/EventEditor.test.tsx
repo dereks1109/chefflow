@@ -4,10 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import EventEditor from './EventEditor';
 import { db } from '../../db/dexie';
-import type { KitchenEvent } from '../../core/types';
+import type { KitchenEvent, Recipe } from '../../core/types';
 
 beforeEach(async () => {
   await db.events.clear();
+  await db.recipes.clear();
 });
 
 const seed: KitchenEvent = {
@@ -15,8 +16,17 @@ const seed: KitchenEvent = {
   title: 'Seed Event',
   serveAt: '2026-06-15T18:00:00.000Z',
   notes: '',
-  sessions: [],
   dishes: [],
+  createdAt: 1,
+  updatedAt: 1,
+};
+
+const ribeyeRecipe: Recipe = {
+  id: 'r_test_ribeye',
+  title: 'Ribeye',
+  originalYield: 2,
+  ingredients: [],
+  steps: [],
   createdAt: 1,
   updatedAt: 1,
 };
@@ -49,35 +59,85 @@ describe('EventEditor', () => {
     });
   });
 
-  it('adds, edits, and persists a session on save', async () => {
+  it('adds a dish via Confirm and persists it on Save', async () => {
     await db.events.put(seed);
     renderEditorAt(seed.id);
     await screen.findByDisplayValue('Seed Event');
 
-    await userEvent.click(screen.getByRole('button', { name: /add session/i }));
-    const titleInput = screen.getByLabelText(/session 1 title/i);
-    await userEvent.type(titleInput, 'Prep');
+    await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
+    await userEvent.type(screen.getByLabelText(/dish name/i), 'Roast veg');
+    await userEvent.click(screen.getByRole('button', { name: /confirm dish/i }));
+
+    // Dish should now show in compact form
+    expect(screen.getByText('Roast veg')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
     await waitFor(async () => {
       const updated = await db.events.get(seed.id);
-      expect(updated?.sessions).toHaveLength(1);
-      expect(updated?.sessions[0].title).toBe('Prep');
+      expect(updated?.dishes).toHaveLength(1);
+      expect(updated?.dishes[0].name).toBe('Roast veg');
+      expect(updated?.dishes[0].portions).toBe(1);
     });
   });
 
-  it('disables save when a session has end <= start', async () => {
-    await db.events.put({
-      ...seed,
-      sessions: [{
-        id: 's1', title: 'Bad', startAt: '2026-06-15T15:00:00.000Z',
-        endAt: '2026-06-15T14:00:00.000Z', notes: '',
-      }],
-    });
+  it('Cancel on a new dish draft discards it', async () => {
+    await db.events.put(seed);
     renderEditorAt(seed.id);
     await screen.findByDisplayValue('Seed Event');
-    const save = await screen.findByRole('button', { name: /^save$/i });
-    expect(save).toBeDisabled();
-    expect(screen.getByText(/end time must be after start time/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
+    await userEvent.type(screen.getByLabelText(/dish name/i), 'Temp');
+    await userEvent.click(screen.getByRole('button', { name: /cancel dish/i }));
+
+    expect(screen.queryByText('Temp')).toBeNull();
+    expect(screen.getByText(/no dishes yet/i)).toBeInTheDocument();
+  });
+
+  it('suggests an existing recipe in the dish name input', async () => {
+    await db.recipes.put(ribeyeRecipe);
+    await db.events.put(seed);
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Event');
+
+    await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
+    await userEvent.type(screen.getByLabelText(/dish name/i), 'Rib');
+
+    // The suggestion button shows the recipe title
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /ribeye/i })).toBeInTheDocument();
+    });
+  });
+
+  it('offers "Create new recipe" and "I\'ll get the dish ready" when nothing matches', async () => {
+    await db.events.put(seed);
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Event');
+
+    await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
+    await userEvent.type(screen.getByLabelText(/dish name/i), 'Mystery casserole');
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /create new recipe/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /i'll get the dish ready/i })).toBeInTheDocument();
+    });
+  });
+
+  it('"I\'ll get the dish ready" sets isPrepared=true on Confirm', async () => {
+    await db.events.put(seed);
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Event');
+
+    await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
+    await userEvent.type(screen.getByLabelText(/dish name/i), 'Bakery rolls');
+
+    await userEvent.click(await screen.findByRole('button', { name: /i'll get the dish ready/i }));
+    await userEvent.click(screen.getByRole('button', { name: /confirm dish/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
+
+    await waitFor(async () => {
+      const updated = await db.events.get(seed.id);
+      expect(updated?.dishes[0].isPrepared).toBe(true);
+      expect(updated?.dishes[0].recipeId).toBeUndefined();
+    });
   });
 });

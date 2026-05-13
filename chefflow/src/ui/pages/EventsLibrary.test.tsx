@@ -23,7 +23,6 @@ const dinner: KitchenEvent = {
   title: "Sunday Dinner",
   serveAt: '2026-06-15T18:00:00.000Z',
   notes: 'Family',
-  sessions: [],
   dishes: [],
   createdAt: 1,
   updatedAt: 1,

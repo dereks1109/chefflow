@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function EventCard({ event, onDelete }: Props) {
-  const sessionCount = event.sessions.length;
+  const dishCount = event.dishes.length;
   return (
     <article className="group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
       <header className="flex items-start justify-between gap-3">
@@ -35,7 +35,7 @@ export default function EventCard({ event, onDelete }: Props) {
         </div>
         <div className="flex items-center gap-2">
           <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{sessionCount} session{sessionCount === 1 ? '' : 's'}</span>
+          <span>{dishCount} dish{dishCount === 1 ? '' : 'es'}</span>
         </div>
       </dl>
       {event.notes && (

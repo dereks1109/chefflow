@@ -42,28 +42,22 @@ export interface Recipe {
   isPinned?: boolean;
 }
 
-export interface EventDish {
-  recipeId: string;
-  recipeSnapshot: Recipe;
-  portions: number;
-  perDishNotes?: string;
-}
-
-export interface Session {
+export interface Dish {
   id: string;
-  title: string;
-  startAt: string;      // ISO datetime
-  endAt: string;        // ISO datetime
-  notes: string;
+  name: string;
+  recipeId?: string;     // set when linked to a recipe in the library
+  isPrepared?: boolean;  // user marked "I'll get the dish ready" (no recipe)
+  portions: number;
+  startAt: string;       // ISO datetime
+  notes?: string;
 }
 
 export interface KitchenEvent {
   id: string;
   title: string;
-  serveAt?: string;     // ISO datetime — when food is served / event anchor
+  serveAt?: string;      // ISO datetime — when food is served / event anchor
   notes: string;
-  sessions: Session[];
-  dishes: EventDish[];  // reserved for recipe-link work (default [])
+  dishes: Dish[];
   createdAt: number;
   updatedAt: number;
 }

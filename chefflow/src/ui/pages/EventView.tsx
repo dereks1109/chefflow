@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Edit3, StickyNote, Layers } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, Clock, Edit3, Hand, Layers, StickyNote, Users } from 'lucide-react';
 import { getEvent } from '../../db/eventsRepo';
-import { formatDateTime, formatTimeRange } from '../../core/util/datetime';
-import type { KitchenEvent, Session } from '../../core/types';
+import { formatDateTime } from '../../core/util/datetime';
+import type { Dish, KitchenEvent } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -36,7 +36,7 @@ export default function EventView() {
   }
 
   const e = state.event;
-  const sortedSessions = e.sessions.slice().sort(
+  const sortedDishes = e.dishes.slice().sort(
     (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime()
   );
 
@@ -74,13 +74,13 @@ export default function EventView() {
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
           <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-          Timeline ({sortedSessions.length} session{sortedSessions.length === 1 ? '' : 's'})
+          Timeline ({sortedDishes.length} dish{sortedDishes.length === 1 ? '' : 'es'})
         </h2>
-        {sortedSessions.length === 0 ? (
-          <p className="text-sm text-slate-500 italic">No sessions added.</p>
+        {sortedDishes.length === 0 ? (
+          <p className="text-sm text-slate-500 italic">No dishes added.</p>
         ) : (
           <ol className="space-y-3">
-            {sortedSessions.map((s) => <TimelineRow key={s.id} session={s} />)}
+            {sortedDishes.map((d) => <TimelineRow key={d.id} dish={d} />)}
           </ol>
         )}
       </div>
@@ -88,17 +88,44 @@ export default function EventView() {
   );
 }
 
-function TimelineRow({ session }: { session: Session }) {
+function TimelineRow({ dish }: { dish: Dish }) {
   return (
     <li className="flex gap-4 rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
-      <div className="w-32 shrink-0 text-sm text-slate-600 dark:text-slate-400 font-mono">
-        {formatTimeRange(session.startAt, session.endAt)}
+      <div className="w-28 shrink-0 text-sm text-slate-600 dark:text-slate-400 font-mono">
+        {formatDateTime(dish.startAt).split(',').slice(-1)[0].trim()}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-semibold">{session.title || 'Untitled session'}</h3>
-        {session.notes && (
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-            {session.notes}
+        <div className="flex items-center gap-2 flex-wrap">
+          <h3 className="font-semibold">{dish.name || 'Untitled dish'}</h3>
+          {dish.recipeId && (
+            <Link
+              to={`/recipes/${dish.recipeId}/edit`}
+              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+            >
+              <BookOpen className="h-3 w-3" aria-hidden="true" />
+              recipe
+            </Link>
+          )}
+          {dish.isPrepared && (
+            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+              <Hand className="h-3 w-3" aria-hidden="true" />
+              ready
+            </span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+          <span className="inline-flex items-center gap-1">
+            <Users className="h-3 w-3" aria-hidden="true" />
+            {dish.portions} portion{dish.portions === 1 ? '' : 's'}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            {formatDateTime(dish.startAt)}
+          </span>
+        </div>
+        {dish.notes && (
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+            {dish.notes}
           </p>
         )}
       </div>

@@ -9,7 +9,6 @@ function makeEvent(overrides: Partial<KitchenEvent> = {}): KitchenEvent {
     title: 'Test Event',
     serveAt: '2026-06-15T18:00:00.000Z',
     notes: '',
-    sessions: [],
     dishes: [],
     createdAt: 1000,
     updatedAt: 1000,
@@ -26,7 +25,7 @@ describe('eventsRepo', () => {
     await saveEvent(makeEvent());
     const got = await getEvent('e_test_001');
     expect(got?.title).toBe('Test Event');
-    expect(got?.sessions).toEqual([]);
+    expect(got?.dishes).toEqual([]);
   });
 
   it('returns undefined for unknown id', async () => {
@@ -63,14 +62,16 @@ describe('eventsRepo', () => {
     expect(await getEvent('e_test_001')).toBeUndefined();
   });
 
-  it('round-trips sessions', async () => {
+  it('round-trips dishes including a recipe link and a "prepared" flag', async () => {
     await saveEvent(makeEvent({
-      sessions: [
-        { id: 's1', title: 'Prep', startAt: '2026-06-15T14:00:00.000Z', endAt: '2026-06-15T15:30:00.000Z', notes: 'Chop veg' },
+      dishes: [
+        { id: 'd1', name: 'Ribeye', recipeId: 'r_demo_ribeye', portions: 2, startAt: '2026-06-15T17:30:00.000Z' },
+        { id: 'd2', name: 'Bakery rolls', isPrepared: true, portions: 8, startAt: '2026-06-15T18:00:00.000Z', notes: 'pick up at 5' },
       ],
     }));
     const got = await getEvent('e_test_001');
-    expect(got?.sessions).toHaveLength(1);
-    expect(got?.sessions[0].title).toBe('Prep');
+    expect(got?.dishes).toHaveLength(2);
+    expect(got?.dishes[0]).toMatchObject({ name: 'Ribeye', recipeId: 'r_demo_ribeye', portions: 2 });
+    expect(got?.dishes[1]).toMatchObject({ name: 'Bakery rolls', isPrepared: true, notes: 'pick up at 5' });
   });
 });
