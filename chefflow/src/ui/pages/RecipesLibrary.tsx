@@ -26,8 +26,14 @@ export default function RecipesLibrary() {
   }
 
   async function handleDelete(target: Recipe) {
+    if (target.id.startsWith('r_demo_')) return;
     if (!window.confirm(`Delete "${target.title}"? This cannot be undone.`)) return;
     await deleteRecipe(target.id);
+    setRecipes(await listRecipes());
+  }
+
+  async function handleTogglePin(target: Recipe) {
+    await saveRecipe({ ...target, isPinned: !target.isPinned });
     setRecipes(await listRecipes());
   }
 
@@ -79,7 +85,12 @@ export default function RecipesLibrary() {
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {recipes.map((r) => (
           <li key={r.id}>
-            <RecipeCard recipe={r} onDuplicate={handleDuplicate} onDelete={handleDelete} />
+            <RecipeCard
+              recipe={r}
+              onTogglePin={handleTogglePin}
+              onDuplicate={handleDuplicate}
+              onDelete={handleDelete}
+            />
           </li>
         ))}
       </ul>

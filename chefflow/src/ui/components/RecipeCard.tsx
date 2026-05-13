@@ -3,17 +3,37 @@ import type { Recipe } from '../../core/types';
 
 interface Props {
   recipe: Recipe;
+  onTogglePin: (r: Recipe) => void;
   onDuplicate: (r: Recipe) => void;
   onDelete: (r: Recipe) => void;
 }
 
-export default function RecipeCard({ recipe, onDuplicate, onDelete }: Props) {
+function isDemo(recipe: Recipe): boolean {
+  return recipe.id.startsWith('r_demo_');
+}
+
+export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete }: Props) {
+  const pinned = Boolean(recipe.isPinned);
   return (
     <article className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-kitchen-ink">
       <header className="flex items-start justify-between gap-2">
-        <Link to={`/recipes/${recipe.id}/edit`} className="text-lg font-semibold hover:text-accent">
+        <Link to={`/recipes/${recipe.id}/edit`} className="text-lg font-semibold hover:text-accent flex-1 min-w-0">
           {recipe.title || 'Untitled recipe'}
         </Link>
+        <button
+          type="button"
+          onClick={() => onTogglePin(recipe)}
+          className={`touch-target px-3 rounded-md text-lg shrink-0 ${
+            pinned
+              ? 'bg-accent text-white'
+              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+          }`}
+          aria-label={pinned ? 'Unpin recipe' : 'Pin recipe to top'}
+          aria-pressed={pinned}
+          title={pinned ? 'Pinned — click to unpin' : 'Pin to top'}
+        >
+          📌
+        </button>
       </header>
       <dl className="mt-2 text-sm text-slate-600 dark:text-slate-400 flex flex-wrap gap-x-3 gap-y-1">
         <div>
@@ -38,9 +58,11 @@ export default function RecipeCard({ recipe, onDuplicate, onDelete }: Props) {
         <button type="button" onClick={() => onDuplicate(recipe)} className="btn-secondary text-sm">
           Duplicate
         </button>
-        <button type="button" onClick={() => onDelete(recipe)} className="btn-danger text-sm">
-          Delete
-        </button>
+        {!isDemo(recipe) && (
+          <button type="button" onClick={() => onDelete(recipe)} className="btn-danger text-sm">
+            Delete
+          </button>
+        )}
       </footer>
     </article>
   );

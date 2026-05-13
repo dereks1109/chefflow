@@ -53,4 +53,13 @@ describe('recipesRepo', () => {
     await deleteRecipe('r_test_001');
     expect(await getRecipe('r_test_001')).toBeUndefined();
   });
+
+  it('listRecipes places pinned recipes first, then by updatedAt desc within each group', async () => {
+    await saveRecipe(makeRecipe({ id: 'a', title: 'A', updatedAt: 100 }));
+    await saveRecipe(makeRecipe({ id: 'b', title: 'B', updatedAt: 300 }));
+    await saveRecipe(makeRecipe({ id: 'c', title: 'C', updatedAt: 200, isPinned: true }));
+    await saveRecipe(makeRecipe({ id: 'd', title: 'D', updatedAt: 50, isPinned: true }));
+    const all = await listRecipes();
+    expect(all.map(r => r.id)).toEqual(['c', 'd', 'b', 'a']);
+  });
 });

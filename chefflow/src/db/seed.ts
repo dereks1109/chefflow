@@ -2,7 +2,7 @@ import { db } from './dexie';
 import { randomId } from '../core/util/id';
 import type { Recipe, Ingredient, WorkflowStep, StepPhase } from '../core/types';
 
-const SEED_FLAG = 'chefflow:seeded-demo';
+const SEED_FLAG = 'chefflow:seeded-demo-v2';
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -46,7 +46,7 @@ function demoRecipes(): Recipe[] {
   return [
     makeRecipe(
       'r_demo_ribeye',
-      'Pan-seared Rib Eye',
+      '(Demo) Ribeye',
       2,
       '5m',
       '15m',
@@ -68,7 +68,7 @@ function demoRecipes(): Recipe[] {
     ),
     makeRecipe(
       'r_demo_salad',
-      'Mixed Garden Salad',
+      '(Demo) Garden Salad',
       4,
       '10m',
       undefined,
@@ -90,7 +90,7 @@ function demoRecipes(): Recipe[] {
     ),
     makeRecipe(
       'r_demo_soup',
-      'Tomato Basil Soup',
+      '(Demo) Tomato Basil Soup',
       4,
       '10m',
       '30m',

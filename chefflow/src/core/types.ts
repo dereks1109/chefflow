@@ -39,6 +39,7 @@ export interface Recipe {
   steps: WorkflowStep[];
   createdAt: number;
   updatedAt: number;
+  isPinned?: boolean;
 }
 
 export interface EventDish {
