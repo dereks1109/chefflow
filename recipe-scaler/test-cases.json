@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "name": "Simple Scale-Up",
+    "input": "Beef stew recipe serves 4, need for 12. Ingredients: 800g beef, 2 tbsp tomato paste, 1 tsp salt, 250ml red wine.",
+    "expected": "Scaled 3x: 2.4kg beef, 6 tbsp tomato paste, 3 tsp salt, 750ml red wine"
+  },
+  {
+    "id": 2,
+    "name": "Unit Conversion",
+    "input": "Apple pie recipe (no scaling). Convert to metric: 3 cups flour, 1 cup sugar, 0.5 cup butter.",
+    "expected": "Metric: ~375g flour, ~190g sugar, ~120g butter. Servings unchanged."
+  },
+  {
+    "id": 3,
+    "name": "Locked Ingredient",
+    "input": "Scale garam masala 5x. Ingredients: 20g cumin, 15g coriander, 5g salt (LOCKED).",
+    "expected": "Scaled: 100g cumin, 75g coriander, 5g salt (unchanged). Note: salt locked."
+  },
+  {
+    "id": 4,
+    "name": "Halving Recipe",
+    "input": "Pasta carbonara serves 4, need for 2. Ingredients: 400g spaghetti, 200g bacon, 4 eggs.",
+    "expected": "Halved: 200g spaghetti, 100g bacon, 2 eggs"
+  },
+  {
+    "id": 5,
+    "name": "Temperature Conversion",
+    "input": "Bake at 350°F. What's that in Celsius?",
+    "expected": "350°F ≈ 177°C (round to 175°C or 180°C for oven preset)"
+  },
+  {
+    "id": 6,
+    "name": "Extreme Scaling",
+    "input": "Scale vanilla cake frosting 25x (4→100 servings). Vanilla: 1 tsp. Should I scale it?",
+    "expected": "Flag as risky (would be 25 tsp = 1.3 cups). Suggest 50% scaling or lock it."
+  },
+  {
+    "id": 7,
+    "name": "Fractional Scaling",
+    "input": "Scale 2.5x: 0.75 cup flour, 0.33 cup vinegar, 1.5 tbsp mustard.",
+    "expected": "Scaled: ~444ml flour, ~196ml vinegar, ~56ml mustard"
+  },
+  {
+    "id": 8,
+    "name": "Ingredient Modifiers",
+    "input": "Double recipe: 200g chicken breast (thinly sliced), 150g peppers (diced into 1-inch pieces).",
+    "expected": "Doubled: 400g chicken (thinly sliced), 300g peppers (diced into 1-inch pieces). Modifiers preserved."
+  },
+  {
+    "id": 9,
+    "name": "Missing Serving Size",
+    "input": "Scale this apple pie (doesn't state servings): 6 apples, 500g sugar, 1 cup flour.",
+    "expected": "Ask: Assume 8 servings or user specifies? Then proceed with scaling."
+  },
+  {
+    "id": 10,
+    "name": "Non-Linear Ingredient",
+    "input": "Scale baking powder 4x (4→16 servings). Current: 1.5 tbsp baking powder.",
+    "expected": "Flag non-linear. Suggest option: scale 4x (6 tbsp), scale 75% (4.5 tbsp), or lock (1.5 tbsp)."
+  }
+]

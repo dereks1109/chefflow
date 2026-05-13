@@ -20,3 +20,6 @@ chefflow/*.local
 
 # Test artifacts
 coverage/
+
+# Claude Code local state
+.claude/
