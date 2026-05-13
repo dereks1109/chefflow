@@ -174,7 +174,6 @@ export default function RecipeEditor() {
                 key={s.id}
                 index={i}
                 value={s}
-                earlierSteps={r.steps.slice(0, i)}
                 onChange={(next) => updateStep(i, next)}
                 onRemove={() => removeStep(i)}
               />
