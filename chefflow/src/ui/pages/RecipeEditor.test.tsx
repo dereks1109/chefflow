@@ -34,13 +34,15 @@ function renderEditorAt(id: string) {
 }
 
 describe('RecipeEditor — header + ingredients', () => {
-  it('loads an existing recipe and shows its title', async () => {
+  it('loads an existing recipe and shows its title + prep time', async () => {
     await db.recipes.put(seed);
     renderEditorAt(seed.id);
     await waitFor(() => {
       expect(screen.getByDisplayValue('Seed Recipe')).toBeInTheDocument();
     });
-    expect(screen.getByDisplayValue('20m')).toBeInTheDocument();
+    // seed.prepTime = '20m' → 0h, 20m
+    expect(screen.getByLabelText('Prep time hours')).toHaveValue('0');
+    expect(screen.getByLabelText('Prep time minutes')).toHaveValue('20');
   });
 
   it('edits the title and saves', async () => {

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
 import MarkdownPreview from '../components/MarkdownPreview';
+import TimePicker from '../components/TimePicker';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import type { Recipe, Ingredient, WorkflowStep } from '../../core/types';
 
@@ -127,26 +128,16 @@ export default function RecipeEditor() {
               className="input mt-1"
             />
           </label>
-          <label className="block">
-            <span className="text-sm font-medium">Prep time</span>
-            <input
-              type="text"
-              placeholder="30m"
-              value={r.prepTime ?? ''}
-              onChange={(e) => update('prepTime', e.target.value || undefined)}
-              className="input mt-1"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium">Cook time</span>
-            <input
-              type="text"
-              placeholder="2h"
-              value={r.cookTime ?? ''}
-              onChange={(e) => update('cookTime', e.target.value || undefined)}
-              className="input mt-1"
-            />
-          </label>
+          <TimePicker
+            label="Prep time"
+            value={r.prepTime}
+            onChange={(v) => update('prepTime', v)}
+          />
+          <TimePicker
+            label="Cook time"
+            value={r.cookTime}
+            onChange={(v) => update('cookTime', v)}
+          />
         </div>
 
         <fieldset>
