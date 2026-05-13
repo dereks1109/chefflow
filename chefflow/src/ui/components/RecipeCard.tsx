@@ -17,7 +17,7 @@ export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete 
   return (
     <article className="border border-slate-200 dark:border-slate-700 rounded-lg p-4 bg-white dark:bg-kitchen-ink">
       <header className="flex items-start justify-between gap-2">
-        <Link to={`/recipes/${recipe.id}/edit`} className="text-lg font-semibold hover:text-accent flex-1 min-w-0">
+        <Link to={`/recipes/${recipe.id}`} className="text-lg font-semibold hover:text-accent flex-1 min-w-0">
           {recipe.title || 'Untitled recipe'}
         </Link>
         <button
