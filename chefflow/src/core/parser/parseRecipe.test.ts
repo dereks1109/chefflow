@@ -54,3 +54,48 @@ describe('parseRecipe — ingredients', () => {
     expect(ids).toEqual(['i1', 'i2', 'i3', 'i4']);
   });
 });
+
+describe('parseRecipe — steps (basic)', () => {
+  it('parses 3 steps', () => {
+    expect(parseRecipe(stewMd).steps).toHaveLength(3);
+  });
+  it('first step text is plain', () => {
+    const s = parseRecipe(stewMd).steps[0];
+    expect(s.text).toBe('Chop the onions.');
+  });
+  it('assigns ids s1, s2, s3 by order', () => {
+    const ids = parseRecipe(stewMd).steps.map(s => s.id);
+    expect(ids).toEqual(['s1', 's2', 's3']);
+  });
+  it('defaults: kind=active, thermal=normal, allergen=allergen-free, phase=cook', () => {
+    const s = parseRecipe(stewMd).steps[0];
+    expect(s.kind).toBe('active');
+    expect(s.thermalClass).toBe('normal');
+    expect(s.allergenClass).toBe('allergen-free');
+    expect(s.phase).toBe('cook');
+    expect(s.dependsOn).toEqual([]);
+  });
+});
+
+describe('parseRecipe — steps (metadata + timer)', () => {
+  it('parses thermal attribute', () => {
+    const s = parseRecipe(stewMd).steps[1];
+    expect(s.thermalClass).toBe('stable');
+  });
+  it('parses phase attribute', () => {
+    const s = parseRecipe(stewMd).steps[1];
+    expect(s.phase).toBe('cook');
+  });
+  it('parses depends attribute as array', () => {
+    const s = parseRecipe(stewMd).steps[2];
+    expect(s.dependsOn).toEqual(['s2']);
+  });
+  it('extracts Timer duration', () => {
+    const s = parseRecipe(stewMd).steps[1];
+    expect(s.durationSec).toBe(600);
+  });
+  it('keeps Timer markup in text (the parser does not strip it)', () => {
+    const s = parseRecipe(stewMd).steps[1];
+    expect(s.text).toContain('<Timer duration="600s">');
+  });
+});
