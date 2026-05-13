@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
+import StepRow, { blankStep } from '../components/StepRow';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
-import type { Recipe, Ingredient } from '../../core/types';
+import type { Recipe, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -61,6 +62,20 @@ export default function RecipeEditor() {
 
   function removeIngredient(idx: number) {
     update('ingredients', r.ingredients.filter((_, i) => i !== idx));
+  }
+
+  function updateStep(idx: number, next: WorkflowStep) {
+    const nextList = r.steps.slice();
+    nextList[idx] = next;
+    update('steps', nextList);
+  }
+
+  function addStep() {
+    update('steps', [...r.steps, blankStep()]);
+  }
+
+  function removeStep(idx: number) {
+    update('steps', r.steps.filter((_, i) => i !== idx));
   }
 
   async function handleSave() {
@@ -146,6 +161,25 @@ export default function RecipeEditor() {
           </ul>
           <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
             Add ingredient
+          </button>
+        </fieldset>
+
+        <fieldset>
+          <legend className="text-sm font-medium">Steps</legend>
+          <ul className="space-y-3">
+            {r.steps.map((s, i) => (
+              <StepRow
+                key={s.id}
+                index={i}
+                value={s}
+                earlierSteps={r.steps.slice(0, i)}
+                onChange={(next) => updateStep(i, next)}
+                onRemove={() => removeStep(i)}
+              />
+            ))}
+          </ul>
+          <button type="button" onClick={addStep} className="btn-secondary mt-3">
+            Add step
           </button>
         </fieldset>
       </form>

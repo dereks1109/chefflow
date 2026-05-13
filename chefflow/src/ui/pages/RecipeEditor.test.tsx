@@ -75,3 +75,35 @@ describe('RecipeEditor — header + ingredients', () => {
     });
   });
 });
+
+describe('RecipeEditor — steps', () => {
+  it('adds a step and persists it on save', async () => {
+    await db.recipes.put(seed);
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Recipe');
+
+    await userEvent.click(screen.getByRole('button', { name: /add step/i }));
+    const stepTextarea = screen.getByLabelText(/step 1 text/i);
+    await userEvent.type(stepTextarea, 'Sear the beef');
+
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(async () => {
+      const updated = await db.recipes.get(seed.id);
+      expect(updated?.steps).toHaveLength(1);
+      expect(updated?.steps[0].text).toBe('Sear the beef');
+    });
+  });
+
+  it('removes a step', async () => {
+    await db.recipes.put({ ...seed, steps: [{
+      id: 's1', text: 'Existing', kind: 'active',
+      thermalClass: 'normal', allergenClass: 'allergen-free',
+      dependsOn: [], phase: 'cook'
+    }] });
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Existing');
+
+    await userEvent.click(screen.getByRole('button', { name: /remove step 1/i }));
+    expect(screen.queryByDisplayValue('Existing')).toBeNull();
+  });
+});
