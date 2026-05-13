@@ -1,21 +1,26 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import AppLayout from './ui/layout/AppLayout';
+import EventsPlaceholder from './ui/pages/EventsPlaceholder';
+import KitchenPlaceholder from './ui/pages/KitchenPlaceholder';
+
+function RecipesLibraryStub() {
+  return <div className="p-6"><h1 className="text-2xl font-bold">Recipes</h1></div>;
+}
+function RecipeEditorStub() {
+  return <div className="p-6"><h1 className="text-2xl font-bold">Edit Recipe</h1></div>;
+}
 
 export default function App() {
   return (
-    <div className="min-h-screen">
-      <Routes>
+    <Routes>
+      <Route element={<AppLayout />}>
         <Route path="/" element={<Navigate to="/recipes" replace />} />
-        <Route path="*" element={<PlaceholderShell />} />
-      </Routes>
-    </div>
-  );
-}
-
-function PlaceholderShell() {
-  return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold">ChefFlow</h1>
-      <p className="text-slate-600 dark:text-slate-400">Booting up…</p>
-    </main>
+        <Route path="/recipes" element={<RecipesLibraryStub />} />
+        <Route path="/recipes/:id/edit" element={<RecipeEditorStub />} />
+        <Route path="/events" element={<EventsPlaceholder />} />
+        <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+        <Route path="*" element={<div className="p-6">Not found.</div>} />
+      </Route>
+    </Routes>
   );
 }
