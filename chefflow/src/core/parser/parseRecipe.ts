@@ -1,5 +1,6 @@
 import matter from 'gray-matter';
 import type { Recipe, Ingredient, WorkflowStep } from '../types';
+import { randomId } from '../util/id';
 
 export function parseRecipe(md: string): Recipe {
   const { data, content } = matter(md);
@@ -100,6 +101,3 @@ function extractSection(content: string, name: string): string | null {
   return m ? m[0] : null;
 }
 
-function randomId(): string {
-  return 'r_' + Math.random().toString(36).slice(2, 10);
-}
