@@ -21,19 +21,19 @@ export default function IngredientRow({ index, value, onChange, onRemove }: Prop
   return (
     <li className="py-2">
       <div className="flex items-start gap-2">
-        <span className="text-sm font-semibold w-6 pt-2">{index + 1}.</span>
+        <span className="text-sm font-semibold w-6 pt-2 shrink-0">{index + 1}.</span>
         <input
           type="number"
           step="any"
           value={value.amount}
           onChange={(e) => update('amount', Number(e.target.value))}
-          className="input w-20"
+          className="input w-20 shrink-0"
           aria-label="Amount"
         />
         <select
           value={value.unit}
           onChange={(e) => update('unit', e.target.value)}
-          className="input w-24"
+          className="input w-24 shrink-0"
           aria-label="Unit"
         >
           <optgroup label="Weight">

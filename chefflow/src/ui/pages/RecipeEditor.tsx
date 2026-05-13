@@ -115,9 +115,9 @@ export default function RecipeEditor() {
           />
         </label>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3 items-start">
           <div>
-            <div className="text-sm font-medium">Yield (portions)</div>
+            <div className="text-sm font-medium">Yield</div>
             <input
               type="number"
               min={1}
@@ -139,7 +139,7 @@ export default function RecipeEditor() {
           />
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 items-start">
+        <div className="grid gap-2 md:grid-cols-2 items-start">
           <fieldset>
             <legend className="text-sm font-medium">Ingredients</legend>
             <ul>
@@ -160,7 +160,7 @@ export default function RecipeEditor() {
 
           <fieldset>
             <legend className="text-sm font-medium">Steps</legend>
-            <ul className="space-y-3">
+            <ul>
               {r.steps.map((s, i) => (
                 <StepRow
                   key={s.id}
