@@ -10,7 +10,7 @@ interface Props {
 
 export default function StepRow({ index, value, onChange, onRemove }: Props) {
   return (
-    <li className="border border-slate-200 dark:border-slate-700 rounded-md p-3">
+    <li className="py-2">
       <div className="flex items-start gap-2">
         <span className="text-sm font-semibold w-6 pt-2">{index + 1}.</span>
         <textarea
