@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
+import MarkdownPreview from '../components/MarkdownPreview';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import type { Recipe, Ingredient, WorkflowStep } from '../../core/types';
 
@@ -103,6 +104,7 @@ export default function RecipeEditor() {
         </div>
       </header>
 
+      <div className="grid gap-4 md:grid-cols-2">
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <label className="block">
           <span className="text-sm font-medium">Title</span>
@@ -183,6 +185,8 @@ export default function RecipeEditor() {
           </button>
         </fieldset>
       </form>
+      <MarkdownPreview recipe={r} />
+      </div>
     </section>
   );
 }
