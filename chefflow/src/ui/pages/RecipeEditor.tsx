@@ -115,17 +115,18 @@ export default function RecipeEditor() {
           />
         </label>
 
-        <div className="grid grid-cols-3 gap-3">
-          <label className="block">
-            <span className="text-sm font-medium">Yield (portions)</span>
+        <div className="grid grid-cols-3 gap-3 items-start">
+          <div>
+            <div className="text-sm font-medium">Yield</div>
             <input
               type="number"
               min={1}
               value={r.originalYield}
               onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
               className="input mt-1"
+              aria-label="Yield (portions)"
             />
-          </label>
+          </div>
           <TimePicker
             label="Prep time"
             value={r.prepTime}
@@ -138,13 +139,14 @@ export default function RecipeEditor() {
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 items-start">
+        <div className="grid gap-2 md:grid-cols-2 items-start">
           <fieldset>
             <legend className="text-sm font-medium">Ingredients</legend>
-            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+            <ul>
               {r.ingredients.map((ing, i) => (
                 <IngredientRow
                   key={ing.id}
+                  index={i}
                   value={ing}
                   onChange={(next) => updateIngredient(i, next)}
                   onRemove={() => removeIngredient(i)}
@@ -158,7 +160,7 @@ export default function RecipeEditor() {
 
           <fieldset>
             <legend className="text-sm font-medium">Steps</legend>
-            <ul className="space-y-3">
+            <ul>
               {r.steps.map((s, i) => (
                 <StepRow
                   key={s.id}
