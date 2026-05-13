@@ -105,7 +105,7 @@ export default function RecipeEditor() {
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <label className="block">
           <span className="text-sm font-medium">Title</span>
@@ -140,40 +140,42 @@ export default function RecipeEditor() {
           />
         </div>
 
-        <fieldset>
-          <legend className="text-sm font-medium">Ingredients</legend>
-          <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-            {r.ingredients.map((ing, i) => (
-              <IngredientRow
-                key={ing.id}
-                value={ing}
-                onChange={(next) => updateIngredient(i, next)}
-                onRemove={() => removeIngredient(i)}
-              />
-            ))}
-          </ul>
-          <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
-            Add ingredient
-          </button>
-        </fieldset>
+        <div className="grid gap-4 md:grid-cols-2 items-start">
+          <fieldset>
+            <legend className="text-sm font-medium">Ingredients</legend>
+            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+              {r.ingredients.map((ing, i) => (
+                <IngredientRow
+                  key={ing.id}
+                  value={ing}
+                  onChange={(next) => updateIngredient(i, next)}
+                  onRemove={() => removeIngredient(i)}
+                />
+              ))}
+            </ul>
+            <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
+              Add ingredient
+            </button>
+          </fieldset>
 
-        <fieldset>
-          <legend className="text-sm font-medium">Steps</legend>
-          <ul className="space-y-3">
-            {r.steps.map((s, i) => (
-              <StepRow
-                key={s.id}
-                index={i}
-                value={s}
-                onChange={(next) => updateStep(i, next)}
-                onRemove={() => removeStep(i)}
-              />
-            ))}
-          </ul>
-          <button type="button" onClick={addStep} className="btn-secondary mt-3">
-            Add step
-          </button>
-        </fieldset>
+          <fieldset>
+            <legend className="text-sm font-medium">Steps</legend>
+            <ul className="space-y-3">
+              {r.steps.map((s, i) => (
+                <StepRow
+                  key={s.id}
+                  index={i}
+                  value={s}
+                  onChange={(next) => updateStep(i, next)}
+                  onRemove={() => removeStep(i)}
+                />
+              ))}
+            </ul>
+            <button type="button" onClick={addStep} className="btn-secondary mt-3">
+              Add step
+            </button>
+          </fieldset>
+        </div>
       </form>
       <MarkdownPreview recipe={r} />
       </div>
