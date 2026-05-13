@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+.DS_Store
+
+# Vite
+chefflow/dist
+chefflow/dist-ssr
+chefflow/*.local
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Test artifacts
+coverage/
