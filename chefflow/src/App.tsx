@@ -7,12 +7,12 @@ import RecipeEditor from './ui/pages/RecipeEditor';
 import EventsLibrary from './ui/pages/EventsLibrary';
 import EventView from './ui/pages/EventView';
 import EventEditor from './ui/pages/EventEditor';
-import { seedDemoRecipes } from './db/seed';
+import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 
 export default function App() {
   const [booted, setBooted] = useState(false);
   useEffect(() => {
-    seedDemoRecipes().finally(() => setBooted(true));
+    Promise.all([seedDemoRecipes(), seedDemoEvents()]).finally(() => setBooted(true));
   }, []);
 
   if (!booted) {

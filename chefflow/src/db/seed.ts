@@ -1,8 +1,9 @@
 import { db } from './dexie';
 import { randomId } from '../core/util/id';
-import type { Recipe, Ingredient, WorkflowStep, StepPhase } from '../core/types';
+import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish } from '../core/types';
 
 const SEED_FLAG = 'chefflow:seeded-demo-v2';
+const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v1';
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -121,4 +122,43 @@ export async function seedDemoRecipes(): Promise<void> {
   if (window.localStorage.getItem(SEED_FLAG) === '1') return;
   await db.recipes.bulkPut(demoRecipes());
   window.localStorage.setItem(SEED_FLAG, '1');
+}
+
+function demoDish(name: string, recipeId: string, portions: number, startAt: Date): Dish {
+  return {
+    id: randomId(),
+    name,
+    recipeId,
+    portions,
+    startAt: startAt.toISOString(),
+  };
+}
+
+function demoEvents(): KitchenEvent[] {
+  // Local-time construction: 2026-05-14 18:00 in the user's timezone.
+  const serve = new Date(2026, 4, 14, 18, 0, 0);
+  const ribeyeStart = new Date(2026, 4, 14, 17, 30, 0);
+  const saladStart = new Date(2026, 4, 14, 17, 45, 0);
+  const now = Date.now();
+  return [
+    {
+      id: 'e_demo_main',
+      title: 'Demo Event',
+      serveAt: serve.toISOString(),
+      notes: 'Nothing',
+      dishes: [
+        demoDish('(Demo) Ribeye', 'r_demo_ribeye', 2, ribeyeStart),
+        demoDish('(Demo) Garden Salad', 'r_demo_salad', 4, saladStart),
+      ],
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+}
+
+export async function seedDemoEvents(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (window.localStorage.getItem(EVENTS_SEED_FLAG) === '1') return;
+  await db.events.bulkPut(demoEvents());
+  window.localStorage.setItem(EVENTS_SEED_FLAG, '1');
 }

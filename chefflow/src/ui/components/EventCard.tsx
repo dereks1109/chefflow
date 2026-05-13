@@ -8,6 +8,10 @@ interface Props {
   onDelete: (e: KitchenEvent) => void;
 }
 
+function isDemo(event: KitchenEvent): boolean {
+  return event.id.startsWith('e_demo_');
+}
+
 export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
@@ -19,14 +23,16 @@ export default function EventCard({ event, onDelete }: Props) {
         >
           {event.title || 'Untitled event'}
         </Link>
-        <button
-          type="button"
-          onClick={() => onDelete(event)}
-          className="touch-target px-2 rounded-md text-slate-400 hover:text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
-          aria-label={`Delete event ${event.title || 'Untitled event'}`}
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-        </button>
+        {!isDemo(event) && (
+          <button
+            type="button"
+            onClick={() => onDelete(event)}
+            className="touch-target px-2 rounded-md text-slate-400 hover:text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
+            aria-label={`Delete event ${event.title || 'Untitled event'}`}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
       </header>
       <dl className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
         <div className="flex items-center gap-2">

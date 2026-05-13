@@ -29,6 +29,7 @@ export default function EventsLibrary() {
   }
 
   async function handleDelete(target: KitchenEvent) {
+    if (target.id.startsWith('e_demo_')) return;
     if (!window.confirm(`Delete "${target.title}"? This cannot be undone.`)) return;
     await deleteEvent(target.id);
     setEvents(await listEvents());
