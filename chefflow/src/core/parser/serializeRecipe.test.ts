@@ -42,3 +42,45 @@ describe('serializeRecipe — round trip', () => {
     expect(md).toMatch(/^1\.\s+Chop the onions\.$/m);
   });
 });
+
+describe('serializeRecipe — custom step ids', () => {
+  it('preserves custom step ids through round trip', () => {
+    const md = `---
+recipe_id: "test"
+original_yield: 1
+---
+# Test
+## Ingredients
+- [ ] {1|g|Stub}
+## Workflow
+1. <step id="sear">Sear it.</step>
+2. <step depends="sear">Plate it.</step>
+`;
+    const r1 = parseRecipe(md);
+    expect(r1.steps[0].id).toBe('sear');
+    expect(r1.steps[1].dependsOn).toEqual(['sear']);
+
+    const md2 = serializeRecipe(r1);
+    const r2 = parseRecipe(md2);
+    expect(r2.steps[0].id).toBe('sear');
+    expect(r2.steps[1].dependsOn).toEqual(['sear']);
+  });
+
+  it('omits the id attribute when step id matches default positional id', () => {
+    const md = `---
+recipe_id: "test"
+original_yield: 1
+---
+# Test
+## Ingredients
+- [ ] {1|g|Stub}
+## Workflow
+1. Plain step.
+`;
+    const r1 = parseRecipe(md);
+    expect(r1.steps[0].id).toBe('s1');
+    const md2 = serializeRecipe(r1);
+    // The serialized form should NOT contain id="s1"
+    expect(md2).not.toMatch(/id="s1"/);
+  });
+});

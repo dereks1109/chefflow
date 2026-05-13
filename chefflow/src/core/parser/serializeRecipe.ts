@@ -13,7 +13,7 @@ export function serializeRecipe(r: Recipe): string {
     .join('\n');
 
   const ingredientLines = r.ingredients.map(serializeIngredient).join('\n');
-  const stepLines = r.steps.map((s, i) => `${i + 1}. ${serializeStep(s)}`).join('\n');
+  const stepLines = r.steps.map((s, i) => `${i + 1}. ${serializeStep(s, i)}`).join('\n');
 
   return [
     fm,
@@ -32,8 +32,10 @@ function serializeIngredient(i: Ingredient): string {
   return `- [ ] {${i.amount}|${i.unit}|${i.name}}${tail}`;
 }
 
-function serializeStep(s: WorkflowStep): string {
+function serializeStep(s: WorkflowStep, index: number): string {
   const attrs: string[] = [];
+  const defaultId = `s${index + 1}`;
+  if (s.id !== defaultId) attrs.push(`id="${s.id}"`);
   if (s.kind !== 'active') attrs.push(`kind="${s.kind}"`);
   if (s.thermalClass !== 'normal') attrs.push(`thermal="${s.thermalClass}"`);
   if (s.allergenClass !== 'allergen-free') attrs.push(`allergen="${s.allergenClass}"`);

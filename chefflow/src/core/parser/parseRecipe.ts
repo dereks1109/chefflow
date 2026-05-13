@@ -7,7 +7,7 @@ export function parseRecipe(md: string): Recipe {
   const title = titleMatch ? titleMatch[1].trim() : 'Untitled Recipe';
 
   return {
-    id: String(data.recipe_id ?? cryptoRandomId()),
+    id: String(data.recipe_id ?? randomId()),
     title,
     originalYield: Number(data.original_yield ?? 1),
     prepTime: data.prep_time ? String(data.prep_time) : undefined,
@@ -100,6 +100,6 @@ function extractSection(content: string, name: string): string | null {
   return m ? m[0] : null;
 }
 
-function cryptoRandomId(): string {
+function randomId(): string {
   return 'r_' + Math.random().toString(36).slice(2, 10);
 }

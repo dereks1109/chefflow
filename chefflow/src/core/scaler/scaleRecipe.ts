@@ -1,4 +1,5 @@
 import type { Recipe, Ingredient, UnitSystem } from '../types';
+import type { Measurement } from '../units/normalize';
 import { convertUnit } from '../units/convert';
 import { roundSensible } from '../units/normalize';
 import Decimal from 'decimal.js';
@@ -20,11 +21,11 @@ export function scaleRecipe(recipe: Recipe, opts: ScaleOptions): Recipe {
   };
 }
 
-interface Measurement {
-  amount: number;
-  unit: string;
-}
-
+// Scaler-specific normalization: the metric upgrade paths (g→kg, ml→L)
+// deliberately skip roundSensible to preserve exact arithmetic results
+// like 2400g → 2.4kg (roundSensible would yield 2.5kg under the <10/step-0.25
+// rule). Imperial oz→lb still uses roundSensible because oz→lb conversion
+// yields messier fractions where chef-friendly rounding helps.
 /**
  * Normalize a measurement: upgrade small units to larger ones when thresholds
  * are met, without applying extra rounding after division (preserving exact
