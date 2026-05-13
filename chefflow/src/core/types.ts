@@ -49,12 +49,21 @@ export interface EventDish {
   perDishNotes?: string;
 }
 
+export interface Session {
+  id: string;
+  title: string;
+  startAt: string;      // ISO datetime
+  endAt: string;        // ISO datetime
+  notes: string;
+}
+
 export interface KitchenEvent {
   id: string;
   title: string;
-  serveAt?: string;     // ISO datetime
+  serveAt?: string;     // ISO datetime — when food is served / event anchor
   notes: string;
-  dishes: EventDish[];
+  sessions: Session[];
+  dishes: EventDish[];  // reserved for recipe-link work (default [])
   createdAt: number;
   updatedAt: number;
 }
