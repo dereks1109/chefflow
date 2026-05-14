@@ -114,19 +114,72 @@ describe('scheduledStepsToMilestones adapter', () => {
     }
   });
 
-  it('preserves colorTag through the milestonesToScheduledSteps round-trip', () => {
+  it('populates meta.colorTag from dish.colorTag when dishes are passed', () => {
+    const dishWithColor = { ...DEMO_EVENT.dishes[0], colorTag: 'green' as const, chefName: 'Alice' };
+    const event = { ...DEMO_EVENT, dishes: [dishWithColor] };
     const recipes = new Map([[RIBEYE_RECIPE.id, RIBEYE_RECIPE]]);
-    const original = scheduleEvent({
-      event: { ...DEMO_EVENT, dishes: [DEMO_EVENT.dishes[0]] },
-      recipes,
-    });
-    const milestones = scheduledStepsToMilestones(original);
-    // Tag the first step green via the DnD shape.
-    milestones[0].steps[0].meta = { ...milestones[0].steps[0].meta, colorTag: 'green' };
+    const scheduled = scheduleEvent({ event, recipes });
+    const milestones = scheduledStepsToMilestones(scheduled, event.dishes);
+    // Every step in the result should carry the dish's green color tag.
+    for (const milestone of milestones) {
+      for (const step of milestone.steps) {
+        expect(step.meta?.colorTag).toBe('green');
+        expect(step.meta?.dishId).toBe(dishWithColor.id);
+      }
+    }
+  });
+});
 
-    const byId = new Map(original.map((s) => [s.id, s]));
-    const rebuilt = milestonesToScheduledSteps(milestones, byId, new Date(DEMO_EVENT.serveAt!));
-    expect(rebuilt[0].colorTag).toBe('green');
+describe('Workflow page — chef filter', () => {
+  it('renders chef-filter chips, one per unique dish color', async () => {
+    await db.events.put({
+      ...DEMO_EVENT,
+      dishes: [
+        { ...DEMO_EVENT.dishes[0], colorTag: 'green', chefName: 'Alice' },
+        { ...DEMO_EVENT.dishes[1], colorTag: 'blue', chefName: 'Bob' },
+      ],
+    });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /All/ })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('tab', { name: /Alice/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Bob/ })).toBeInTheDocument();
+  });
+
+  it('shows a hint when no dish has a color assigned yet', async () => {
+    await db.events.put(DEMO_EVENT);  // no colorTags on dishes
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Assign a color/)).toBeInTheDocument();
+    });
+  });
+
+  it('filtering to a chef shows only that chef\'s steps in a read-only list', async () => {
+    await db.events.put({
+      ...DEMO_EVENT,
+      dishes: [
+        { ...DEMO_EVENT.dishes[0], colorTag: 'green', chefName: 'Alice' },  // ribeye
+        { ...DEMO_EVENT.dishes[1], colorTag: 'blue', chefName: 'Bob' },     // salad
+      ],
+    });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => screen.getByRole('tab', { name: /Alice/ }));
+    await userEvent.click(screen.getByRole('tab', { name: /Alice/ }));
+
+    // Filtered view shows Alice's tasks heading + all ribeye step text…
+    await waitFor(() => {
+      expect(screen.getByText(/Alice's tasks/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Pat steaks dry/)).toBeInTheDocument();
+    // …and NONE of the salad step text (Bob's).
+    expect(screen.queryByText(/Wash salad leaves/)).toBeNull();
   });
 });
 

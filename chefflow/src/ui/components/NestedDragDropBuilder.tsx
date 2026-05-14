@@ -10,7 +10,7 @@ import {
   type DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
-import ColorPicker from './ColorPicker';
+import ColorPicker, { swatchClassFor } from './ColorPicker';
 import type { ColorTag } from '../../core/types';
 
 // ---------------------------------------------------------------------------
@@ -22,9 +22,11 @@ export interface DndStepMeta {
   time?: string;
   /** Dish label (e.g. "Ribeye") shown as a small tag. */
   dish?: string;
+  /** Dish id — used by the workflow page to filter steps per chef-color. */
+  dishId?: string;
   /** CulinaryRule.md rule numbers that drove this step's placement (e.g. [1, 5]). */
   rules?: number[];
-  /** Optional color tag assigned to this step. Persisted on save. */
+  /** Color tag (sourced from the step's dish on the workflow page). */
   colorTag?: ColorTag;
 }
 
@@ -61,6 +63,13 @@ interface Props {
    * Same rationale as allowAddMilestone for the workflow page.
    */
   allowAddStep?: boolean;
+  /**
+   * When false, hides the per-step ColorPicker. The workflow page sets
+   * this to false because color now lives on the dish — the picker on
+   * each step would be misleading. A small read-only swatch still shows
+   * when `meta.colorTag` is present, so chefs see who owns each step.
+   */
+  allowColorPicker?: boolean;
 }
 
 // Two drop types so milestones can only land in the milestone column and
@@ -84,6 +93,7 @@ export default function NestedDragDropBuilder({
   onChange,
   allowAddMilestone = true,
   allowAddStep = true,
+  allowColorPicker = true,
 }: Props) {
   const [milestones, setMilestones] = useState<DndMilestone[]>(initialMilestones);
 
@@ -315,11 +325,19 @@ export default function NestedDragDropBuilder({
                                       className="flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
                                       aria-label="Step content"
                                     />
-                                    <ColorPicker
-                                      value={step.meta?.colorTag}
-                                      onChange={(c) => setStepColor(milestone.id, step.id, c)}
-                                      label={`Color tag for step ${stepIndex + 1}`}
-                                    />
+                                    {allowColorPicker ? (
+                                      <ColorPicker
+                                        value={step.meta?.colorTag}
+                                        onChange={(c) => setStepColor(milestone.id, step.id, c)}
+                                        label={`Color tag for step ${stepIndex + 1}`}
+                                      />
+                                    ) : step.meta?.colorTag ? (
+                                      <span
+                                        className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(step.meta.colorTag)}`}
+                                        aria-label={`Color: ${step.meta.colorTag}`}
+                                        title={`Color: ${step.meta.colorTag}`}
+                                      />
+                                    ) : null}
                                     <button
                                       type="button"
                                       onClick={() => removeStep(milestone.id, step.id)}

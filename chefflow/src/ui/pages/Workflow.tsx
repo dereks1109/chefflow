@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, AlertTriangle, Calendar, Check, Compass, RefreshCw, StickyNote } from 'lucide-react';
+import {
+  ArrowLeft,
+  AlertTriangle,
+  Calendar,
+  ChefHat,
+  Check,
+  Clock,
+  Compass,
+  RefreshCw,
+  StickyNote,
+  Users,
+} from 'lucide-react';
 import NestedDragDropBuilder, {
   type DndMilestone,
 } from '../components/NestedDragDropBuilder';
+import { swatchClassFor } from '../components/ColorPicker';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { listRecipes } from '../../db/recipesRepo';
 import { formatDateTime } from '../../core/util/datetime';
 import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
 import { hashDishes } from '../../core/scheduler/hash';
 import type {
+  ColorTag,
+  Dish,
   KitchenEvent,
   Recipe,
   ScheduledStep,
@@ -29,6 +43,10 @@ type LoadState =
 
 // ---------------------------------------------------------------------------
 // Adapter: ScheduledStep[] -> DndMilestone[] (display)
+//
+// Optionally accepts the event's dishes so each step's meta carries the
+// dish-level colorTag (used to color-code chef ownership) and the dishId
+// (used by the filter to scope to one chef's tasks).
 // ---------------------------------------------------------------------------
 const PHASE_ORDER: SchedulePhase[] = ['prep', 'sanitize', 'cook', 'serve'];
 const PHASE_LABEL: Record<SchedulePhase, string> = {
@@ -48,7 +66,12 @@ function formatClockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-export function scheduledStepsToMilestones(steps: ScheduledStep[]): DndMilestone[] {
+export function scheduledStepsToMilestones(
+  steps: ScheduledStep[],
+  dishes: readonly Dish[] = [],
+): DndMilestone[] {
+  const dishById = new Map(dishes.map((d) => [d.id, d]));
+
   const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
   for (const phase of PHASE_ORDER) byPhase.set(phase, []);
   for (const step of steps) {
@@ -73,8 +96,9 @@ export function scheduledStepsToMilestones(steps: ScheduledStep[]): DndMilestone
         meta: {
           time: formatClockTime(s.startAt),
           dish: s.dishLabel,
+          dishId: s.dishId,
           rules: s.rulesApplied,
-          colorTag: s.colorTag,
+          colorTag: dishById.get(s.dishId)?.colorTag,
         },
       })),
     });
@@ -87,6 +111,10 @@ export function scheduledStepsToMilestones(steps: ScheduledStep[]): DndMilestone
 // last step in display order ends exactly at serveAt and each prior step ends
 // where the next begins. The user's manual order becomes the canonical order;
 // step phase is inferred from the milestone the step now sits in.
+//
+// Note: colorTag is no longer a per-step field — it lives on the dish — so we
+// don't read it back from DnD meta here. (Old saved snapshots may have it on
+// ScheduledStep, but it's display-derived now and harmless if present.)
 // ---------------------------------------------------------------------------
 export function milestonesToScheduledSteps(
   milestones: DndMilestone[],
@@ -103,7 +131,6 @@ export function milestonesToScheduledSteps(
         ...original,
         text: dndStep.content,
         phase: inferredPhase ?? original.phase,
-        colorTag: dndStep.meta?.colorTag,
       });
     }
   }
@@ -125,21 +152,47 @@ export function milestonesToScheduledSteps(
 }
 
 // ---------------------------------------------------------------------------
-// Page
+// Chef groups — one per unique (colorTag, chefName) pair on the event's dishes.
 // ---------------------------------------------------------------------------
+interface ChefGroup {
+  color: ColorTag;
+  chefName?: string;
+  dishCount: number;
+}
+
+function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
+  const groups = new Map<ColorTag, ChefGroup>();
+  for (const dish of dishes) {
+    if (!dish.colorTag) continue;
+    const existing = groups.get(dish.colorTag);
+    if (existing) {
+      existing.dishCount++;
+      if (!existing.chefName && dish.chefName) existing.chefName = dish.chefName;
+    } else {
+      groups.set(dish.colorTag, {
+        color: dish.colorTag,
+        chefName: dish.chefName,
+        dishCount: 1,
+      });
+    }
+  }
+  return Array.from(groups.values());
+}
+
+// ===========================================================================
+// Page
+// ===========================================================================
 
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [scheduled, setScheduled] = useState<ScheduledStep[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [chefFilter, setChefFilter] = useState<ColorTag | null>(null);
   // Forces the DnD builder to remount when we Regenerate (so it picks up
   // the fresh initialMilestones).
   const [generation, setGeneration] = useState(0);
 
-  // Load event + recipes; decide initial scheduled state from snapshot or
-  // fresh algorithm run. Runs once per eventId — Regenerate updates state
-  // synchronously below rather than re-triggering this effect.
   useEffect(() => {
     let cancelled = false;
     Promise.all([getEvent(eventId), listRecipes()]).then(([event, recipes]) => {
@@ -159,12 +212,12 @@ export default function Workflow() {
       }
       setScheduled(initial);
       setDirty(false);
+      setChefFilter(null);
       setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot });
     });
     return () => { cancelled = true; };
   }, [eventId]);
 
-  // Index by id for fast reverse mapping when the DnD builder emits onChange.
   const scheduledById = useMemo(
     () => new Map(scheduled.map((s) => [s.id, s])),
     [scheduled],
@@ -183,7 +236,6 @@ export default function Workflow() {
   }
 
   const { event, recipes, loadedFromSnapshot } = state;
-  const milestones = scheduledStepsToMilestones(scheduled);
   const hasDishes = event.dishes.length > 0;
   const serveAt = event.serveAt ? new Date(event.serveAt) : new Date();
   const currentDishesHash = hashDishes(event.dishes);
@@ -191,6 +243,16 @@ export default function Workflow() {
     loadedFromSnapshot &&
     !!event.workflowDishesHash &&
     event.workflowDishesHash !== currentDishesHash;
+
+  const chefGroups = buildChefGroups(event.dishes);
+  const dishById = new Map(event.dishes.map((d) => [d.id, d]));
+
+  // Steps that belong to the active chef-filter, or all when filter is null.
+  const visibleSteps = chefFilter
+    ? scheduled.filter((s) => dishById.get(s.dishId)?.colorTag === chefFilter)
+    : scheduled;
+
+  const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes);
 
   function handleBuilderChange(nextMilestones: DndMilestone[]) {
     const next = milestonesToScheduledSteps(nextMilestones, scheduledById, serveAt);
@@ -213,7 +275,7 @@ export default function Workflow() {
   async function handleRegenerate() {
     if (
       dirty &&
-      !window.confirm('Regenerate from rules? Unsaved reorder/colors will be discarded.')
+      !window.confirm('Regenerate from rules? Unsaved reorder will be discarded.')
     ) return;
     const cleared: KitchenEvent = {
       ...event,
@@ -222,21 +284,15 @@ export default function Workflow() {
       updatedAt: Date.now(),
     };
     await saveEvent(cleared);
-    // Re-run the algorithm in-place so the new scheduled state and the
-    // builder remount happen in the same React commit. Bumping generation
-    // changes the builder's key so it picks up the new initialMilestones.
     const fresh = scheduleEvent({ event: cleared, recipes });
     setScheduled(fresh);
     setDirty(false);
+    setChefFilter(null);
     setState({ kind: 'ready', event: cleared, recipes, loadedFromSnapshot: false });
     setGeneration((g) => g + 1);
   }
 
-  // Count colors so the user has a hint at-a-glance.
-  const colorCounts = scheduled.reduce<Record<string, number>>((acc, s) => {
-    if (s.colorTag) acc[s.colorTag] = (acc[s.colorTag] ?? 0) + 1;
-    return acc;
-  }, {});
+  const filteredChef = chefFilter ? chefGroups.find((g) => g.color === chefFilter) : null;
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
@@ -296,7 +352,7 @@ export default function Workflow() {
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
             <p>
               Dishes have changed since this workflow was saved. Click <strong>Regenerate</strong> to rebuild it from the
-              current dishes, or keep your saved order and edits and ignore the new dishes.
+              current dishes, or keep your saved order and ignore the new dishes.
             </p>
           </div>
         )}
@@ -306,31 +362,131 @@ export default function Workflow() {
             This event has no dishes yet — add some in the Events tab and the workflow will populate automatically.
           </p>
         )}
-        {hasDishes && milestones.length === 0 && (
-          <p className="text-sm text-slate-500 italic mb-3">
-            No schedulable steps. Make sure each dish is linked to a recipe (or marked "I'll get the dish ready") in the editor.
+
+        {/* ----- Chef filter bar (one chip per unique dish color) ----- */}
+        {hasDishes && chefGroups.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs font-medium text-slate-500 mb-2 inline-flex items-center gap-1">
+              <ChefHat className="h-3 w-3" aria-hidden="true" />
+              Filter by chef
+            </p>
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Chef filter">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={chefFilter === null}
+                onClick={() => setChefFilter(null)}
+                className={`text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors ${
+                  chefFilter === null
+                    ? 'bg-accent text-white border-accent'
+                    : 'bg-white dark:bg-kitchen-ink border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-accent'
+                }`}
+              >
+                All ({event.dishes.length})
+              </button>
+              {chefGroups.map((g) => (
+                <button
+                  key={g.color}
+                  type="button"
+                  role="tab"
+                  aria-selected={chefFilter === g.color}
+                  onClick={() => setChefFilter(g.color)}
+                  className={`text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition-colors ${
+                    chefFilter === g.color
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-white dark:bg-kitchen-ink border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-accent'
+                  }`}
+                >
+                  <span className={`h-3 w-3 rounded-full ${swatchClassFor(g.color)}`} />
+                  {g.chefName ?? g.color} ({g.dishCount})
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {hasDishes && chefGroups.length === 0 && (
+          <p className="text-xs text-slate-500 italic mb-3">
+            Assign a color (and optionally a chef name) to each dish in the Events tab to enable per-chef filtering.
           </p>
         )}
 
-        {Object.keys(colorCounts).length > 0 && (
-          <p className="text-xs text-slate-500 mb-3" aria-label="Color summary">
-            {Object.entries(colorCounts)
-              .map(([color, count]) => `${count} ${color}`)
-              .join(' · ')}
-          </p>
+        {/* ----- Workflow body: editable when "All", read-only when filtered ----- */}
+        {chefFilter && filteredChef ? (
+          <PerChefReadOnlyList
+            steps={visibleSteps}
+            chefGroup={filteredChef}
+          />
+        ) : (
+          <NestedDragDropBuilder
+            key={`${event.id}-${generation}`}
+            initialMilestones={milestones}
+            onChange={handleBuilderChange}
+            allowAddMilestone={false}
+            allowAddStep={false}
+            allowColorPicker={false}
+          />
         )}
-
-        {/* Remount when the underlying generation changes (Regenerate) or
-            when the event itself changes (eventId switch). */}
-        <NestedDragDropBuilder
-          key={`${event.id}-${generation}`}
-          initialMilestones={milestones}
-          onChange={handleBuilderChange}
-          allowAddMilestone={false}
-          allowAddStep={false}
-        />
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// PerChefReadOnlyList — clean flat list for one chef's tasks. No DnD here;
+// the chef is meant to scan/print this view, not reorganize it.
+// ---------------------------------------------------------------------------
+function PerChefReadOnlyList({
+  steps,
+  chefGroup,
+}: {
+  steps: ScheduledStep[];
+  chefGroup: ChefGroup;
+}) {
+  if (steps.length === 0) {
+    return (
+      <p className="text-sm text-slate-500 italic">
+        No steps for this chef. (No dishes match this color, or no recipes are linked.)
+      </p>
+    );
+  }
+  const sorted = steps
+    .slice()
+    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink overflow-hidden">
+      <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
+        <span className={`h-4 w-4 rounded-full ${swatchClassFor(chefGroup.color)}`} />
+        <h3 className="font-semibold">
+          {chefGroup.chefName ? `${chefGroup.chefName}'s tasks` : `${chefGroup.color} tasks`}
+        </h3>
+        <span className="ml-auto text-xs text-slate-500">
+          {sorted.length} step{sorted.length === 1 ? '' : 's'}
+        </span>
+      </header>
+      <ol className="divide-y divide-slate-100 dark:divide-slate-800">
+        {sorted.map((s) => (
+          <li key={s.id} className="flex gap-3 px-4 py-3">
+            <span className="w-12 shrink-0 text-xs font-mono text-slate-500 pt-0.5">
+              {formatClockTime(s.startAt)}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm">{s.text}</p>
+              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                <span className="inline-flex items-center gap-1">
+                  <Users className="h-3 w-3" aria-hidden="true" />
+                  {s.dishLabel}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" aria-hidden="true" />
+                  {Math.round(s.durationSec / 60)} min
+                </span>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 

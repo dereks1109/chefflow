@@ -50,6 +50,8 @@ export interface Dish {
   portions: number;
   startAt: string;       // ISO datetime
   notes?: string;
+  colorTag?: ColorTag;   // assigned color — used to mark which chef owns the dish
+  chefName?: string;     // free-text chef-in-charge label; no separate chef entity
 }
 
 export interface KitchenEvent {

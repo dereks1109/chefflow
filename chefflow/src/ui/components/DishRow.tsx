@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users } from 'lucide-react';
+import { BookOpen, ChefHat, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users } from 'lucide-react';
 import type { Dish } from '../../core/types';
 import { formatDateTime } from '../../core/util/datetime';
+import { swatchClassFor } from './ColorPicker';
 
 interface Props {
   index: number;
@@ -32,7 +33,20 @@ export default function DishRow({
         <span className="text-xs font-semibold text-slate-500 w-6 pt-1">{index + 1}.</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
+            {value.colorTag && (
+              <span
+                className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(value.colorTag)}`}
+                aria-label={`Color tag: ${value.colorTag}`}
+                title={`Color tag: ${value.colorTag}`}
+              />
+            )}
             <h3 className="font-semibold">{value.name || 'Untitled dish'}</h3>
+            {value.chefName && (
+              <span className="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
+                <ChefHat className="h-3 w-3" aria-hidden="true" />
+                {value.chefName}
+              </span>
+            )}
             {value.recipeId && (
               <Link
                 to={`/recipes/${value.recipeId}/edit`}

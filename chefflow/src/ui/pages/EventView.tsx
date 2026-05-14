@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Calendar, Clock, Compass, Edit3, Hand, Layers, StickyNote, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, ChefHat, Clock, Compass, Edit3, Hand, Layers, StickyNote, Users } from 'lucide-react';
 import { getEvent } from '../../db/eventsRepo';
+import { swatchClassFor } from '../components/ColorPicker';
 import { formatDateTime } from '../../core/util/datetime';
 import type { Dish, KitchenEvent } from '../../core/types';
 
@@ -105,7 +106,20 @@ function TimelineRow({ dish }: { dish: Dish }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
+          {dish.colorTag && (
+            <span
+              className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(dish.colorTag)}`}
+              aria-label={`Color tag: ${dish.colorTag}`}
+              title={`Color tag: ${dish.colorTag}`}
+            />
+          )}
           <h3 className="font-semibold">{dish.name || 'Untitled dish'}</h3>
+          {dish.chefName && (
+            <span className="inline-flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
+              <ChefHat className="h-3 w-3" aria-hidden="true" />
+              {dish.chefName}
+            </span>
+          )}
           {dish.recipeId && (
             <Link
               to={`/recipes/${dish.recipeId}/edit`}
