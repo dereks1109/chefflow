@@ -10,6 +10,8 @@ import {
   type DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import ColorPicker from './ColorPicker';
+import type { ColorTag } from '../../core/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,6 +24,8 @@ export interface DndStepMeta {
   dish?: string;
   /** CulinaryRule.md rule numbers that drove this step's placement (e.g. [1, 5]). */
   rules?: number[];
+  /** Optional color tag assigned to this step. Persisted on save. */
+  colorTag?: ColorTag;
 }
 
 export interface DndStep {
@@ -45,6 +49,18 @@ export interface DndMilestone {
 interface Props {
   initialMilestones: DndMilestone[];
   onChange?: (milestones: DndMilestone[]) => void;
+  /**
+   * When false, hides the "Add milestone" affordance at the column foot.
+   * The workflow page sets this to false because milestones are derived
+   * from phases (Prep / Cook / Serve / Sanitize) — chefs shouldn't be
+   * inventing new ones in that view.
+   */
+  allowAddMilestone?: boolean;
+  /**
+   * When false, hides the "Add step" affordance inside each milestone.
+   * Same rationale as allowAddMilestone for the workflow page.
+   */
+  allowAddStep?: boolean;
 }
 
 // Two drop types so milestones can only land in the milestone column and
@@ -63,7 +79,12 @@ function newId(prefix: string): string {
 // Component
 // ===========================================================================
 
-export default function NestedDragDropBuilder({ initialMilestones, onChange }: Props) {
+export default function NestedDragDropBuilder({
+  initialMilestones,
+  onChange,
+  allowAddMilestone = true,
+  allowAddStep = true,
+}: Props) {
   const [milestones, setMilestones] = useState<DndMilestone[]>(initialMilestones);
 
   // Hydration guard. In Next.js (App Router) the drag-and-drop libraries can
@@ -183,6 +204,23 @@ export default function NestedDragDropBuilder({ initialMilestones, onChange }: P
     );
   }
 
+  function setStepColor(milestoneId: string, stepId: string, colorTag: ColorTag | undefined) {
+    commit(
+      milestones.map((m) =>
+        m.id === milestoneId
+          ? {
+              ...m,
+              steps: m.steps.map((s) =>
+                s.id === stepId
+                  ? { ...s, meta: { ...(s.meta ?? {}), colorTag } }
+                  : s,
+              ),
+            }
+          : m,
+      ),
+    );
+  }
+
   // SSR placeholder — see the comment on `mounted` above.
   if (!mounted) {
     return (
@@ -277,6 +315,11 @@ export default function NestedDragDropBuilder({ initialMilestones, onChange }: P
                                       className="flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
                                       aria-label="Step content"
                                     />
+                                    <ColorPicker
+                                      value={step.meta?.colorTag}
+                                      onChange={(c) => setStepColor(milestone.id, step.id, c)}
+                                      label={`Color tag for step ${stepIndex + 1}`}
+                                    />
                                     <button
                                       type="button"
                                       onClick={() => removeStep(milestone.id, step.id)}
@@ -293,16 +336,18 @@ export default function NestedDragDropBuilder({ initialMilestones, onChange }: P
                           ))}
                           {stepsProvided.placeholder}
 
-                          <li>
-                            <button
-                              type="button"
-                              onClick={() => addStep(milestone.id)}
-                              className="w-full inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs text-slate-500 hover:text-accent border border-dashed border-slate-300 dark:border-slate-700 rounded-md hover:border-accent transition-colors"
-                            >
-                              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                              Add step
-                            </button>
-                          </li>
+                          {allowAddStep && (
+                            <li>
+                              <button
+                                type="button"
+                                onClick={() => addStep(milestone.id)}
+                                className="w-full inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs text-slate-500 hover:text-accent border border-dashed border-slate-300 dark:border-slate-700 rounded-md hover:border-accent transition-colors"
+                              >
+                                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                                Add step
+                              </button>
+                            </li>
+                          )}
                         </ul>
                       )}
                     </Droppable>
@@ -312,14 +357,16 @@ export default function NestedDragDropBuilder({ initialMilestones, onChange }: P
             ))}
             {provided.placeholder}
 
-            <button
-              type="button"
-              onClick={addMilestone}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-slate-500 hover:text-accent border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-accent rounded-lg transition-colors"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add milestone
-            </button>
+            {allowAddMilestone && (
+              <button
+                type="button"
+                onClick={addMilestone}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium text-slate-500 hover:text-accent border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-accent rounded-lg transition-colors"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add milestone
+              </button>
+            )}
           </div>
         )}
       </Droppable>

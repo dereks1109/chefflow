@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import Workflow, { scheduledStepsToMilestones } from './Workflow';
+import Workflow, { scheduledStepsToMilestones, milestonesToScheduledSteps } from './Workflow';
 import { db } from '../../db/dexie';
 import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
+import { hashDishes } from '../../core/scheduler/hash';
 import { DEMO_EVENT, RIBEYE_RECIPE, SALAD_RECIPE } from '../../core/scheduler/__fixtures__/demoEvent';
+import type { ScheduledStep } from '../../core/types';
 
 beforeEach(async () => {
   await db.events.clear();
@@ -91,5 +94,156 @@ describe('scheduledStepsToMilestones adapter', () => {
     expect(firstStep.meta?.time).toMatch(/^\d{2}:\d{2}$/);
     expect(firstStep.meta?.dish).toBe('(Demo) Ribeye');
     expect(firstStep.meta?.rules).toContain(1);
+  });
+
+  it('round-trips through milestonesToScheduledSteps: last step ends at serveAt, times chain', () => {
+    const recipes = new Map([[RIBEYE_RECIPE.id, RIBEYE_RECIPE]]);
+    const original = scheduleEvent({
+      event: { ...DEMO_EVENT, dishes: [DEMO_EVENT.dishes[0]] },
+      recipes,
+    });
+    const milestones = scheduledStepsToMilestones(original);
+    const byId = new Map(original.map((s) => [s.id, s]));
+    const serveAt = new Date(DEMO_EVENT.serveAt!);
+    const rebuilt = milestonesToScheduledSteps(milestones, byId, serveAt);
+
+    // Last step must end at serveAt and chain back contiguously.
+    expect(rebuilt[rebuilt.length - 1].endAt).toBe(DEMO_EVENT.serveAt);
+    for (let i = 1; i < rebuilt.length; i++) {
+      expect(rebuilt[i - 1].endAt).toBe(rebuilt[i].startAt);
+    }
+  });
+
+  it('preserves colorTag through the milestonesToScheduledSteps round-trip', () => {
+    const recipes = new Map([[RIBEYE_RECIPE.id, RIBEYE_RECIPE]]);
+    const original = scheduleEvent({
+      event: { ...DEMO_EVENT, dishes: [DEMO_EVENT.dishes[0]] },
+      recipes,
+    });
+    const milestones = scheduledStepsToMilestones(original);
+    // Tag the first step green via the DnD shape.
+    milestones[0].steps[0].meta = { ...milestones[0].steps[0].meta, colorTag: 'green' };
+
+    const byId = new Map(original.map((s) => [s.id, s]));
+    const rebuilt = milestonesToScheduledSteps(milestones, byId, new Date(DEMO_EVENT.serveAt!));
+    expect(rebuilt[0].colorTag).toBe('green');
+  });
+});
+
+describe('Workflow page — persistence', () => {
+  it('uses event.workflow when present (skipping the algorithm)', async () => {
+    // Plant a saved snapshot with custom step text that wouldn't come from the algorithm.
+    const customStep: ScheduledStep = {
+      id: 'custom:1',
+      dishId: 'd_ribeye',
+      recipeId: RIBEYE_RECIPE.id,
+      recipeStepId: 'rs1',
+      dishLabel: '(Demo) Ribeye',
+      text: 'CUSTOM SAVED STEP — should appear on load',
+      startAt: '2026-05-14T17:55:00.000Z',
+      endAt: '2026-05-14T18:00:00.000Z',
+      durationSec: 300,
+      phase: 'serve',
+      kind: 'active',
+      thermalClass: 'normal',
+      allergenClass: 'allergen-free',
+      dependsOnStepIds: [],
+      warnings: [],
+      rulesApplied: [1],
+    };
+    const eventWithSnapshot = {
+      ...DEMO_EVENT,
+      workflow: [customStep],
+      workflowDishesHash: hashDishes(DEMO_EVENT.dishes),
+    };
+    await db.events.put(eventWithSnapshot);
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(/CUSTOM SAVED STEP/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows a stale banner when the saved hash no longer matches the current dishes', async () => {
+    await db.events.put({
+      ...DEMO_EVENT,
+      workflow: [
+        {
+          id: 'fake:1',
+          dishId: 'd_ribeye',
+          recipeId: RIBEYE_RECIPE.id,
+          recipeStepId: 'rs1',
+          dishLabel: '(Demo) Ribeye',
+          text: 'Stale snapshot step',
+          startAt: '2026-05-14T17:55:00.000Z',
+          endAt: '2026-05-14T18:00:00.000Z',
+          durationSec: 300,
+          phase: 'prep',
+          kind: 'active',
+          thermalClass: 'normal',
+          allergenClass: 'allergen-free',
+          dependsOnStepIds: [],
+          warnings: [],
+          rulesApplied: [1],
+        },
+      ],
+      workflowDishesHash: 'not-matching',
+    });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByText(/dishes have changed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('Regenerate clears the saved snapshot and re-runs the algorithm', async () => {
+    await db.events.put({
+      ...DEMO_EVENT,
+      workflow: [
+        {
+          id: 'fake:1',
+          dishId: 'd_ribeye',
+          recipeId: RIBEYE_RECIPE.id,
+          recipeStepId: 'rs1',
+          dishLabel: '(Demo) Ribeye',
+          text: 'OLD SAVED STEP',
+          startAt: '2026-05-14T17:55:00.000Z',
+          endAt: '2026-05-14T18:00:00.000Z',
+          durationSec: 300,
+          phase: 'prep',
+          kind: 'active',
+          thermalClass: 'normal',
+          allergenClass: 'allergen-free',
+          dependsOnStepIds: [],
+          warnings: [],
+          rulesApplied: [1],
+        },
+      ],
+      workflowDishesHash: hashDishes(DEMO_EVENT.dishes),
+    });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(/OLD SAVED STEP/)).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /regenerate/i }));
+
+    // Saved snapshot should be cleared in Dexie.
+    await waitFor(async () => {
+      const updated = await db.events.get(DEMO_EVENT.id);
+      expect(updated?.workflow).toBeUndefined();
+      expect(updated?.workflowDishesHash).toBeUndefined();
+    });
+    // After regeneration, the algorithm output should mount (real recipe text).
+    await waitFor(
+      () => {
+        expect(screen.getByDisplayValue(/Pat steaks dry/)).toBeInTheDocument();
+      },
+      { timeout: 3000 },
+    );
   });
 });
