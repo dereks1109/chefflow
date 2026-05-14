@@ -12,6 +12,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "decimal.js": "^10.6.0",
     "dexie": "^4.4.2",
     "gray-matter": "^4.0.3",

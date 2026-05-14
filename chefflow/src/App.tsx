@@ -7,6 +7,7 @@ import RecipeEditor from './ui/pages/RecipeEditor';
 import EventsLibrary from './ui/pages/EventsLibrary';
 import EventView from './ui/pages/EventView';
 import EventEditor from './ui/pages/EventEditor';
+import NestedDndDemo from './ui/pages/NestedDndDemo';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="/events/:id" element={<EventView />} />
         <Route path="/events/:id/edit" element={<EventEditor />} />
         <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+        <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
         <Route path="*" element={<div className="p-6">Not found.</div>} />
       </Route>
     </Routes>
