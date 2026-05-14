@@ -60,17 +60,45 @@ export interface KitchenEvent {
   dishes: Dish[];
   createdAt: number;
   updatedAt: number;
+
+  // Plan 3: saved workflow snapshot — present once user clicks Save on the
+  // workflow page. Staleness is detected by comparing workflowDishesHash to
+  // a fresh hash of dishes; mismatched → show a banner offering Regenerate.
+  workflow?: ScheduledStep[];
+  workflowDishesHash?: string;
 }
 
+export type ColorTag = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
 export interface ScheduledStep {
-  stepId: string;
+  // identity — synthesized as `${dishId}:${recipeStepId}`, unique across the workflow
+  id: string;
+  dishId: string;
   recipeId: string;
+  recipeStepId: string;
+
+  // display
   dishLabel: string;
   text: string;
-  durationSec?: number;
-  startAt: Date;
-  endAt: Date;
+
+  // timing — ISO strings so the structure round-trips through JSON / MCP / Dexie
+  startAt: string;
+  endAt: string;
+  durationSec: number;
+
+  // step metadata pulled forward from the underlying WorkflowStep so a single
+  // ScheduledStep is self-contained for the LLM tool and the UI
   phase: SchedulePhase;
+  kind: StepKind;
+  thermalClass: ThermalClass;
+  allergenClass: AllergenClass;
   dependsOnStepIds: string[];
+
+  // user-editable overlay
+  colorTag?: ColorTag;
+  manualOrderHint?: number;
+
+  // diagnostics
   warnings: string[];
+  rulesApplied: number[];   // which CulinaryRule.md rules drove this placement
 }
