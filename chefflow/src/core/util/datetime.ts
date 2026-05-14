@@ -18,11 +18,13 @@ export function fromLocalInputValue(local: string): string | undefined {
   return d.toISOString();
 }
 
+const LOCALE = 'en-GB';
+
 export function formatDateTime(iso: string | undefined): string {
   if (!iso) return 'Not scheduled';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return 'Invalid date';
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(LOCALE, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -40,7 +42,7 @@ export function formatTimeRange(startIso: string, endIso: string): string {
     start.getFullYear() === end.getFullYear() &&
     start.getMonth() === end.getMonth() &&
     start.getDate() === end.getDate();
-  const t = (d: Date) => d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const t = (d: Date) => d.toLocaleTimeString(LOCALE, { hour: 'numeric', minute: '2-digit' });
   if (sameDay) return `${t(start)} – ${t(end)}`;
   return `${formatDateTime(startIso)} → ${formatDateTime(endIso)}`;
 }

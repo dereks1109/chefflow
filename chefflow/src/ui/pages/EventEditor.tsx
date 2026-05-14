@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Calendar, StickyNote } from 'lucide-react';
+import { Plus, Calendar, StickyNote, ArrowUpDown, Check } from 'lucide-react';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
@@ -23,6 +23,7 @@ export default function EventEditor() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [dirty, setDirty] = useState(false);
   const [dishUi, setDishUi] = useState<DishUiState>({ mode: 'none' });
+  const [reorderMode, setReorderMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +79,14 @@ export default function EventEditor() {
 
   function removeDish(idx: number) {
     update('dishes', e.dishes.filter((_, i) => i !== idx));
+  }
+
+  function moveDish(idx: number, delta: -1 | 1) {
+    const target = idx + delta;
+    if (target < 0 || target >= e.dishes.length) return;
+    const nextList = e.dishes.slice();
+    [nextList[idx], nextList[target]] = [nextList[target], nextList[idx]];
+    update('dishes', nextList);
   }
 
   async function handleSave() {
@@ -153,14 +162,40 @@ export default function EventEditor() {
           <div className="flex items-center justify-between mb-3">
             <legend className="text-sm font-medium">Dishes</legend>
             {dishUi.mode === 'none' && (
-              <button
-                type="button"
-                onClick={startAdding}
-                className="btn-secondary text-sm inline-flex items-center gap-1"
-              >
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                Add dish
-              </button>
+              <div className="flex gap-2">
+                {e.dishes.length >= 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setReorderMode((m) => !m)}
+                    aria-pressed={reorderMode}
+                    className={`text-sm inline-flex items-center gap-1 ${
+                      reorderMode ? 'btn-primary' : 'btn-secondary'
+                    }`}
+                  >
+                    {reorderMode ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        Done
+                      </>
+                    ) : (
+                      <>
+                        <ArrowUpDown className="h-3.5 w-3.5" aria-hidden="true" />
+                        Reorder
+                      </>
+                    )}
+                  </button>
+                )}
+                {!reorderMode && (
+                  <button
+                    type="button"
+                    onClick={startAdding}
+                    className="btn-secondary text-sm inline-flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                    Add dish
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -180,8 +215,13 @@ export default function EventEditor() {
                   key={d.id}
                   index={i}
                   value={d}
+                  reorderMode={reorderMode}
+                  canMoveUp={i > 0}
+                  canMoveDown={i < e.dishes.length - 1}
                   onEdit={() => startEditing(i)}
                   onRemove={() => removeDish(i)}
+                  onMoveUp={() => moveDish(i, -1)}
+                  onMoveDown={() => moveDish(i, 1)}
                 />
               )
             ))}

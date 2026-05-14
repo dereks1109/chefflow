@@ -1,16 +1,31 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Clock, Edit3, Hand, Trash2, Users } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users } from 'lucide-react';
 import type { Dish } from '../../core/types';
 import { formatDateTime } from '../../core/util/datetime';
 
 interface Props {
   index: number;
   value: Dish;
+  reorderMode?: boolean;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-export default function DishRow({ index, value, onEdit, onRemove }: Props) {
+export default function DishRow({
+  index,
+  value,
+  reorderMode,
+  canMoveUp,
+  canMoveDown,
+  onEdit,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+}: Props) {
   return (
     <li className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-3">
       <div className="flex items-start gap-3">
@@ -49,22 +64,47 @@ export default function DishRow({ index, value, onEdit, onRemove }: Props) {
           )}
         </div>
         <div className="flex gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="touch-target px-2 rounded-md text-slate-500 hover:text-accent"
-            aria-label={`Edit dish ${index + 1}`}
-          >
-            <Edit3 className="h-4 w-4" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="touch-target px-2 rounded-md text-slate-500 hover:text-danger"
-            aria-label={`Remove dish ${index + 1}`}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-          </button>
+          {reorderMode ? (
+            <>
+              <button
+                type="button"
+                onClick={onMoveUp}
+                disabled={!canMoveUp}
+                className="touch-target px-2 rounded-md text-slate-500 hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label={`Move dish ${index + 1} up`}
+              >
+                <ChevronUp className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={onMoveDown}
+                disabled={!canMoveDown}
+                className="touch-target px-2 rounded-md text-slate-500 hover:text-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label={`Move dish ${index + 1} down`}
+              >
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onEdit}
+                className="touch-target px-2 rounded-md text-slate-500 hover:text-accent"
+                aria-label={`Edit dish ${index + 1}`}
+              >
+                <Edit3 className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="touch-target px-2 rounded-md text-slate-500 hover:text-danger"
+                aria-label={`Remove dish ${index + 1}`}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </li>
