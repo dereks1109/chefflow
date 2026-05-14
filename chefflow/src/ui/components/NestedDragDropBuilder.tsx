@@ -15,9 +15,25 @@ import { GripVertical, Plus, Trash2 } from 'lucide-react';
 // Types
 // ---------------------------------------------------------------------------
 
+export interface DndStepMeta {
+  /** Clock time (e.g. "17:48") shown in a monospace pill. */
+  time?: string;
+  /** Dish label (e.g. "Ribeye") shown as a small tag. */
+  dish?: string;
+  /** CulinaryRule.md rule numbers that drove this step's placement (e.g. [1, 5]). */
+  rules?: number[];
+}
+
 export interface DndStep {
   id: string;
   content: string;
+  /**
+   * Optional metadata rendered as a sub-line under the step input. Used by the
+   * Workflow page to display computed clock times + dish + rule pills next to
+   * each scheduled step. The generic /demo/nested-dnd page leaves this off and
+   * gets the plain editable-row UI.
+   */
+  meta?: DndStepMeta;
 }
 
 export interface DndMilestone {
@@ -239,35 +255,38 @@ export default function NestedDragDropBuilder({ initialMilestones, onChange }: P
                                   ref={sp.innerRef}
                                   {...sp.draggableProps}
                                   className={[
-                                    'flex items-center gap-2 rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2',
+                                    'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2',
                                     ss.isDragging
                                       ? 'border-accent shadow-md ring-1 ring-accent/30'
                                       : 'border-slate-200 dark:border-slate-700',
                                   ].join(' ')}
                                 >
-                                  <span
-                                    {...sp.dragHandleProps}
-                                    className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
-                                    aria-label="Drag step"
-                                  >
-                                    <GripVertical className="h-4 w-4" aria-hidden="true" />
-                                  </span>
-                                  <input
-                                    type="text"
-                                    value={step.content}
-                                    onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
-                                    placeholder="Step description…"
-                                    className="flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
-                                    aria-label="Step content"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeStep(milestone.id, step.id)}
-                                    className="touch-target px-2 text-slate-400 hover:text-danger rounded"
-                                    aria-label="Delete step"
-                                  >
-                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      {...sp.dragHandleProps}
+                                      className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+                                      aria-label="Drag step"
+                                    >
+                                      <GripVertical className="h-4 w-4" aria-hidden="true" />
+                                    </span>
+                                    <input
+                                      type="text"
+                                      value={step.content}
+                                      onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
+                                      placeholder="Step description…"
+                                      className="flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
+                                      aria-label="Step content"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => removeStep(milestone.id, step.id)}
+                                      className="touch-target px-2 text-slate-400 hover:text-danger rounded"
+                                      aria-label="Delete step"
+                                    >
+                                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                    </button>
+                                  </div>
+                                  {step.meta && <StepMetaLine meta={step.meta} />}
                                 </li>
                               )}
                             </Draggable>
@@ -347,6 +366,36 @@ function MilestoneHeader({
       >
         <Trash2 className="h-4 w-4" aria-hidden="true" />
       </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-component: optional metadata line rendered under a step's main row.
+// Only shown when DndStep.meta is provided (Workflow page populates it; the
+// generic recipe builder leaves it off).
+// ---------------------------------------------------------------------------
+function StepMetaLine({ meta }: { meta: DndStepMeta }) {
+  if (!meta.time && !meta.dish && !(meta.rules && meta.rules.length > 0)) return null;
+  return (
+    <div className="mt-1 pl-9 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+      {meta.time && (
+        <span className="font-mono text-slate-700 dark:text-slate-300">{meta.time}</span>
+      )}
+      {meta.dish && (
+        <span className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+          {meta.dish}
+        </span>
+      )}
+      {meta.rules && meta.rules.map((n) => (
+        <span
+          key={n}
+          className="rounded px-1.5 py-0.5 bg-accent/10 text-accent text-[10px] font-medium"
+          title={`CulinaryRule.md — Rule ${n}`}
+        >
+          R{n}
+        </span>
+      ))}
     </div>
   );
 }

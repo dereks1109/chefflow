@@ -1,76 +1,76 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, StickyNote } from 'lucide-react';
-import NestedDragDropBuilder, { type DndMilestone } from '../components/NestedDragDropBuilder';
+import { ArrowLeft, Calendar, Compass, StickyNote } from 'lucide-react';
+import NestedDragDropBuilder, {
+  type DndMilestone,
+} from '../components/NestedDragDropBuilder';
 import { getEvent } from '../../db/eventsRepo';
+import { listRecipes } from '../../db/recipesRepo';
 import { formatDateTime } from '../../core/util/datetime';
-import type { KitchenEvent } from '../../core/types';
+import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
+import type { KitchenEvent, Recipe, ScheduledStep, SchedulePhase } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'not-found' }
-  | { kind: 'ready'; event: KitchenEvent };
+  | { kind: 'ready'; event: KitchenEvent; recipes: Map<string, Recipe> };
 
-// Placeholder workflow data for the Demo Event. This is hand-crafted to
-// mirror the reverse-engineered timeline I sketched in chat for the Demo
-// Event (Ribeye + Salad, serve at 18:00). When the scheduler algorithm
-// ships, this is replaced by scheduleEvent(event, recipes).
-const DEMO_EVENT_PLACEHOLDER: DndMilestone[] = [
-  {
-    id: 'm-prep',
-    title: 'Phase 1 — Cold prep (17:30 – 17:40)',
-    steps: [
-      { id: 's-prep-1', content: 'Wash & dry salad leaves' },
-      { id: 's-prep-2', content: 'Halve cherry tomatoes' },
-      { id: 's-prep-3', content: 'Slice cucumber into half-moons' },
-      { id: 's-prep-4', content: 'Whisk dressing (oil, lemon, salt, pepper)' },
-    ],
-  },
-  {
-    id: 'm-sanitize',
-    title: 'Phase 1.5 — Sanitize handoff (17:40 – 17:43)',
-    steps: [
-      { id: 's-san-1', content: 'Hold leaves at room temp; refrigerate tomatoes & cucumber' },
-      { id: 's-san-2', content: 'Wash green board & knife; switch to red board for beef' },
-    ],
-  },
-  {
-    id: 'm-mise',
-    title: 'Phase 2 — Beef mise en place (17:43 – 17:48)',
-    steps: [
-      { id: 's-mise-1', content: 'Pat steaks dry, season generously with salt & pepper' },
-      { id: 's-mise-2', content: 'Smash garlic clove, pluck thyme leaves' },
-      { id: 's-mise-3', content: 'Pre-portion butter on a small dish' },
-    ],
-  },
-  {
-    id: 'm-cook',
-    title: 'Phase 3 — Sear & baste (17:48 – 17:55)',
-    steps: [
-      { id: 's-cook-1', content: 'Skillet on high until smoking (~2 min)' },
-      { id: 's-cook-2', content: 'Sear steaks 2 min, side 1 (don\'t move)' },
-      { id: 's-cook-3', content: 'Flip; sear 2 min, side 2' },
-      { id: 's-cook-4', content: 'Reduce heat; add butter, garlic, thyme; baste 1 min' },
-      { id: 's-cook-5', content: 'Remove steaks; rest under foil 5 min' },
-    ],
-  },
-  {
-    id: 'm-plate',
-    title: 'Phase 4 — Final toss & plate (17:55 – 18:00)',
-    steps: [
-      { id: 's-plate-1', content: 'Plate salad leaves, tomatoes, cucumber' },
-      { id: 's-plate-2', content: 'Re-whisk dressing; drizzle over plated salads' },
-      { id: 's-plate-3', content: 'Slice rested steaks against the grain' },
-      { id: 's-plate-4', content: 'Lay slices alongside salad; spoon pan butter over' },
-      { id: 's-plate-5', content: 'Serve at 18:00' },
-    ],
-  },
-];
+// ---------------------------------------------------------------------------
+// Adapter: scheduler output (flat ScheduledStep[]) -> DnD shape (milestones).
+// Groups steps by phase in a fixed chef-friendly order so the chef sees a
+// Prep block, optionally a Sanitize block, then Cook, then Serve. Times are
+// computed from the steps' actual start/end, so an "empty" phase is silently
+// skipped.
+// ---------------------------------------------------------------------------
+const PHASE_ORDER: SchedulePhase[] = ['prep', 'sanitize', 'cook', 'serve'];
+const PHASE_LABEL: Record<SchedulePhase, string> = {
+  prep: 'Prep',
+  sanitize: 'Sanitize',
+  cook: 'Cook',
+  serve: 'Serve',
+};
 
-function initialMilestonesFor(event: KitchenEvent): DndMilestone[] {
-  if (event.id === 'e_demo_main') return DEMO_EVENT_PLACEHOLDER;
-  return [];
+function formatClockTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
+
+export function scheduledStepsToMilestones(steps: ScheduledStep[]): DndMilestone[] {
+  const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
+  for (const phase of PHASE_ORDER) byPhase.set(phase, []);
+  for (const step of steps) {
+    if (!byPhase.has(step.phase)) byPhase.set(step.phase, []);
+    byPhase.get(step.phase)!.push(step);
+  }
+
+  const milestones: DndMilestone[] = [];
+  for (const phase of PHASE_ORDER) {
+    const stepsForPhase = byPhase.get(phase) ?? [];
+    if (stepsForPhase.length === 0) continue;
+    stepsForPhase.sort(
+      (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+    );
+    const firstStart = formatClockTime(stepsForPhase[0].startAt);
+    const lastEnd = formatClockTime(stepsForPhase[stepsForPhase.length - 1].endAt);
+    milestones.push({
+      id: `phase-${phase}`,
+      title: `${PHASE_LABEL[phase]} — ${firstStart} to ${lastEnd}`,
+      steps: stepsForPhase.map((s) => ({
+        id: s.id,
+        content: s.text,
+        meta: {
+          time: formatClockTime(s.startAt),
+          dish: s.dishLabel,
+          rules: s.rulesApplied,
+        },
+      })),
+    });
+  }
+  return milestones;
+}
+
+// ===========================================================================
+// Page
+// ===========================================================================
 
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
@@ -78,10 +78,14 @@ export default function Workflow() {
 
   useEffect(() => {
     let cancelled = false;
-    getEvent(eventId).then((event) => {
+    Promise.all([getEvent(eventId), listRecipes()]).then(([event, recipes]) => {
       if (cancelled) return;
-      if (!event) setState({ kind: 'not-found' });
-      else setState({ kind: 'ready', event });
+      if (!event) {
+        setState({ kind: 'not-found' });
+        return;
+      }
+      const recipesMap = new Map(recipes.map((r) => [r.id, r]));
+      setState({ kind: 'ready', event, recipes: recipesMap });
     });
     return () => { cancelled = true; };
   }, [eventId]);
@@ -98,8 +102,10 @@ export default function Workflow() {
     );
   }
 
-  const event = state.event;
-  const initial = initialMilestonesFor(event);
+  const { event, recipes } = state;
+  const scheduled = scheduleEvent({ event, recipes });
+  const milestones = scheduledStepsToMilestones(scheduled);
+  const hasDishes = event.dishes.length > 0;
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
@@ -123,17 +129,26 @@ export default function Workflow() {
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 mb-3 flex items-center gap-2">
+          <Compass className="h-3.5 w-3.5" aria-hidden="true" />
           Workflow
         </h2>
-        {initial.length === 0 && (
+        {!hasDishes && (
           <p className="text-sm text-slate-500 italic mb-3">
-            No workflow steps yet — add milestones below. The algorithm will fill this in automatically once it ships.
+            This event has no dishes yet — add some in the Events tab and the workflow will populate automatically.
           </p>
         )}
-        {/* Pass eventId as the key so swapping between events fully resets the
-            DnD state (the builder takes initialMilestones only once at mount). */}
-        <NestedDragDropBuilder key={event.id} initialMilestones={initial} />
+        {hasDishes && milestones.length === 0 && (
+          <p className="text-sm text-slate-500 italic mb-3">
+            No schedulable steps. Make sure each dish is linked to a recipe (or marked "I'll get the dish ready") in the editor.
+          </p>
+        )}
+        <p className="text-xs text-slate-500 mb-3">
+          Generated from the event's dishes via the rule-driven scheduler. Times are reverse-engineered from the serve
+          moment. Edits and drags are local-only for now — they won't persist across navigation until Task C lands.
+        </p>
+        {/* Pass eventId as the key so swapping events fully resets the DnD state. */}
+        <NestedDragDropBuilder key={event.id} initialMilestones={milestones} />
       </div>
     </section>
   );

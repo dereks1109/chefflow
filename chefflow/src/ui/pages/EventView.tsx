@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Calendar, Clock, Edit3, Hand, Layers, StickyNote, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, Calendar, Clock, Compass, Edit3, Hand, Layers, StickyNote, Users } from 'lucide-react';
 import { getEvent } from '../../db/eventsRepo';
 import { formatDateTime } from '../../core/util/datetime';
 import type { Dish, KitchenEvent } from '../../core/types';
@@ -47,14 +47,23 @@ export default function EventView() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Events
         </Link>
-        <button
-          type="button"
-          onClick={() => navigate(`/events/${e.id}/edit`)}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <Edit3 className="h-4 w-4" aria-hidden="true" />
-          Edit
-        </button>
+        <div className="flex gap-2">
+          <Link
+            to={`/workflows/${e.id}`}
+            className="btn-secondary inline-flex items-center gap-2"
+          >
+            <Compass className="h-4 w-4" aria-hidden="true" />
+            Workflow
+          </Link>
+          <button
+            type="button"
+            onClick={() => navigate(`/events/${e.id}/edit`)}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <Edit3 className="h-4 w-4" aria-hidden="true" />
+            Edit
+          </button>
+        </div>
       </header>
 
       <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
