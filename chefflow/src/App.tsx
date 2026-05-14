@@ -8,6 +8,8 @@ import EventsLibrary from './ui/pages/EventsLibrary';
 import EventView from './ui/pages/EventView';
 import EventEditor from './ui/pages/EventEditor';
 import NestedDndDemo from './ui/pages/NestedDndDemo';
+import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
+import Workflow from './ui/pages/Workflow';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 
 export default function App() {
@@ -30,6 +32,8 @@ export default function App() {
         <Route path="/events/:id" element={<EventView />} />
         <Route path="/events/:id/edit" element={<EventEditor />} />
         <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+        <Route path="/workflows" element={<WorkflowsLibrary />} />
+        <Route path="/workflows/:eventId" element={<Workflow />} />
         <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
         <Route path="*" element={<div className="p-6">Not found.</div>} />
       </Route>
