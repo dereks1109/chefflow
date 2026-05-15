@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -6,12 +6,48 @@ import Workflow, { scheduledStepsToMilestones, milestonesToScheduledSteps } from
 import { db } from '../../db/dexie';
 import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
 import { hashDishes } from '../../core/scheduler/hash';
+import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { DEMO_EVENT, RIBEYE_RECIPE, SALAD_RECIPE } from '../../core/scheduler/__fixtures__/demoEvent';
 import type { ScheduledStep } from '../../core/types';
+
+// ---------------------------------------------------------------------------
+// LLM stub: all tests get a fake fetch that returns a valid workflow JSON
+// matching the Demo Event's 9 recipe steps. Tests that want to assert error
+// or needs-key flows override or unset.
+// ---------------------------------------------------------------------------
+const VALID_DEMO_REPLY = JSON.stringify({
+  steps: [
+    { stepId: 'd_ribeye:rs1', dishId: 'd_ribeye', recipeStepId: 'rs1', text: 'Pat steaks dry', startAt: '2026-05-14T17:45:00.000Z', endAt: '2026-05-14T17:47:00.000Z', durationSec: 120, phase: 'prep', rulesApplied: [1], warnings: [] },
+    { stepId: 'd_ribeye:rs2', dishId: 'd_ribeye', recipeStepId: 'rs2', text: 'Heat skillet', startAt: '2026-05-14T17:47:00.000Z', endAt: '2026-05-14T17:49:00.000Z', durationSec: 120, phase: 'cook', rulesApplied: [1, 3], warnings: [] },
+    { stepId: 'd_ribeye:rs3', dishId: 'd_ribeye', recipeStepId: 'rs3', text: 'Sear', startAt: '2026-05-14T17:49:00.000Z', endAt: '2026-05-14T17:53:00.000Z', durationSec: 240, phase: 'cook', rulesApplied: [1, 3], warnings: [] },
+    { stepId: 'd_ribeye:rs4', dishId: 'd_ribeye', recipeStepId: 'rs4', text: 'Baste', startAt: '2026-05-14T17:53:00.000Z', endAt: '2026-05-14T17:54:00.000Z', durationSec: 60, phase: 'cook', rulesApplied: [1], warnings: [] },
+    { stepId: 'd_ribeye:rs5', dishId: 'd_ribeye', recipeStepId: 'rs5', text: 'Rest steaks 5 minutes', startAt: '2026-05-14T17:55:00.000Z', endAt: '2026-05-14T18:00:00.000Z', durationSec: 300, phase: 'serve', rulesApplied: [1, 2], warnings: [] },
+    { stepId: 'd_salad:ss1', dishId: 'd_salad', recipeStepId: 'ss1', text: 'Wash salad leaves', startAt: '2026-05-14T17:40:00.000Z', endAt: '2026-05-14T17:45:00.000Z', durationSec: 300, phase: 'prep', rulesApplied: [1, 5], warnings: [] },
+    { stepId: 'd_salad:ss2', dishId: 'd_salad', recipeStepId: 'ss2', text: 'Chop', startAt: '2026-05-14T17:45:00.000Z', endAt: '2026-05-14T17:47:00.000Z', durationSec: 120, phase: 'prep', rulesApplied: [1, 5], warnings: [] },
+    { stepId: 'd_salad:ss3', dishId: 'd_salad', recipeStepId: 'ss3', text: 'Whisk dressing', startAt: '2026-05-14T17:47:00.000Z', endAt: '2026-05-14T17:48:00.000Z', durationSec: 60, phase: 'prep', rulesApplied: [1, 6], warnings: [] },
+    { stepId: 'd_salad:ss4', dishId: 'd_salad', recipeStepId: 'ss4', text: 'Toss leaves, tomatoes, and cucumber', startAt: '2026-05-14T17:58:00.000Z', endAt: '2026-05-14T18:00:00.000Z', durationSec: 120, phase: 'serve', rulesApplied: [1, 3], warnings: [] },
+  ],
+});
+
+function stubGroqOk() {
+  vi.stubGlobal('fetch', vi.fn(() =>
+    Promise.resolve(new Response(
+      JSON.stringify({ choices: [{ message: { content: VALID_DEMO_REPLY } }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )),
+  ));
+}
 
 beforeEach(async () => {
   await db.events.clear();
   await db.recipes.clear();
+  // Default: ready-to-go LLM. Set an API key so the page doesn't park on needs-key.
+  useLlmSettingsStore.setState({ apiKey: 'gsk_test', model: 'llama-3.3-70b-versatile' });
+  stubGroqOk();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 function renderWorkflowAt(eventId: string) {

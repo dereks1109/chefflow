@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -8,7 +8,10 @@ import {
   Check,
   Clock,
   Compass,
+  Key,
   RefreshCw,
+  Settings,
+  Sparkles,
   StickyNote,
   Users,
 } from 'lucide-react';
@@ -16,11 +19,13 @@ import NestedDragDropBuilder, {
   type DndMilestone,
 } from '../components/NestedDragDropBuilder';
 import { swatchClassFor } from '../components/ColorPicker';
+import LlmSettingsSheet from '../components/LlmSettingsSheet';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { listRecipes } from '../../db/recipesRepo';
 import { formatDateTime } from '../../core/util/datetime';
-import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
+import { scheduleEventLLM, GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
 import { hashDishes } from '../../core/scheduler/hash';
+import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
   ColorTag,
   Dish,
@@ -37,16 +42,18 @@ type LoadState =
       kind: 'ready';
       event: KitchenEvent;
       recipes: Map<string, Recipe>;
-      /** Was the initial state from a saved snapshot vs a fresh algorithm run? */
       loadedFromSnapshot: boolean;
     };
 
+type WorkflowStatus =
+  | { kind: 'idle' }            // initial — before we know what to do
+  | { kind: 'needs-key' }       // event ready, no snapshot, no API key
+  | { kind: 'generating' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready' };
+
 // ---------------------------------------------------------------------------
-// Adapter: ScheduledStep[] -> DndMilestone[] (display)
-//
-// Optionally accepts the event's dishes so each step's meta carries the
-// dish-level colorTag (used to color-code chef ownership) and the dishId
-// (used by the filter to scope to one chef's tasks).
+// Adapter — same as before, just the DnD-shape helpers.
 // ---------------------------------------------------------------------------
 const PHASE_ORDER: SchedulePhase[] = ['prep', 'sanitize', 'cook', 'serve'];
 const PHASE_LABEL: Record<SchedulePhase, string> = {
@@ -75,7 +82,6 @@ export function scheduledStepsToMilestones(
   dishes: readonly Dish[] = [],
 ): DndMilestone[] {
   const dishById = new Map(dishes.map((d) => [d.id, d]));
-
   const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
   for (const phase of PHASE_ORDER) byPhase.set(phase, []);
   for (const step of steps) {
@@ -110,16 +116,6 @@ export function scheduledStepsToMilestones(
   return milestones;
 }
 
-// ---------------------------------------------------------------------------
-// Reverse direction: DndMilestone[] -> ScheduledStep[], chaining times so the
-// last step in display order ends exactly at serveAt and each prior step ends
-// where the next begins. The user's manual order becomes the canonical order;
-// step phase is inferred from the milestone the step now sits in.
-//
-// Note: colorTag is no longer a per-step field — it lives on the dish — so we
-// don't read it back from DnD meta here. (Old saved snapshots may have it on
-// ScheduledStep, but it's display-derived now and harmless if present.)
-// ---------------------------------------------------------------------------
 export function milestonesToScheduledSteps(
   milestones: DndMilestone[],
   byOriginalId: Map<string, ScheduledStep>,
@@ -139,8 +135,6 @@ export function milestonesToScheduledSteps(
     }
   }
   if (ordered.length === 0) return ordered;
-
-  // Reverse-chain clock times from serveAt.
   let cursorMs = serveAt.getTime();
   for (let i = ordered.length - 1; i >= 0; i--) {
     const endMs = cursorMs;
@@ -155,10 +149,6 @@ export function milestonesToScheduledSteps(
   return ordered;
 }
 
-// ---------------------------------------------------------------------------
-// Chef groups — one per unique colorTag on the event's dishes. The color
-// effectively names the chef in v1 (no separate chef-name field).
-// ---------------------------------------------------------------------------
 interface ChefGroup {
   color: ColorTag;
   dishCount: number;
@@ -182,13 +172,24 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>({ kind: 'idle' });
   const [scheduled, setScheduled] = useState<ScheduledStep[]>([]);
   const [dirty, setDirty] = useState(false);
   const [chefFilter, setChefFilter] = useState<ColorTag | null>(null);
-  // Forces the DnD builder to remount when we Regenerate (so it picks up
-  // the fresh initialMilestones).
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Forces the DnD builder to remount on Regenerate.
   const [generation, setGeneration] = useState(0);
+  // AbortController for in-flight LLM calls (so Regenerate can cancel).
+  const inflight = useRef<AbortController | null>(null);
 
+  const apiKey = useLlmSettingsStore((s) => s.apiKey);
+  const model = useLlmSettingsStore((s) => s.model);
+  const isReady = useLlmSettingsStore((s) => s.isReady)();
+
+  // -------------------------------------------------------------------------
+  // Initial load: pull event + recipes, decide whether to use the saved
+  // snapshot or call the LLM.
+  // -------------------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
     Promise.all([getEvent(eventId), listRecipes()]).then(([event, recipes]) => {
@@ -198,21 +199,55 @@ export default function Workflow() {
         return;
       }
       const recipesMap = new Map(recipes.map((r) => [r.id, r]));
-      let initial: ScheduledStep[];
-      let loadedFromSnapshot = false;
-      if (event.workflow && event.workflow.length > 0) {
-        initial = event.workflow;
-        loadedFromSnapshot = true;
-      } else {
-        initial = scheduleEvent({ event, recipes: recipesMap });
-      }
-      setScheduled(initial);
-      setDirty(false);
       setChefFilter(null);
-      setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot });
+
+      if (event.workflow && event.workflow.length > 0) {
+        // Saved snapshot — skip the LLM entirely.
+        setScheduled(event.workflow);
+        setDirty(false);
+        setWorkflowStatus({ kind: 'ready' });
+        setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: true });
+        return;
+      }
+
+      // No snapshot — need to generate. Gate on API key.
+      setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: false });
+      if (!isReady) {
+        setWorkflowStatus({ kind: 'needs-key' });
+        return;
+      }
+      void runLlm(event, recipesMap);
     });
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
+
+  // -------------------------------------------------------------------------
+  // runLlm — call the LLM, set scheduled state, surface errors.
+  // -------------------------------------------------------------------------
+  async function runLlm(event: KitchenEvent, recipes: Map<string, Recipe>) {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+
+    setWorkflowStatus({ kind: 'generating' });
+    try {
+      const { steps } = await scheduleEventLLM({
+        event,
+        recipes,
+        apiKey,
+        model,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      setScheduled(steps);
+      setDirty(false);
+      setWorkflowStatus({ kind: 'ready' });
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setWorkflowStatus({ kind: 'error', message: friendlyError(err) });
+    }
+  }
 
   const scheduledById = useMemo(
     () => new Map(scheduled.map((s) => [s.id, s])),
@@ -242,12 +277,9 @@ export default function Workflow() {
 
   const chefGroups = buildChefGroups(event.dishes);
   const dishById = new Map(event.dishes.map((d) => [d.id, d]));
-
-  // Steps that belong to the active chef-filter, or all when filter is null.
   const visibleSteps = chefFilter
     ? scheduled.filter((s) => dishById.get(s.dishId)?.colorTag === chefFilter)
     : scheduled;
-
   const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes);
 
   function handleBuilderChange(nextMilestones: DndMilestone[]) {
@@ -273,6 +305,10 @@ export default function Workflow() {
       dirty &&
       !window.confirm('Regenerate from rules? Unsaved reorder will be discarded.')
     ) return;
+    if (!isReady) {
+      setWorkflowStatus({ kind: 'needs-key' });
+      return;
+    }
     const cleared: KitchenEvent = {
       ...event,
       workflow: undefined,
@@ -280,22 +316,34 @@ export default function Workflow() {
       updatedAt: Date.now(),
     };
     await saveEvent(cleared);
-    const fresh = scheduleEvent({ event: cleared, recipes });
-    setScheduled(fresh);
     setDirty(false);
     setChefFilter(null);
     setState({ kind: 'ready', event: cleared, recipes, loadedFromSnapshot: false });
     setGeneration((g) => g + 1);
+    await runLlm(cleared, recipes);
   }
 
   const filteredChef = chefFilter ? chefGroups.find((g) => g.color === chefFilter) : null;
+  const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
-        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Workflows
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Workflows
+        </Link>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          className="btn-secondary text-sm inline-flex items-center gap-1"
+          aria-label="LLM settings"
+          title="LLM settings"
+        >
+          <Settings className="h-3.5 w-3.5" aria-hidden="true" />
+          {isReady ? 'Connected' : 'Connect Groq'}
+        </button>
+      </div>
 
       <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
         <h1 className="text-3xl font-bold">{event.title || 'Untitled event'}</h1>
@@ -321,16 +369,17 @@ export default function Workflow() {
             <button
               type="button"
               onClick={() => void handleRegenerate()}
-              className="btn-secondary text-sm inline-flex items-center gap-1"
-              title="Discard saved snapshot and re-run the algorithm"
+              disabled={workflowStatus.kind === 'generating'}
+              className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Discard saved snapshot and re-run the LLM"
             >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              <RefreshCw className={`h-3.5 w-3.5 ${workflowStatus.kind === 'generating' ? 'animate-spin' : ''}`} aria-hidden="true" />
               Regenerate
             </button>
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={!dirty && loadedFromSnapshot}
+              disabled={(!dirty && loadedFromSnapshot) || !showWorkflowBody}
               className="btn-primary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Persist the current workflow on this event"
             >
@@ -340,7 +389,57 @@ export default function Workflow() {
           </div>
         </div>
 
-        {isStale && (
+        {/* ----- Workflow status banners ----- */}
+        {workflowStatus.kind === 'needs-key' && (
+          <div className="mb-3 flex items-start gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm">
+            <Key className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-medium">Connect Groq to generate a workflow.</p>
+              <p className="text-slate-600 dark:text-slate-400 mt-1 text-xs">
+                Plan 4 uses Llama 3.3 70B (free tier on Groq) to combine your dishes + CulinaryRule.md into a kitchen
+                schedule. Paste an API key once; it stays in your browser only.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="btn-primary text-sm mt-3 inline-flex items-center gap-1"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Connect Groq
+              </button>
+            </div>
+          </div>
+        )}
+
+        {workflowStatus.kind === 'generating' && (
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-400">
+            <Sparkles className="h-4 w-4 animate-pulse text-accent" aria-hidden="true" />
+            Asking {model} to build your workflow…
+          </div>
+        )}
+
+        {workflowStatus.kind === 'error' && (
+          <div
+            role="status"
+            className="mb-3 flex items-start gap-2 rounded-md border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-900 dark:text-red-200"
+          >
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-medium">Couldn't generate the workflow.</p>
+              <p className="mt-1 text-xs whitespace-pre-wrap">{workflowStatus.message}</p>
+              <button
+                type="button"
+                onClick={() => void handleRegenerate()}
+                className="btn-secondary text-xs mt-2 inline-flex items-center gap-1"
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isStale && workflowStatus.kind === 'ready' && (
           <div
             role="status"
             className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200"
@@ -359,8 +458,14 @@ export default function Workflow() {
           </p>
         )}
 
-        {/* ----- Chef filter bar (one chip per unique dish color) ----- */}
-        {hasDishes && chefGroups.length > 0 && (
+        {showWorkflowBody && hasDishes && chefGroups.length === 0 && (
+          <p className="text-xs text-slate-500 italic mb-3">
+            Assign a color to each dish in the Events tab to enable per-chef filtering.
+          </p>
+        )}
+
+        {/* ----- Chef filter bar ----- */}
+        {showWorkflowBody && hasDishes && chefGroups.length > 0 && (
           <div className="mb-3">
             <p className="text-xs font-medium text-slate-500 mb-2 inline-flex items-center gap-1">
               <ChefHat className="h-3 w-3" aria-hidden="true" />
@@ -401,36 +506,39 @@ export default function Workflow() {
           </div>
         )}
 
-        {hasDishes && chefGroups.length === 0 && (
-          <p className="text-xs text-slate-500 italic mb-3">
-            Assign a color (and optionally a chef name) to each dish in the Events tab to enable per-chef filtering.
-          </p>
-        )}
-
-        {/* ----- Workflow body: editable when "All", read-only when filtered ----- */}
-        {chefFilter && filteredChef ? (
-          <PerChefReadOnlyList
-            steps={visibleSteps}
-            chefGroup={filteredChef}
-          />
-        ) : (
-          <NestedDragDropBuilder
-            key={`${event.id}-${generation}`}
-            initialMilestones={milestones}
-            onChange={handleBuilderChange}
-            allowAddMilestone={false}
-            allowAddStep={false}
-            allowColorPicker={false}
-          />
+        {/* ----- Workflow body ----- */}
+        {showWorkflowBody && (
+          chefFilter && filteredChef ? (
+            <PerChefReadOnlyList steps={visibleSteps} chefGroup={filteredChef} />
+          ) : (
+            <NestedDragDropBuilder
+              key={`${event.id}-${generation}`}
+              initialMilestones={milestones}
+              onChange={handleBuilderChange}
+              allowAddMilestone={false}
+              allowAddStep={false}
+              allowColorPicker={false}
+            />
+          )
         )}
       </div>
+
+      <LlmSettingsSheet
+        open={settingsOpen}
+        onClose={() => {
+          setSettingsOpen(false);
+          // If user just provided a key while we were stuck on needs-key, kick off the LLM.
+          if (workflowStatus.kind === 'needs-key' && useLlmSettingsStore.getState().isReady()) {
+            void runLlm(event, recipes);
+          }
+        }}
+      />
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PerChefReadOnlyList — clean flat list for one chef's tasks. No DnD here;
-// the chef is meant to scan/print this view, not reorganize it.
+// PerChefReadOnlyList — same as before, untouched.
 // ---------------------------------------------------------------------------
 function PerChefReadOnlyList({
   steps,
@@ -453,9 +561,7 @@ function PerChefReadOnlyList({
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink overflow-hidden">
       <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
         <span className={`h-4 w-4 rounded-full ${swatchClassFor(chefGroup.color)}`} />
-        <h3 className="font-semibold">
-          {capitalize(chefGroup.color)} tasks
-        </h3>
+        <h3 className="font-semibold">{capitalize(chefGroup.color)} tasks</h3>
         <span className="ml-auto text-xs text-slate-500">
           {sorted.length} step{sorted.length === 1 ? '' : 's'}
         </span>
@@ -484,6 +590,25 @@ function PerChefReadOnlyList({
       </ol>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// friendlyError — turn an error from the LLM scheduler into a user-facing
+// one-liner. Keeps the original message for context but strips stack frames
+// and adds a hint when the cause is well-known.
+// ---------------------------------------------------------------------------
+function friendlyError(err: unknown): string {
+  if (err instanceof GroqClientError) {
+    if (err.status === 401) return 'Invalid API key. Check your Groq key in settings.';
+    if (err.status === 429) return 'Rate limited by Groq. Wait a minute and try again.';
+    if (err.status === undefined) return `${err.message}\n\nIs your internet connected?`;
+    return `${err.message}${err.upstreamBody ? `\n\n${err.upstreamBody}` : ''}`;
+  }
+  if (err instanceof LlmValidationError) {
+    return `The LLM returned an invalid workflow.\n\n${err.message}\n\nTry Regenerate — JSON-mode is ~99% reliable but occasionally needs a retry.`;
+  }
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 // Re-export for tests.
