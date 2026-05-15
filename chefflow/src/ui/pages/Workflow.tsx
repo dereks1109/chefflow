@@ -66,6 +66,10 @@ function formatClockTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 export function scheduledStepsToMilestones(
   steps: ScheduledStep[],
   dishes: readonly Dish[] = [],
@@ -152,11 +156,11 @@ export function milestonesToScheduledSteps(
 }
 
 // ---------------------------------------------------------------------------
-// Chef groups — one per unique (colorTag, chefName) pair on the event's dishes.
+// Chef groups — one per unique colorTag on the event's dishes. The color
+// effectively names the chef in v1 (no separate chef-name field).
 // ---------------------------------------------------------------------------
 interface ChefGroup {
   color: ColorTag;
-  chefName?: string;
   dishCount: number;
 }
 
@@ -165,16 +169,8 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
   for (const dish of dishes) {
     if (!dish.colorTag) continue;
     const existing = groups.get(dish.colorTag);
-    if (existing) {
-      existing.dishCount++;
-      if (!existing.chefName && dish.chefName) existing.chefName = dish.chefName;
-    } else {
-      groups.set(dish.colorTag, {
-        color: dish.colorTag,
-        chefName: dish.chefName,
-        dishCount: 1,
-      });
-    }
+    if (existing) existing.dishCount++;
+    else groups.set(dish.colorTag, { color: dish.colorTag, dishCount: 1 });
   }
   return Array.from(groups.values());
 }
@@ -398,7 +394,7 @@ export default function Workflow() {
                   }`}
                 >
                   <span className={`h-3 w-3 rounded-full ${swatchClassFor(g.color)}`} />
-                  {g.chefName ?? g.color} ({g.dishCount})
+                  {capitalize(g.color)} ({g.dishCount})
                 </button>
               ))}
             </div>
@@ -458,7 +454,7 @@ function PerChefReadOnlyList({
       <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
         <span className={`h-4 w-4 rounded-full ${swatchClassFor(chefGroup.color)}`} />
         <h3 className="font-semibold">
-          {chefGroup.chefName ? `${chefGroup.chefName}'s tasks` : `${chefGroup.color} tasks`}
+          {capitalize(chefGroup.color)} tasks
         </h3>
         <span className="ml-auto text-xs text-slate-500">
           {sorted.length} step{sorted.length === 1 ? '' : 's'}

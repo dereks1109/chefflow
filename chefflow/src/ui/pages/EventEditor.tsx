@@ -5,7 +5,7 @@ import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
-import type { KitchenEvent, Dish } from '../../core/types';
+import type { ColorTag, KitchenEvent, Dish } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -79,6 +79,12 @@ export default function EventEditor() {
 
   function removeDish(idx: number) {
     update('dishes', e.dishes.filter((_, i) => i !== idx));
+  }
+
+  function setDishColor(idx: number, colorTag: ColorTag | undefined) {
+    const nextList = e.dishes.slice();
+    nextList[idx] = { ...nextList[idx], colorTag };
+    update('dishes', nextList);
   }
 
   function moveDish(idx: number, delta: -1 | 1) {
@@ -220,6 +226,7 @@ export default function EventEditor() {
                   canMoveDown={i < e.dishes.length - 1}
                   onEdit={() => startEditing(i)}
                   onRemove={() => removeDish(i)}
+                  onColorChange={(c) => setDishColor(i, c)}
                   onMoveUp={() => moveDish(i, -1)}
                   onMoveDown={() => moveDish(i, 1)}
                 />

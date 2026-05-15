@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Clock, Plus, Hand, BookOpen, X, Check, AlertTriangle, ChefHat } from 'lucide-react';
+import { Clock, Plus, Hand, BookOpen, X, Check, AlertTriangle } from 'lucide-react';
 import type { Dish, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
 import { toLocalInputValue, fromLocalInputValue, isSameLocalDate } from '../../core/util/datetime';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
-import ColorPicker from './ColorPicker';
 
 interface Props {
   initial: Dish;
@@ -180,31 +179,6 @@ export default function DishForm({ initial, eventServeAt, onConfirm, onCancel }:
           <span>Start time isn't on the event date.</span>
         </div>
       )}
-
-      <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
-        <label className="text-xs font-medium text-slate-500 space-y-1">
-          <span className="inline-flex items-center gap-1">
-            <ChefHat className="h-3 w-3" aria-hidden="true" />
-            Chef in charge (optional)
-          </span>
-          <input
-            type="text"
-            value={draft.chefName ?? ''}
-            onChange={(e) => setDraft({ ...draft, chefName: e.target.value || undefined })}
-            className="input"
-            placeholder="e.g. Marco"
-            aria-label="Chef in charge"
-          />
-        </label>
-        <div className="flex flex-col items-center gap-1 pb-1">
-          <span className="text-xs font-medium text-slate-500">Color</span>
-          <ColorPicker
-            value={draft.colorTag}
-            onChange={(c) => setDraft({ ...draft, colorTag: c })}
-            label="Color tag for this dish"
-          />
-        </div>
-      </div>
 
       <label className="text-xs font-medium text-slate-500 block">
         <span>Notes (optional)</span>
