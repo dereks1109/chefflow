@@ -6,13 +6,17 @@ Deferred work, in rough priority order. Tick items as you go; add new ones at th
 
 ## 🚀 Next session — pick up here
 
-The single biggest unfinished thread is **Plan 3 (the workflow scheduler)**. The plan doc is fully written but no task has started. Recommended order:
+The single biggest unfinished thread is **Plan 3 (the workflow scheduler)**. Task A is done (commit `f832dbc`); next up is wiring the algorithm into the UI. Recommended order:
 
-- [ ] **Plan 3 — Task A**: implement `core/scheduler/scheduleEvent.ts` (TDD against the Demo Event timeline). See [docs/superpowers/plans/2026-05-14-chefflow-plan-3-workflow-scheduler.md](docs/superpowers/plans/2026-05-14-chefflow-plan-3-workflow-scheduler.md). Tasks A–C ship the must-have feature; D–E unlock the per-chef task lists and the MCP server.
-- [ ] **Plan 3 — Task B**: replace the placeholder data on `/workflows/:eventId` with the algorithm's output for *every* event (not just the Demo).
-- [ ] **Plan 3 — Task C**: persist workflow edits to Dexie (`event.workflow` field) — currently the Workflow page is component-local and loses state on navigation.
-- [ ] **Plan 3 — Task D**: color filter + print view for per-chef task lists.
-- [ ] **Plan 3 — Task E**: `chefflow-mcp/` Node package so other LLMs can call `generate_workflow`.
+- [x] **Plan 3 — Task A**: `core/scheduler/scheduleEvent.ts` pure-function core. ✅ Done — 27 tests, asserts against the Demo Event timeline. **Superseded by Plan 4**: deterministic scheduler is now a test oracle; production path is LLM-driven.
+- [x] **Plan 3 — Task B**: workflow page driven by the algorithm for every event. ✅ Done (commit `0c6a5cb`).
+- [x] **Plan 3 — Task C**: persistence + reorder + color tags. ✅ Done (commit `1ccb601`).
+- [x] **Plan 3 — Task D — filter**: chef filter chips + per-color read-only list. ✅ Done (commits `bd31b50` + `731b443`).
+- [ ] **Plan 3 — Task D — print**: dedicated `/workflows/:eventId/print/:color` route with `@media print` rules for paper handouts. (Small finisher.)
+- [ ] **Plan 3 — Task E**: `chefflow-mcp/` Node package so other LLMs can call `generate_workflow` as an MCP tool.
+- [ ] **Plan 4 — Task B (LLM modules)**: prompt + responseSchema + groqClient + llmScheduler + llmSettingsStore. See [docs/superpowers/plans/2026-05-15-chefflow-plan-4-llm-scheduler.md](docs/superpowers/plans/2026-05-15-chefflow-plan-4-llm-scheduler.md).
+- [ ] **Plan 4 — Task C (LLM UI)**: `LlmSettingsSheet.tsx` modal for the Groq API key + replace `scheduleEvent` call in `Workflow.tsx` with `llmScheduler.scheduleEventLLM`.
+- [ ] **Plan 4 — Task D (manual smoke)**: connect Groq, verify the Demo Event renders via the LLM.
 
 ---
 
