@@ -10,6 +10,7 @@ import {
   type DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import ColorPicker, { swatchClassFor } from './ColorPicker';
 import type { ColorTag } from '../../core/types';
 
@@ -70,6 +71,14 @@ interface Props {
    * when `meta.colorTag` is present, so chefs see who owns each step.
    */
   allowColorPicker?: boolean;
+  /**
+   * When false, steps inside a milestone become non-draggable and the
+   * grip is replaced with a tick-off checkbox (strikethrough when checked).
+   * Milestones themselves stay drag-reorderable. Used by the workflow page
+   * because the LLM owns step ordering — chefs check off what's done, not
+   * shuffle the order.
+   */
+  allowStepDrag?: boolean;
 }
 
 // Two drop types so milestones can only land in the milestone column and
@@ -94,8 +103,22 @@ export default function NestedDragDropBuilder({
   allowAddMilestone = true,
   allowAddStep = true,
   allowColorPicker = true,
+  allowStepDrag = true,
 }: Props) {
   const [milestones, setMilestones] = useState<DndMilestone[]>(initialMilestones);
+  // Tick-off state for non-draggable steps. Local-only — resets on remount
+  // (e.g. after Regenerate or page reload). Persisting per-step "done" would
+  // need a new field on ScheduledStep + a save path; out of scope here.
+  const [checkedStepIds, setCheckedStepIds] = useState<Set<string>>(() => new Set());
+
+  function toggleStepChecked(stepId: string) {
+    setCheckedStepIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) next.delete(stepId);
+      else next.add(stepId);
+      return next;
+    });
+  }
 
   // Hydration guard. In Next.js (App Router) the drag-and-drop libraries can
   // mismatch between server-rendered and client-rendered HTML, so we render
@@ -292,66 +315,106 @@ export default function NestedDragDropBuilder({
                               : '',
                           ].join(' ')}
                         >
-                          {milestone.steps.map((step, stepIndex) => (
-                            <Draggable
-                              key={step.id}
-                              draggableId={step.id}
-                              index={stepIndex}
-                            >
-                              {(sp: DraggableProvided, ss: DraggableStateSnapshot) => (
+                          {milestone.steps.map((step, stepIndex) => {
+                            const isChecked = checkedStepIds.has(step.id);
+                            const stepBody = (leadingControl: ReactNode): ReactNode => (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  {leadingControl}
+                                  <input
+                                    type="text"
+                                    value={step.content}
+                                    onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
+                                    placeholder="Step description…"
+                                    className={[
+                                      'flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1',
+                                      isChecked ? 'line-through text-slate-400 dark:text-slate-500' : '',
+                                    ].join(' ')}
+                                    aria-label="Step content"
+                                  />
+                                  {allowColorPicker ? (
+                                    <ColorPicker
+                                      value={step.meta?.colorTag}
+                                      onChange={(c) => setStepColor(milestone.id, step.id, c)}
+                                      label={`Color tag for step ${stepIndex + 1}`}
+                                    />
+                                  ) : step.meta?.colorTag ? (
+                                    <span
+                                      className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(step.meta.colorTag)}`}
+                                      aria-label={`Color: ${step.meta.colorTag}`}
+                                      title={`Color: ${step.meta.colorTag}`}
+                                    />
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    onClick={() => removeStep(milestone.id, step.id)}
+                                    className="touch-target px-2 text-slate-400 hover:text-danger rounded"
+                                    aria-label="Delete step"
+                                  >
+                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                  </button>
+                                </div>
+                                {step.meta && <StepMetaLine meta={step.meta} />}
+                              </>
+                            );
+
+                            if (!allowStepDrag) {
+                              return (
                                 <li
-                                  ref={sp.innerRef}
-                                  {...sp.draggableProps}
+                                  key={step.id}
                                   className={[
-                                    'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2',
-                                    ss.isDragging
-                                      ? 'border-accent shadow-md ring-1 ring-accent/30'
-                                      : 'border-slate-200 dark:border-slate-700',
+                                    'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2 border-slate-200 dark:border-slate-700',
+                                    isChecked ? 'opacity-70' : '',
                                   ].join(' ')}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <span
-                                      {...sp.dragHandleProps}
-                                      className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
-                                      aria-label="Drag step"
+                                  {stepBody(
+                                    <label
+                                      className="touch-target px-1 inline-flex items-center cursor-pointer"
+                                      aria-label={isChecked ? 'Mark step not done' : 'Mark step done'}
                                     >
-                                      <GripVertical className="h-4 w-4" aria-hidden="true" />
-                                    </span>
-                                    <input
-                                      type="text"
-                                      value={step.content}
-                                      onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
-                                      placeholder="Step description…"
-                                      className="flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
-                                      aria-label="Step content"
-                                    />
-                                    {allowColorPicker ? (
-                                      <ColorPicker
-                                        value={step.meta?.colorTag}
-                                        onChange={(c) => setStepColor(milestone.id, step.id, c)}
-                                        label={`Color tag for step ${stepIndex + 1}`}
+                                      <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleStepChecked(step.id)}
+                                        className="h-4 w-4 rounded border-slate-300 text-accent focus:ring-accent"
                                       />
-                                    ) : step.meta?.colorTag ? (
-                                      <span
-                                        className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(step.meta.colorTag)}`}
-                                        aria-label={`Color: ${step.meta.colorTag}`}
-                                        title={`Color: ${step.meta.colorTag}`}
-                                      />
-                                    ) : null}
-                                    <button
-                                      type="button"
-                                      onClick={() => removeStep(milestone.id, step.id)}
-                                      className="touch-target px-2 text-slate-400 hover:text-danger rounded"
-                                      aria-label="Delete step"
-                                    >
-                                      <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                    </button>
-                                  </div>
-                                  {step.meta && <StepMetaLine meta={step.meta} />}
+                                    </label>,
+                                  )}
                                 </li>
-                              )}
-                            </Draggable>
-                          ))}
+                              );
+                            }
+
+                            return (
+                              <Draggable
+                                key={step.id}
+                                draggableId={step.id}
+                                index={stepIndex}
+                              >
+                                {(sp: DraggableProvided, ss: DraggableStateSnapshot) => (
+                                  <li
+                                    ref={sp.innerRef}
+                                    {...sp.draggableProps}
+                                    className={[
+                                      'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2',
+                                      ss.isDragging
+                                        ? 'border-accent shadow-md ring-1 ring-accent/30'
+                                        : 'border-slate-200 dark:border-slate-700',
+                                    ].join(' ')}
+                                  >
+                                    {stepBody(
+                                      <span
+                                        {...sp.dragHandleProps}
+                                        className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+                                        aria-label="Drag step"
+                                      >
+                                        <GripVertical className="h-4 w-4" aria-hidden="true" />
+                                      </span>,
+                                    )}
+                                  </li>
+                                )}
+                              </Draggable>
+                            );
+                          })}
                           {stepsProvided.placeholder}
 
                           {allowAddStep && (
@@ -441,7 +504,7 @@ function MilestoneHeader({
 // generic recipe builder leaves it off).
 // ---------------------------------------------------------------------------
 function StepMetaLine({ meta }: { meta: DndStepMeta }) {
-  if (!meta.time && !meta.dish && !(meta.rules && meta.rules.length > 0)) return null;
+  if (!meta.time && !meta.dish) return null;
   return (
     <div className="mt-1 pl-9 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
       {meta.time && (
@@ -452,15 +515,6 @@ function StepMetaLine({ meta }: { meta: DndStepMeta }) {
           {meta.dish}
         </span>
       )}
-      {meta.rules && meta.rules.map((n) => (
-        <span
-          key={n}
-          className="rounded px-1.5 py-0.5 bg-accent/10 text-accent text-[10px] font-medium"
-          title={`CulinaryRule.md — Rule ${n}`}
-        >
-          R{n}
-        </span>
-      ))}
     </div>
   );
 }

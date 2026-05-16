@@ -20,7 +20,7 @@ export default function WorkflowsLibrary() {
     return (
       <section className="p-6 text-center max-w-md mx-auto">
         <Compass className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600" aria-hidden="true" />
-        <h1 className="text-2xl font-bold mt-4">Workflow</h1>
+        <h1 className="text-2xl font-bold mt-4">Workflows</h1>
         <p className="mt-2 text-slate-600 dark:text-slate-400">
           Workflows are tied to events. Create an event in the Events tab first, then come back here to plan its kitchen workflow.
         </p>
@@ -34,11 +34,8 @@ export default function WorkflowsLibrary() {
 
   return (
     <section className="p-4 md:p-6 max-w-5xl mx-auto">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">Workflow</h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-          One workflow per event. Open one to plan its milestones and steps.
-        </p>
+      <header className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Workflows</h1>
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {events.map((e) => {

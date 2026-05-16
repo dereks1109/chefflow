@@ -10,7 +10,6 @@ import {
   Compass,
   Key,
   RefreshCw,
-  Settings,
   Sparkles,
   StickyNote,
   Users,
@@ -182,9 +181,14 @@ export default function Workflow() {
   // AbortController for in-flight LLM calls (so Regenerate can cancel).
   const inflight = useRef<AbortController | null>(null);
 
-  const apiKey = useLlmSettingsStore((s) => s.apiKey);
+  const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
-  const isReady = useLlmSettingsStore((s) => s.isReady)();
+  // Env var (chefflow/.env.local, gitignored) acts as a fallback when the user
+  // hasn't pasted a key into the settings sheet. Keeps a single source of truth
+  // at the consumer level — the store stays purely user-managed state.
+  const envApiKey = ((import.meta.env.VITE_GROQ_API_KEY as string | undefined) ?? '').trim();
+  const apiKey = (storedApiKey || envApiKey).trim();
+  const isReady = apiKey.length > 0;
 
   // -------------------------------------------------------------------------
   // Initial load: pull event + recipes, decide whether to use the saved
@@ -333,16 +337,6 @@ export default function Workflow() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Workflows
         </Link>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="btn-secondary text-sm inline-flex items-center gap-1"
-          aria-label="LLM settings"
-          title="LLM settings"
-        >
-          <Settings className="h-3.5 w-3.5" aria-hidden="true" />
-          {isReady ? 'Connected' : 'Connect Groq'}
-        </button>
       </div>
 
       <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
@@ -518,6 +512,7 @@ export default function Workflow() {
               allowAddMilestone={false}
               allowAddStep={false}
               allowColorPicker={false}
+              allowStepDrag={false}
             />
           )
         )}
