@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { UserButton } from '@clerk/clerk-react';
 
 const tabs = [
   { to: '/recipes', label: 'Recipes', icon: '🍳' },
@@ -12,7 +13,7 @@ export default function BottomNav() {
       aria-label="Primary"
       className="fixed bottom-0 inset-x-0 z-10 border-t border-slate-200 bg-white
                  dark:border-slate-800 dark:bg-kitchen-ink
-                 md:static md:border-t-0 md:border-b md:flex md:gap-2 md:px-4"
+                 md:static md:border-t-0 md:border-b md:flex md:items-center md:gap-2 md:px-4"
     >
       <ul className="flex md:gap-2">
         {tabs.map((t) => (
@@ -35,6 +36,9 @@ export default function BottomNav() {
           </li>
         ))}
       </ul>
+      <div className="hidden md:flex md:ml-auto md:items-center md:px-2">
+        <UserButton afterSignOutUrl="/" />
+      </div>
     </nav>
   );
 }

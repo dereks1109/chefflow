@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { SignedIn, SignedOut } from '@clerk/clerk-react';
 import AppLayout from './ui/layout/AppLayout';
 import KitchenPlaceholder from './ui/pages/KitchenPlaceholder';
 import RecipesLibrary from './ui/pages/RecipesLibrary';
@@ -10,6 +11,7 @@ import EventEditor from './ui/pages/EventEditor';
 import NestedDndDemo from './ui/pages/NestedDndDemo';
 import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
+import SignInScreen from './ui/components/SignInScreen';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 
 export default function App() {
@@ -23,20 +25,27 @@ export default function App() {
   }
 
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Navigate to="/recipes" replace />} />
-        <Route path="/recipes" element={<RecipesLibrary />} />
-        <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
-        <Route path="/events" element={<EventsLibrary />} />
-        <Route path="/events/:id" element={<EventView />} />
-        <Route path="/events/:id/edit" element={<EventEditor />} />
-        <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
-        <Route path="/workflows" element={<WorkflowsLibrary />} />
-        <Route path="/workflows/:eventId" element={<Workflow />} />
-        <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
-        <Route path="*" element={<div className="p-6">Not found.</div>} />
-      </Route>
-    </Routes>
+    <>
+      <SignedOut>
+        <SignInScreen />
+      </SignedOut>
+      <SignedIn>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/recipes" replace />} />
+            <Route path="/recipes" element={<RecipesLibrary />} />
+            <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
+            <Route path="/events" element={<EventsLibrary />} />
+            <Route path="/events/:id" element={<EventView />} />
+            <Route path="/events/:id/edit" element={<EventEditor />} />
+            <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+            <Route path="/workflows" element={<WorkflowsLibrary />} />
+            <Route path="/workflows/:eventId" element={<Workflow />} />
+            <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+            <Route path="*" element={<div className="p-6">Not found.</div>} />
+          </Route>
+        </Routes>
+      </SignedIn>
+    </>
   );
 }
