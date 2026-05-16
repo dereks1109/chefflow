@@ -11,5 +11,5 @@ binding = "RATE_LIMIT"
 id = "TODO_REPLACE_AFTER_NAMESPACE_CREATE"
 
 [vars]
-CLERK_ISSUER = "https://example.clerk.accounts.dev"
+CLERK_ISSUER = "https://engaging-bat-5.clerk.accounts.dev"
 DAILY_LIMIT = "30"

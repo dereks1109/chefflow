@@ -8,11 +8,11 @@ export interface Env {
   AI: Ai;
   RATE_LIMIT: KVNamespace;
   CLERK_ISSUER: string;
-  CLERK_JWT_KEY: string;
+  CLERK_SECRET_KEY: string;
   DAILY_LIMIT: string;
 }
 
-type Verifier = (token: string, opts: { jwtKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
+type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

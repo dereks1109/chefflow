@@ -3,8 +3,8 @@ import { verifyClerkRequest, UnauthorizedError } from './auth';
 
 const fakeEnv = {
   CLERK_ISSUER: 'https://example.clerk.accounts.dev',
-  CLERK_JWT_KEY: '-----BEGIN PUBLIC KEY-----\nFAKE\n-----END PUBLIC KEY-----',
-} as { CLERK_ISSUER: string; CLERK_JWT_KEY: string };
+  CLERK_SECRET_KEY: 'sk_test_fakefakefakefakefakefakefakefakefake',
+} as { CLERK_ISSUER: string; CLERK_SECRET_KEY: string };
 
 describe('verifyClerkRequest', () => {
   it('throws UnauthorizedError when the Authorization header is missing', async () => {
@@ -29,7 +29,7 @@ describe('verifyClerkRequest', () => {
     const userId = await verifyClerkRequest(req, fakeEnv, stubVerify);
     expect(userId).toBe('user_abc123');
     expect(stubVerify).toHaveBeenCalledWith('good.jwt.token', {
-      jwtKey: fakeEnv.CLERK_JWT_KEY,
+      secretKey: fakeEnv.CLERK_SECRET_KEY,
       issuer: fakeEnv.CLERK_ISSUER,
     });
   });

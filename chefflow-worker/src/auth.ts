@@ -9,19 +9,24 @@ export class UnauthorizedError extends Error {
 
 interface ClerkConfig {
   CLERK_ISSUER: string;
-  CLERK_JWT_KEY: string;
+  CLERK_SECRET_KEY: string;
 }
 
 // Injected verifier signature — matches Clerk's verifyToken so tests can stub.
 type TokenVerifier = (
   token: string,
-  opts: { jwtKey: string; issuer: string },
+  opts: { secretKey: string; issuer: string },
 ) => Promise<{ sub: string } | undefined>;
 
 /**
  * Verify the request's Clerk JWT and return the authenticated userId.
  * Throws UnauthorizedError on any failure (missing header, bad shape,
  * bad signature, wrong issuer, expired token, missing sub claim).
+ *
+ * Uses Clerk's secretKey (`sk_test_…` / `sk_live_…`) — the SDK fetches the
+ * JWKS public keys automatically and caches per isolate. Trades a one-time
+ * ~50ms JWKS fetch on cold start for a much simpler setup vs. shipping the
+ * PEM manually as a wrangler secret.
  */
 export async function verifyClerkRequest(
   req: Request,
@@ -35,7 +40,7 @@ export async function verifyClerkRequest(
   const token = match[1].trim();
   try {
     const claims = await verify(token, {
-      jwtKey: env.CLERK_JWT_KEY,
+      secretKey: env.CLERK_SECRET_KEY,
       issuer: env.CLERK_ISSUER,
     });
     if (!claims?.sub) throw new UnauthorizedError('Token missing sub claim');

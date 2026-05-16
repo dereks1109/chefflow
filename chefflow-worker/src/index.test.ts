@@ -30,7 +30,7 @@ function makeEnv(overrides: Partial<Env> = {}): Env {
     AI: makeAi(),
     RATE_LIMIT: makeKv(),
     CLERK_ISSUER: 'https://example.clerk.accounts.dev',
-    CLERK_JWT_KEY: 'fake-jwt-key',
+    CLERK_SECRET_KEY: 'sk_test_fake',
     DAILY_LIMIT: '3', // small so the 429 test runs fast
     ...overrides,
   };
