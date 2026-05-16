@@ -183,12 +183,15 @@ export default function Workflow() {
 
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
-  // Env var (chefflow/.env.local, gitignored) acts as a fallback when the user
-  // hasn't pasted a key into the settings sheet. Keeps a single source of truth
-  // at the consumer level — the store stays purely user-managed state.
+  // In proxy mode the Worker handles auth via Clerk JWT — no Groq key needed
+  // at the call site. In groq dev mode the localStorage + env fallback stands.
+  // (The 'proxy' placeholder is never sent over the wire; llmClient short-
+  // circuits to the proxy in this mode, but the readiness gate needs a
+  // non-empty string.)
+  const isProxyMode = (import.meta.env.VITE_LLM_MODE as string | undefined) === 'proxy';
   const envApiKey = ((import.meta.env.VITE_GROQ_API_KEY as string | undefined) ?? '').trim();
-  const apiKey = (storedApiKey || envApiKey).trim();
-  const isReady = apiKey.length > 0;
+  const apiKey = isProxyMode ? 'proxy' : (storedApiKey || envApiKey).trim();
+  const isReady = isProxyMode || apiKey.length > 0;
 
   // -------------------------------------------------------------------------
   // Initial load: pull event + recipes, decide whether to use the saved
