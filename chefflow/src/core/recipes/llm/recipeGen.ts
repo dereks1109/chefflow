@@ -18,7 +18,8 @@
 
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../types';
 import { randomId } from '../../util/id';
-import { complete, GroqClientError } from '../../scheduler/llm/groqClient';
+import { complete } from '../../llm/llmClient';
+import { GroqClientError } from '../../scheduler/llm/groqClient';
 import {
   buildRecipeGenSystemPrompt,
   buildTextUserPrompt,
@@ -66,6 +67,7 @@ export async function generateRecipeFromText(input: GenerateFromTextInput): Prom
   const userPrompt = buildTextUserPrompt({ dish: input.dish, portions: input.portions });
 
   const rawJson = await complete({
+    endpoint: 'generate',
     apiKey: input.apiKey,
     model: input.model,
     systemPrompt,
@@ -98,6 +100,7 @@ export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAn
   const systemPrompt = buildAnalyzeSystemPrompt();
   const userPrompt = buildAnalyzeUserPrompt(input.recipe);
   const rawJson = await complete({
+    endpoint: 'analyze',
     apiKey: input.apiKey,
     model: input.model,
     systemPrompt,
@@ -136,6 +139,7 @@ export async function generateRecipeFromPhoto(input: GenerateFromPhotoInput): Pr
   // Vision models historically may not honor JSON mode strictly; we still ask
   // for it (most Groq vision models do) but the validator tolerates wrapping.
   const rawJson = await complete({
+    endpoint: 'photo',
     apiKey: input.apiKey,
     model: input.model ?? VISION_MODEL,
     systemPrompt,
