@@ -1,0 +1,15 @@
+name = "chefflow-llm-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-01-15"
+
+[ai]
+binding = "AI"
+
+# Placeholder KV id — replaced via `wrangler kv:namespace create RATE_LIMIT` in a later task
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "TODO_REPLACE_AFTER_NAMESPACE_CREATE"
+
+[vars]
+CLERK_ISSUER = "https://example.clerk.accounts.dev"
+DAILY_LIMIT = "30"
