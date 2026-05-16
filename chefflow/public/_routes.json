@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "description": "Cloudflare Pages routing — only /api/llm/* invokes Functions; everything else is static.",
+  "include": ["/api/llm/*"],
+  "exclude": []
+}
