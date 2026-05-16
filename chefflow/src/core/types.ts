@@ -29,6 +29,34 @@ export interface WorkflowStep {
   phase: StepPhase;
 }
 
+// Closed taxonomy: the 14 allergens UK food law requires businesses to declare.
+// Tag keys are kebab-case so they round-trip cleanly through JSON / IndexedDB.
+// See src/core/recipes/llm/allergens.ts for display labels + examples.
+export type AllergenTag =
+  | 'celery'
+  | 'gluten'
+  | 'crustaceans'
+  | 'eggs'
+  | 'fish'
+  | 'lupin'
+  | 'milk'
+  | 'molluscs'
+  | 'mustard'
+  | 'peanuts'
+  | 'sesame'
+  | 'soybeans'
+  | 'sulphites'
+  | 'tree-nuts';
+
+export interface RecipeAnalysis {
+  caloriesPerPortion?: number;
+  caloriesTotal?: number;
+  keyIngredientTags?: string[];     // 2–6 lowercase headline ingredients (e.g. "beef")
+  allergens?: AllergenTag[];        // closed UK-14 set, deduped
+  analyzedAt?: number;              // epoch ms
+  source?: 'llm-text' | 'llm-vision' | 'manual';
+}
+
 export interface Recipe {
   id: string;
   title: string;
@@ -40,6 +68,7 @@ export interface Recipe {
   createdAt: number;
   updatedAt: number;
   isPinned?: boolean;
+  analysis?: RecipeAnalysis;
 }
 
 export interface Dish {

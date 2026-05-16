@@ -7,12 +7,21 @@
 
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1';
 
+// Multimodal user content (OpenAI-compatible). Vision-capable models accept an
+// array of parts mixing text + image_url; text-only models only see strings.
+// We keep the union narrow — text + image_url cover the recipe-photo flow.
+export type MultimodalPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export interface GroqCompletionInput {
   apiKey: string;
   model: string;
   systemPrompt: string;
-  userPrompt: string;
+  userPrompt?: string;                          // legacy plain-text path (still supported)
+  userContent?: string | MultimodalPart[];      // new: multimodal user message; wins over userPrompt if both given
   temperature?: number;          // default 0 for deterministic-ish output
+  responseFormat?: 'json_object' | 'text';      // default 'json_object'; vision models may not honor JSON mode
   baseUrl?: string;              // override for testing / alternative providers
   fetchImpl?: typeof fetch;      // injectable for unit tests
   signal?: AbortSignal;          // cancellation
@@ -41,7 +50,9 @@ export async function complete(input: GroqCompletionInput): Promise<string> {
     model,
     systemPrompt,
     userPrompt,
+    userContent,
     temperature = 0,
+    responseFormat = 'json_object',
     baseUrl = DEFAULT_BASE_URL,
     fetchImpl = globalThis.fetch,
     signal,
@@ -51,14 +62,20 @@ export async function complete(input: GroqCompletionInput): Promise<string> {
     throw new GroqClientError('Missing API key');
   }
 
+  // userContent wins when provided (multimodal); otherwise fall back to the
+  // legacy plain-text path. We never emit an array body for a plain string,
+  // so existing text-only callers see byte-identical payloads.
+  const messageContent: string | MultimodalPart[] =
+    userContent !== undefined ? userContent : (userPrompt ?? '');
+
   const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
   const body = {
     model,
     messages: [
       { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
+      { role: 'user', content: messageContent },
     ],
-    response_format: { type: 'json_object' },
+    response_format: { type: responseFormat },
     temperature,
   };
 

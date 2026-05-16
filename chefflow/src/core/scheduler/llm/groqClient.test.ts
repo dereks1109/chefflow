@@ -107,4 +107,52 @@ describe('groqClient.complete', () => {
       complete({ apiKey: 'k', model: 'm', systemPrompt: 's', userPrompt: 'u', fetchImpl }),
     ).rejects.toThrow(/no content/);
   });
+
+  it('sends multimodal user content verbatim when userContent is an array', async () => {
+    let captured: { init?: RequestInit } = {};
+    const fetchImpl = mockFetch((..._args: unknown[]) => {
+      const [, init] = _args as [string, RequestInit];
+      captured = { init };
+      return Promise.resolve(jsonResponse({
+        choices: [{ message: { content: '{"title":"x"}' } }],
+      }));
+    });
+
+    await complete({
+      apiKey: 'k',
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+      systemPrompt: 'SYS',
+      userContent: [
+        { type: 'text', text: 'Describe this recipe.' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+      ],
+      fetchImpl,
+    });
+
+    const body = JSON.parse(captured.init?.body as string);
+    expect(body.messages[1].role).toBe('user');
+    expect(body.messages[1].content).toEqual([
+      { type: 'text', text: 'Describe this recipe.' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAA' } },
+    ]);
+  });
+
+  it('honors responseFormat=text (vision models that may not support JSON mode)', async () => {
+    let captured: { init?: RequestInit } = {};
+    const fetchImpl = mockFetch((..._args: unknown[]) => {
+      const [, init] = _args as [string, RequestInit];
+      captured = { init };
+      return Promise.resolve(jsonResponse({ choices: [{ message: { content: '{}' } }] }));
+    });
+    await complete({
+      apiKey: 'k',
+      model: 'm',
+      systemPrompt: 's',
+      userPrompt: 'u',
+      responseFormat: 'text',
+      fetchImpl,
+    });
+    const body = JSON.parse(captured.init?.body as string);
+    expect(body.response_format).toEqual({ type: 'text' });
+  });
 });
