@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { AllergenPill, KeyTagPill } from './AllergenBadge';
 import type { Recipe } from '../../core/types';
 
 interface Props {
@@ -53,6 +54,7 @@ export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete 
           </div>
         )}
       </dl>
+      {recipe.analysis && <RecipeAnalysisRow analysis={recipe.analysis} />}
       <footer className="mt-3 flex gap-2">
         <Link to={`/recipes/${recipe.id}/edit`} className="btn-secondary text-sm">Edit</Link>
         <button type="button" onClick={() => onDuplicate(recipe)} className="btn-secondary text-sm">
@@ -65,5 +67,31 @@ export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete 
         )}
       </footer>
     </article>
+  );
+}
+
+function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysis']> }) {
+  const kcal = analysis.caloriesPerPortion;
+  const keyTags = analysis.keyIngredientTags ?? [];
+  const allergens = analysis.allergens ?? [];
+  if (kcal === undefined && keyTags.length === 0 && allergens.length === 0) return null;
+  return (
+    <section className="mt-2 flex flex-wrap gap-1.5" aria-label="Recipe tags">
+      {kcal !== undefined && (
+        <span
+          className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800
+                     text-slate-700 dark:text-slate-300 px-2 py-0.5 text-xs font-medium"
+          title="Calories per portion (LLM estimate)"
+        >
+          ~{kcal} kcal/portion
+        </span>
+      )}
+      {keyTags.map((t) => (
+        <KeyTagPill key={t}>{t}</KeyTagPill>
+      ))}
+      {allergens.map((a) => (
+        <AllergenPill key={a} tag={a} />
+      ))}
+    </section>
   );
 }

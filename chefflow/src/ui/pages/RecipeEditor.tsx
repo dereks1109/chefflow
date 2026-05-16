@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
+import AnalysisSection from '../components/AnalysisSection';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
-import type { Recipe, Ingredient, WorkflowStep } from '../../core/types';
+import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -79,6 +80,10 @@ export default function RecipeEditor() {
     update('steps', r.steps.filter((_, i) => i !== idx));
   }
 
+  function updateAnalysis(next: RecipeAnalysis) {
+    update('analysis', next);
+  }
+
   async function handleSave() {
     await saveRecipe({ ...r, updatedAt: Date.now() });
     setDirty(false);
@@ -105,6 +110,8 @@ export default function RecipeEditor() {
       </header>
 
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+        <AnalysisSection recipe={r} onChange={updateAnalysis} />
+
         <label className="block">
           <span className="text-sm font-medium">Title</span>
           <input

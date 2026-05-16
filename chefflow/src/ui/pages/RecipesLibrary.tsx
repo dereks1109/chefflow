@@ -1,13 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, Plus } from 'lucide-react';
 import RecipeCard from '../components/RecipeCard';
+import GenerateRecipeSheet from '../components/GenerateRecipeSheet';
 import { listRecipes, saveRecipe, deleteRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
 import type { Recipe } from '../../core/types';
 
 export default function RecipesLibrary() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
+  const [newRecipeOpen, setNewRecipeOpen] = useState(false);
   const navigate = useNavigate();
+
+  async function handleCreated(r: Recipe) {
+    await saveRecipe(r);
+    setRecipes(await listRecipes());
+    setNewRecipeOpen(false);
+    navigate(`/recipes/${r.id}/edit`);
+  }
 
   useEffect(() => {
     listRecipes().then(setRecipes);
@@ -37,48 +47,43 @@ export default function RecipesLibrary() {
     setRecipes(await listRecipes());
   }
 
-  async function handleCreateNew() {
-    const fresh: Recipe = {
-      id: randomId(),
-      title: 'Untitled recipe',
-      originalYield: 1,
-      ingredients: [],
-      steps: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    await saveRecipe(fresh);
-    navigate(`/recipes/${fresh.id}/edit`);
-  }
-
   if (recipes === null) {
     return <div className="p-6 text-slate-500">Loading…</div>;
   }
 
   if (recipes.length === 0) {
     return (
-      <section className="p-6 text-center">
-        <h1 className="text-2xl font-bold">Recipes</h1>
-        <p className="mt-4 text-slate-600 dark:text-slate-400">No recipes yet.</p>
-        <Link
-          to="#"
-          onClick={(e) => {
-            e.preventDefault();
-            void handleCreateNew();
-          }}
-          className="btn-primary mt-6 inline-flex"
+      <section className="p-6 text-center max-w-md mx-auto">
+        <BookOpen className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600" aria-hidden="true" />
+        <h1 className="text-2xl font-bold mt-4">Recipes</h1>
+        <p className="mt-2 text-slate-600 dark:text-slate-400">No recipes yet.</p>
+        <button
+          type="button"
+          onClick={() => setNewRecipeOpen(true)}
+          className="btn-primary mt-6 inline-flex items-center gap-2"
         >
+          <Plus className="h-4 w-4" aria-hidden="true" />
           Create your first recipe
-        </Link>
+        </button>
+        <GenerateRecipeSheet
+          open={newRecipeOpen}
+          onClose={() => setNewRecipeOpen(false)}
+          onCreated={handleCreated}
+        />
       </section>
     );
   }
 
   return (
-    <section className="p-4 md:p-6">
-      <header className="flex items-center justify-between mb-4">
+    <section className="p-4 md:p-6 max-w-5xl mx-auto">
+      <header className="flex items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl font-bold">Recipes</h1>
-        <button type="button" onClick={() => void handleCreateNew()} className="btn-primary">
+        <button
+          type="button"
+          onClick={() => setNewRecipeOpen(true)}
+          className="btn-primary inline-flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
           New recipe
         </button>
       </header>
@@ -94,6 +99,11 @@ export default function RecipesLibrary() {
           </li>
         ))}
       </ul>
+      <GenerateRecipeSheet
+        open={newRecipeOpen}
+        onClose={() => setNewRecipeOpen(false)}
+        onCreated={handleCreated}
+      />
     </section>
   );
 }

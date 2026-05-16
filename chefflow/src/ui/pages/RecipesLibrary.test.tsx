@@ -34,7 +34,7 @@ describe('RecipesLibrary', () => {
     await waitFor(() => {
       expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: /create your first recipe/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create your first recipe/i })).toBeInTheDocument();
   });
 
   it('lists saved recipes', async () => {
