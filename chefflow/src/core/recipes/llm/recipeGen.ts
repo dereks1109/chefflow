@@ -170,14 +170,26 @@ function parseJsonAndValidate(rawJson: string): LlmRecipe {
   return parseLlmRecipe(parsed);
 }
 
+// Vision models (and chatty text models when JSON mode is off) sometimes
+// preface the JSON with prose ("Sure, here is the recipe:") or wrap it in
+// markdown fences. Both cases break JSON.parse. Strip fences first, then
+// extract the outermost {...} substring as a last resort.
 function stripMarkdownFences(s: string): string {
-  const trimmed = s.trim();
-  if (!trimmed.startsWith('```')) return trimmed;
-  // strip an opening fence (```json or ```) and a trailing ``` if present
-  return trimmed
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/```$/, '')
-    .trim();
+  let trimmed = s.trim();
+  if (trimmed.startsWith('```')) {
+    trimmed = trimmed
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/, '')
+      .trim();
+  }
+  if (!trimmed.startsWith('{')) {
+    const first = trimmed.indexOf('{');
+    const last = trimmed.lastIndexOf('}');
+    if (first >= 0 && last > first) {
+      trimmed = trimmed.slice(first, last + 1);
+    }
+  }
+  return trimmed;
 }
 
 // ---------------------------------------------------------------------------
