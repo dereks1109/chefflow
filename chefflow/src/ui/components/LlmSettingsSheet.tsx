@@ -37,6 +37,7 @@ export default function LlmSettingsSheet({ open, onClose }: Props) {
   if (!open) return null;
 
   function handleSave() {
+    if (!window.confirm('Save these LLM settings?')) return;
     setApiKey(draft.trim());
     onClose();
   }

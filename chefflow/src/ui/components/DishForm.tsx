@@ -127,7 +127,7 @@ export default function DishForm({ initial, eventServeAt, onConfirm, onCancel }:
                     className="btn-secondary text-sm inline-flex items-center justify-center gap-1 flex-1"
                   >
                     <Hand className="h-3.5 w-3.5" aria-hidden="true" />
-                    I'll get the dish ready
+                    The dish is ready to go
                   </button>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export default function DishForm({ initial, eventServeAt, onConfirm, onCancel }:
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <label className="text-xs font-medium text-slate-500 space-y-1">
           <span>Portions</span>
           <input

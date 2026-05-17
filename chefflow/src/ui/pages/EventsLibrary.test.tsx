@@ -34,7 +34,7 @@ describe('EventsLibrary', () => {
     await waitFor(() => {
       expect(screen.getByText(/no events yet/i)).toBeInTheDocument();
     });
-    expect(screen.getByRole('link', { name: /create your first event/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create your first event/i })).toBeInTheDocument();
   });
 
   it('lists saved events', async () => {

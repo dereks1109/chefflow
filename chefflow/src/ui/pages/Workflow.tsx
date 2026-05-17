@@ -296,6 +296,7 @@ export default function Workflow() {
   }
 
   async function handleSave() {
+    if (!window.confirm('Save this workflow to the event?')) return;
     const updated: KitchenEvent = {
       ...event,
       workflow: scheduled,

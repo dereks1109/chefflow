@@ -1,30 +1,48 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, CalendarPlus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CalendarPlus, Sparkles } from 'lucide-react';
 import EventCard from '../components/EventCard';
+import GenerateEventSheet, { type ResumeReview } from '../components/GenerateEventSheet';
 import { listEvents, saveEvent, deleteEvent } from '../../db/eventsRepo';
-import { randomId } from '../../core/util/id';
+import { listRecipes } from '../../db/recipesRepo';
+import { loadReviewDraft } from '../../core/events/reviewDraft';
 import type { KitchenEvent } from '../../core/types';
 
 export default function EventsLibrary() {
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // Populated when the chef returns from the recipe editor mid-review.
+  // Passed through to GenerateEventSheet so it can rebuild the review screen
+  // with the saved event + match map + the freshly-saved stub recipe linked.
+  const [resumeReview, setResumeReview] = useState<ResumeReview | undefined>(undefined);
   const navigate = useNavigate();
 
   useEffect(() => {
     listEvents().then(setEvents);
   }, []);
 
-  async function handleCreateNew() {
-    const fresh: KitchenEvent = {
-      id: randomId(),
-      title: 'Untitled event',
-      serveAt: undefined,
-      notes: '',
-      dishes: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+  // Pick up any pending review draft once on mount.
+  useEffect(() => {
+    const draft = loadReviewDraft();
+    if (!draft) return;
+    let cancelled = false;
+    void listRecipes().then((recipes) => {
+      if (cancelled) return;
+      setResumeReview({ draft, recipes });
+      setSheetOpen(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  function handleSheetClose() {
+    setSheetOpen(false);
+    setResumeReview(undefined);
+  }
+
+  async function handleCreated(fresh: KitchenEvent) {
     await saveEvent(fresh);
+    setSheetOpen(false);
+    setResumeReview(undefined);
     navigate(`/events/${fresh.id}/edit`);
   }
 
@@ -41,24 +59,29 @@ export default function EventsLibrary() {
 
   if (events.length === 0) {
     return (
-      <section className="p-6 text-center max-w-md mx-auto">
-        <CalendarPlus className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600" aria-hidden="true" />
-        <h1 className="text-2xl font-bold mt-4">Events</h1>
-        <p className="mt-2 text-slate-600 dark:text-slate-400">
-          No events yet. Plan a dinner, a service, or a meal prep day.
-        </p>
-        <Link
-          to="#"
-          onClick={(e) => {
-            e.preventDefault();
-            void handleCreateNew();
-          }}
-          className="btn-primary mt-6 inline-flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          Create your first event
-        </Link>
-      </section>
+      <>
+        <section className="p-6 text-center max-w-md mx-auto">
+          <CalendarPlus className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600" aria-hidden="true" />
+          <h1 className="text-2xl font-bold mt-4">Events</h1>
+          <p className="mt-2 text-slate-600 dark:text-slate-400">
+            No events yet. Plan a dinner, a service, or a meal prep day.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className="btn-primary mt-6 inline-flex items-center gap-2"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            Create your first event
+          </button>
+        </section>
+        <GenerateEventSheet
+          open={sheetOpen}
+          onClose={handleSheetClose}
+          onCreated={(ev) => void handleCreated(ev)}
+          initialReview={resumeReview}
+        />
+      </>
     );
   }
 
@@ -68,10 +91,10 @@ export default function EventsLibrary() {
         <h1 className="text-2xl font-bold">Events</h1>
         <button
           type="button"
-          onClick={() => void handleCreateNew()}
+          onClick={() => setSheetOpen(true)}
           className="btn-primary inline-flex items-center gap-2"
         >
-          <Plus className="h-4 w-4" aria-hidden="true" />
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
           New event
         </button>
       </header>
@@ -82,6 +105,11 @@ export default function EventsLibrary() {
           </li>
         ))}
       </ul>
+      <GenerateEventSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCreated={(ev) => void handleCreated(ev)}
+      />
     </section>
   );
 }

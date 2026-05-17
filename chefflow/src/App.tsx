@@ -13,6 +13,8 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SignInScreen from './ui/components/SignInScreen';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
+// Bootstrap dark mode from localStorage before first render (default: dark)
+import './ui/theme/useTheme';
 
 export default function App() {
   const [booted, setBooted] = useState(false);

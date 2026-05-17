@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { formatGBP } from '../../core/util/money';
 import type { Recipe } from '../../core/types';
 
 interface Props {
@@ -51,6 +52,12 @@ export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete 
           <div>
             <dt className="sr-only">Cook</dt>
             <dd>Cook {recipe.cookTime}</dd>
+          </div>
+        )}
+        {recipe.pricePerPortion !== undefined && (
+          <div>
+            <dt className="sr-only">Price per portion</dt>
+            <dd>{formatGBP(recipe.pricePerPortion)}/portion</dd>
           </div>
         )}
       </dl>

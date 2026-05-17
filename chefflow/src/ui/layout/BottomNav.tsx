@@ -1,44 +1,78 @@
-import { NavLink } from 'react-router-dom';
-import { UserButton } from '@clerk/clerk-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { BookOpen, CalendarDays, ListChecks } from 'lucide-react';
 
 const tabs = [
-  { to: '/recipes', label: 'Recipes', icon: '🍳' },
-  { to: '/events', label: 'Events', icon: '📅' },
-  { to: '/workflows', label: 'Workflows', icon: '🧭' },
+  { to: '/recipes', label: 'Recipes', icon: BookOpen },
+  { to: '/events', label: 'Events', icon: CalendarDays },
+  { to: '/workflows', label: 'Workflows', icon: ListChecks },
 ];
 
 export default function BottomNav() {
+  const { pathname } = useLocation();
+
   return (
     <nav
       aria-label="Primary"
-      className="fixed bottom-0 inset-x-0 z-10 border-t border-slate-200 bg-white
-                 dark:border-slate-800 dark:bg-kitchen-ink
-                 md:static md:border-t-0 md:border-b md:flex md:items-center md:gap-2 md:px-4"
+      className={[
+        'lg:hidden',
+        'fixed bottom-0 inset-x-0 z-30',
+        'border-t border-[rgba(255,255,255,0.06)]',
+        'bg-surface-0/90 backdrop-blur-md',
+        // Light mode fallback
+        'dark:bg-surface-0/90',
+        'safe-area-pb', // handled via padding below on the list
+      ].join(' ')}
     >
-      <ul className="flex md:gap-2">
-        {tabs.map((t) => (
-          <li key={t.to} className="flex-1 md:flex-none">
-            <NavLink
-              to={t.to}
-              className={({ isActive }) =>
-                [
-                  'touch-target px-4 py-2 flex flex-col items-center justify-center text-sm',
-                  'md:flex-row md:gap-2 md:py-3',
+      <ul
+        className="flex items-stretch"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {tabs.map(({ to, label, icon: Icon }) => {
+          const isActive = pathname === to || pathname.startsWith(to + '/');
+
+          return (
+            <li key={to} className="flex-1">
+              <NavLink
+                to={to}
+                aria-label={label}
+                aria-current={isActive ? 'page' : undefined}
+                className={[
+                  'relative flex flex-col items-center justify-center gap-1',
+                  'min-h-[56px] w-full px-2 py-2',
+                  'text-xs font-medium',
+                  'transition-colors duration-150',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset',
                   isActive
-                    ? 'text-accent font-semibold'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100',
-                ].join(' ')
-              }
-            >
-              <span aria-hidden="true" className="text-xl md:text-base">{t.icon}</span>
-              <span>{t.label}</span>
-            </NavLink>
-          </li>
-        ))}
+                    ? 'text-accent'
+                    : 'text-slate-500 hover:text-slate-300',
+                ].join(' ')}
+              >
+                {/* Active indicator pill behind icon */}
+                {isActive && (
+                  <span
+                    aria-hidden="true"
+                    className={[
+                      'absolute top-2 left-1/2 -translate-x-1/2',
+                      'h-8 w-12 rounded-full',
+                      'bg-accent/15',
+                      'transition-all duration-200',
+                    ].join(' ')}
+                  />
+                )}
+
+                <span className="relative flex items-center justify-center h-6 w-6">
+                  <Icon
+                    size={22}
+                    aria-hidden="true"
+                    strokeWidth={isActive ? 2.5 : 1.75}
+                  />
+                </span>
+                <span className="relative leading-none">{label}</span>
+              </NavLink>
+            </li>
+          );
+        })}
       </ul>
-      <div className="hidden md:flex md:ml-auto md:items-center md:px-2">
-        <UserButton afterSignOutUrl="/" />
-      </div>
     </nav>
   );
 }

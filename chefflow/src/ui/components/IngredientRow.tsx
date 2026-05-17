@@ -31,16 +31,23 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
     onChange(nextIng);
   }
 
-  function clearAllFlags() {
-    setAllergenFlags([]);
-  }
-
   function removeFlag(tag: AllergenTag) {
+    const label = ALLERGEN_LABEL[tag];
+    if (!window.confirm(
+      `Remove the "${label}" allergen flag from this ingredient?\n\n` +
+      `Allergen flags are safety-critical. Only remove if you're certain this ingredient does not contain ${label}.`,
+    )) return;
     setAllergenFlags(flags.filter((t) => t !== tag));
   }
 
   function addFlag(tag: AllergenTag) {
     setAllergenFlags([...flags, tag]);
+  }
+
+  function handleRemoveIngredient() {
+    const label = value.name.trim() || `ingredient #${index + 1}`;
+    if (!window.confirm(`Remove "${label}" from the recipe?`)) return;
+    onRemove();
   }
 
   return (
@@ -81,17 +88,6 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
                 </button>
               </span>
             ))}
-            {hasAllergens && (
-              <button
-                type="button"
-                onClick={clearAllFlags}
-                className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 underline"
-                aria-label="Clear all allergen flags on this ingredient"
-                title="Mark this ingredient as allergen-free (override the auto-detection)"
-              >
-                clear all
-              </button>
-            )}
             {availableToAdd.length > 0 && (
               <select
                 value=""
@@ -136,7 +132,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
         </div>
         <button
           type="button"
-          onClick={onRemove}
+          onClick={handleRemoveIngredient}
           className="touch-target px-3 rounded-md text-lg bg-slate-100 dark:bg-slate-800 shrink-0 self-start"
           aria-label="Remove ingredient"
         >

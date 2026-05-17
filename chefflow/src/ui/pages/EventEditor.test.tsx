@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -9,6 +9,12 @@ import type { KitchenEvent, Recipe } from '../../core/types';
 beforeEach(async () => {
   await db.events.clear();
   await db.recipes.clear();
+  // Save button now confirms — auto-accept in tests.
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const seed: KitchenEvent = {
@@ -90,7 +96,7 @@ describe('EventEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: /cancel dish/i }));
 
     expect(screen.queryByText('Temp')).toBeNull();
-    expect(screen.getByText(/no dishes yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no dishes or sections yet/i)).toBeInTheDocument();
   });
 
   it('suggests an existing recipe in the dish name input', async () => {
@@ -118,7 +124,7 @@ describe('EventEditor', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /create new recipe/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /i'll get the dish ready/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /the dish is ready to go/i })).toBeInTheDocument();
     });
   });
 
@@ -130,7 +136,7 @@ describe('EventEditor', () => {
     await userEvent.click(screen.getByRole('button', { name: /add dish/i }));
     await userEvent.type(screen.getByLabelText(/dish name/i), 'Bakery rolls');
 
-    await userEvent.click(await screen.findByRole('button', { name: /i'll get the dish ready/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /the dish is ready to go/i }));
     await userEvent.click(screen.getByRole('button', { name: /confirm dish/i }));
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }));
 

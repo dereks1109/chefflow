@@ -1,9 +1,13 @@
 import { db } from './dexie';
 import { randomId } from '../core/util/id';
-import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish } from '../core/types';
+import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, RecipeAnalysis } from '../core/types';
 
-const SEED_FLAG = 'chefflow:seeded-demo-v2';
-const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v1';
+// Bump when demo recipe content changes — existing IndexedDB copies are
+// overwritten on next load so chefs see the new fields. v3 adds analysis +
+// pricePerPortion to the three demo recipes.
+const SEED_FLAG = 'chefflow:seeded-demo-v3';
+// v4 adds contact name / email / phone on the demo event.
+const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v4';
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -28,7 +32,17 @@ function step(text: string, phase: StepPhase = 'cook'): WorkflowStep {
   };
 }
 
-function makeRecipe(id: string, title: string, originalYield: number, prepTime: string | undefined, cookTime: string | undefined, ingredients: Ingredient[], steps: WorkflowStep[]): Recipe {
+function makeRecipe(
+  id: string,
+  title: string,
+  originalYield: number,
+  prepTime: string | undefined,
+  cookTime: string | undefined,
+  ingredients: Ingredient[],
+  steps: WorkflowStep[],
+  pricePerPortion: number,
+  analysis: Omit<RecipeAnalysis, 'analyzedAt' | 'source'>,
+): Recipe {
   const now = Date.now();
   return {
     id,
@@ -40,6 +54,12 @@ function makeRecipe(id: string, title: string, originalYield: number, prepTime: 
     steps,
     createdAt: now,
     updatedAt: now,
+    pricePerPortion,
+    analysis: {
+      ...analysis,
+      analyzedAt: now,
+      source: 'manual',
+    },
   };
 }
 
@@ -66,6 +86,13 @@ function demoRecipes(): Recipe[] {
         step('Reduce heat, add butter, garlic, and thyme; baste steaks for 1 minute.'),
         step('Rest steaks 5 minutes before slicing against the grain.', 'serve'),
       ],
+      15,
+      {
+        caloriesPerPortion: 880,
+        caloriesTotal: 1760,
+        keyIngredientTags: ['beef', 'butter', 'garlic'],
+        allergens: ['milk'],
+      },
     ),
     makeRecipe(
       'r_demo_salad',
@@ -88,6 +115,13 @@ function demoRecipes(): Recipe[] {
         step('Whisk olive oil, lemon juice, salt, and pepper into a dressing.', 'prep'),
         step('Toss leaves, tomatoes, and cucumber with the dressing just before serving.', 'serve'),
       ],
+      2.5,
+      {
+        caloriesPerPortion: 90,
+        caloriesTotal: 360,
+        keyIngredientTags: ['lettuce', 'tomato', 'cucumber'],
+        allergens: [],
+      },
     ),
     makeRecipe(
       'r_demo_soup',
@@ -113,6 +147,13 @@ function demoRecipes(): Recipe[] {
         step('Pour in canned tomatoes and broth; simmer 20 minutes.'),
         step('Blend until smooth, then stir in cream and torn basil leaves.', 'serve'),
       ],
+      2,
+      {
+        caloriesPerPortion: 200,
+        caloriesTotal: 800,
+        keyIngredientTags: ['tomato', 'basil', 'cream'],
+        allergens: ['milk'],
+      },
     ),
   ];
 }
@@ -124,9 +165,15 @@ export async function seedDemoRecipes(): Promise<void> {
   window.localStorage.setItem(SEED_FLAG, '1');
 }
 
-function demoDish(name: string, recipeId: string, portions: number, startAt: Date): Dish {
+function demoDish(
+  id: string,
+  name: string,
+  recipeId: string,
+  portions: number,
+  startAt: Date,
+): Dish {
   return {
-    id: randomId(),
+    id,
     name,
     recipeId,
     portions,
@@ -140,15 +187,24 @@ function demoEvents(): KitchenEvent[] {
   const ribeyeStart = new Date(2026, 4, 14, 17, 30, 0);
   const saladStart = new Date(2026, 4, 14, 17, 45, 0);
   const now = Date.now();
+  // Pinned dish ids so the section buckets below can reference them by id.
+  const ribeye = demoDish('d_demo_ribeye', '(Demo) Ribeye', 'r_demo_ribeye', 2, ribeyeStart);
+  const salad = demoDish('d_demo_salad', '(Demo) Garden Salad', 'r_demo_salad', 4, saladStart);
   return [
     {
       id: 'e_demo_main',
       title: 'Demo Event',
       serveAt: serve.toISOString(),
+      location: 'Home kitchen',
+      budget: 50,
+      contactName: 'Alex Johnson',
+      contactEmail: 'alex@example.com',
+      contactPhone: '+44 7700 900123',
       notes: 'Nothing',
-      dishes: [
-        demoDish('(Demo) Ribeye', 'r_demo_ribeye', 2, ribeyeStart),
-        demoDish('(Demo) Garden Salad', 'r_demo_salad', 4, saladStart),
+      dishes: [ribeye, salad],
+      sections: [
+        { id: 's_demo_starters', name: 'Starters', dishIds: [salad.id] },
+        { id: 's_demo_mains', name: 'Mains', dishIds: [ribeye.id] },
       ],
       createdAt: now,
       updatedAt: now,
