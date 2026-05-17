@@ -23,3 +23,10 @@ coverage/
 
 # Claude Code local state
 .claude/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
