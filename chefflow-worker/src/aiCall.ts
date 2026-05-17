@@ -21,6 +21,10 @@ export async function runAi(
       { role: 'user', content: userContent },
     ],
     response_format: { type: responseType },
+    // Workers AI defaults to 256 max tokens, which truncates recipe JSON
+    // mid-string and breaks JSON.parse. 4096 fits a recipe with ~10
+    // ingredients + ~10 steps + analysis with plenty of headroom.
+    max_tokens: 4096,
   };
   // Workers AI returns { response: string } for chat-completion models.
   const result = (await ai.run(model, payload)) as { response?: string };
