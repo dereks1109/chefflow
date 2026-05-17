@@ -5,6 +5,7 @@ import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
 import AnalysisSection from '../components/AnalysisSection';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
+import { findAllergensInIngredient } from '../../core/recipes/llm/allergens';
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
@@ -149,15 +150,22 @@ export default function RecipeEditor() {
           <fieldset>
             <legend className="text-sm font-medium">Ingredients</legend>
             <ul>
-              {r.ingredients.map((ing, i) => (
-                <IngredientRow
-                  key={ing.id}
-                  index={i}
-                  value={ing}
-                  onChange={(next) => updateIngredient(i, next)}
-                  onRemove={() => removeIngredient(i)}
-                />
-              ))}
+              {r.ingredients.map((ing, i) => {
+                // User override wins; otherwise fall back to regex auto-detect
+                // against the recipe's declared allergens.
+                const effective = ing.allergenFlags
+                  ?? findAllergensInIngredient(ing.name, r.analysis?.allergens ?? []);
+                return (
+                  <IngredientRow
+                    key={ing.id}
+                    index={i}
+                    value={ing}
+                    onChange={(next) => updateIngredient(i, next)}
+                    onRemove={() => removeIngredient(i)}
+                    allergenMatches={effective}
+                  />
+                );
+              })}
             </ul>
             <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
               Add ingredient

@@ -77,6 +77,10 @@ function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysi
   if (kcal === undefined && keyTags.length === 0 && allergens.length === 0) return null;
   return (
     <section className="mt-2 flex flex-wrap gap-1.5" aria-label="Recipe tags">
+      {/* Allergens first — safety-critical info gets the most visible slot. */}
+      {allergens.map((a) => (
+        <AllergenPill key={a} tag={a} />
+      ))}
       {kcal !== undefined && (
         <span
           className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800
@@ -88,9 +92,6 @@ function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysi
       )}
       {keyTags.map((t) => (
         <KeyTagPill key={t}>{t}</KeyTagPill>
-      ))}
-      {allergens.map((a) => (
-        <AllergenPill key={a} tag={a} />
       ))}
     </section>
   );

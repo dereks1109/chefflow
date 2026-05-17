@@ -13,6 +13,11 @@ export interface Ingredient {
   unit: string;
   name: string;
   isLocked: boolean;
+  // User override of the regex-based allergen auto-detection.
+  // undefined → use auto-detection (findAllergensInIngredient against recipe.analysis.allergens)
+  // []        → user explicitly cleared the highlight
+  // [tag...]  → user explicitly flagged these allergens
+  allergenFlags?: AllergenTag[];
 }
 
 export interface WorkflowStep {
