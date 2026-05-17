@@ -27,9 +27,11 @@ const MAX_IMAGE_EDGE = 1600;
 export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props) {
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
+  // See Workflow.tsx comment — proxy mode skips the Groq-key gate.
+  const isProxyMode = (import.meta.env.VITE_LLM_MODE as string | undefined) === 'proxy';
   const envApiKey = ((import.meta.env.VITE_GROQ_API_KEY as string | undefined) ?? '').trim();
-  const apiKey = (storedApiKey || envApiKey).trim();
-  const hasKey = apiKey.length > 0;
+  const apiKey = isProxyMode ? 'proxy' : (storedApiKey || envApiKey).trim();
+  const hasKey = isProxyMode || apiKey.length > 0;
 
   const [tab, setTab] = useState<Tab>('manual');
   const [dish, setDish] = useState('');

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { formatGBP } from '../../core/util/money';
 import type { Recipe } from '../../core/types';
 
 interface Props {
@@ -53,6 +54,12 @@ export default function RecipeCard({ recipe, onTogglePin, onDuplicate, onDelete 
             <dd>Cook {recipe.cookTime}</dd>
           </div>
         )}
+        {recipe.pricePerPortion !== undefined && (
+          <div>
+            <dt className="sr-only">Price per portion</dt>
+            <dd>{formatGBP(recipe.pricePerPortion)}/portion</dd>
+          </div>
+        )}
       </dl>
       {recipe.analysis && <RecipeAnalysisRow analysis={recipe.analysis} />}
       <footer className="mt-3 flex gap-2">
@@ -77,6 +84,10 @@ function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysi
   if (kcal === undefined && keyTags.length === 0 && allergens.length === 0) return null;
   return (
     <section className="mt-2 flex flex-wrap gap-1.5" aria-label="Recipe tags">
+      {/* Allergens first — safety-critical info gets the most visible slot. */}
+      {allergens.map((a) => (
+        <AllergenPill key={a} tag={a} />
+      ))}
       {kcal !== undefined && (
         <span
           className="inline-flex items-center rounded-full bg-slate-100 dark:bg-slate-800
@@ -88,9 +99,6 @@ function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysi
       )}
       {keyTags.map((t) => (
         <KeyTagPill key={t}>{t}</KeyTagPill>
-      ))}
-      {allergens.map((a) => (
-        <AllergenPill key={a} tag={a} />
       ))}
     </section>
   );

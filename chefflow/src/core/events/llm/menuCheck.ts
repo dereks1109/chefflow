@@ -1,0 +1,164 @@
+// ---------------------------------------------------------------------------
+// Orchestrator for the LLM-driven menu-suitability check.
+//
+// Given an event (with its freeform dietary requirements + dish list) and a
+// lookup of any linked recipes, asks the LLM whether the menu suits the
+// declared guests and parses the structured verdict.
+// ---------------------------------------------------------------------------
+
+import type {
+  KitchenEvent,
+  MenuAnalysis,
+  MenuIssue,
+  MenuIssueSeverity,
+  Recipe,
+} from '../../types';
+import { complete } from '../../llm/llmClient';
+import {
+  buildMenuCheckSystemPrompt,
+  buildMenuCheckUserPrompt,
+} from './menuCheckPrompt';
+
+export class MenuCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MenuCheckError';
+  }
+}
+
+export interface CheckMenuInput {
+  event: KitchenEvent;
+  /** Linked recipes keyed by id. Pass {} if none are linked. */
+  recipes: Record<string, Recipe>;
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+}
+
+/**
+ * Sum of priced dishes for the event (recipe.pricePerPortion × dish.portions).
+ * Returns undefined when no linked dish has a price — the prompt then omits
+ * the budget section entirely.
+ */
+function computeTotalCost(
+  event: KitchenEvent,
+  recipes: Record<string, Recipe>,
+): number | undefined {
+  let total = 0;
+  let anyPriced = false;
+  for (const d of event.dishes) {
+    if (!d.recipeId) continue;
+    const r = recipes[d.recipeId];
+    const perPortion = r?.pricePerPortion;
+    if (perPortion === undefined) continue;
+    anyPriced = true;
+    total += perPortion * d.portions;
+  }
+  return anyPriced ? total : undefined;
+}
+
+export async function checkMenu(input: CheckMenuInput): Promise<MenuAnalysis> {
+  const dishes = input.event.dishes.map((d) => {
+    const recipe = d.recipeId ? input.recipes[d.recipeId] : undefined;
+    return {
+      name: d.name,
+      portions: d.portions,
+      allergens: recipe?.analysis?.allergens,
+      keyIngredients: recipe?.analysis?.keyIngredientTags,
+    };
+  });
+
+  const systemPrompt = buildMenuCheckSystemPrompt();
+  const userPrompt = buildMenuCheckUserPrompt({
+    dietaryRequirements: input.event.notes ?? '',
+    dishes,
+    budget: input.event.budget,
+    totalCost: computeTotalCost(input.event, input.recipes),
+  });
+
+  const raw = await complete({
+    endpoint: 'analyze',
+    apiKey: input.apiKey,
+    model: input.model,
+    systemPrompt,
+    userPrompt,
+    baseUrl: input.baseUrl,
+    fetchImpl: input.fetchImpl,
+    signal: input.signal,
+  });
+
+  return parseMenuAnalysis(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Lenient JSON parser. Mirrors the recipeGen tolerance for markdown fences
+// and stray prose around the JSON body.
+// ---------------------------------------------------------------------------
+export function parseMenuAnalysis(raw: string): MenuAnalysis {
+  const stripped = stripWrapper(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripped);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new MenuCheckError(`LLM did not return valid JSON: ${msg}`);
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new MenuCheckError('LLM response is not a JSON object');
+  }
+  const o = parsed as Record<string, unknown>;
+  return {
+    verdict: parseVerdict(o.verdict),
+    issues: parseIssues(o.issues),
+    suggestions: parseStringArray(o.suggestions).slice(0, 5),
+    analyzedAt: Date.now(),
+  };
+}
+
+function stripWrapper(s: string): string {
+  let trimmed = s.trim();
+  if (trimmed.startsWith('```')) {
+    trimmed = trimmed
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```$/, '')
+      .trim();
+  }
+  if (!trimmed.startsWith('{')) {
+    const first = trimmed.indexOf('{');
+    const last = trimmed.lastIndexOf('}');
+    if (first >= 0 && last > first) {
+      trimmed = trimmed.slice(first, last + 1);
+    }
+  }
+  return trimmed;
+}
+
+function parseVerdict(v: unknown): MenuAnalysis['verdict'] {
+  if (v === 'ok' || v === 'warnings' || v === 'blocked') return v;
+  // Safe-ish default: surface as warnings so the chef looks at the result
+  // rather than silently treating an unparsable verdict as fine.
+  return 'warnings';
+}
+
+function parseIssues(v: unknown): MenuIssue[] {
+  if (!Array.isArray(v)) return [];
+  const out: MenuIssue[] = [];
+  for (const item of v) {
+    if (typeof item !== 'object' || item === null) continue;
+    const o = item as Record<string, unknown>;
+    const message = typeof o.message === 'string' ? o.message.trim() : '';
+    if (!message) continue;
+    const severity: MenuIssueSeverity = o.severity === 'blocker' ? 'blocker' : 'warning';
+    out.push({ severity, message });
+  }
+  return out;
+}
+
+function parseStringArray(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    .map((x) => x.trim());
+}

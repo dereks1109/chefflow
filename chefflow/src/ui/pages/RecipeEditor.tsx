@@ -5,6 +5,8 @@ import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
 import AnalysisSection from '../components/AnalysisSection';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
+import { findAllergensInIngredient } from '../../core/recipes/llm/allergens';
+import { loadReviewDraft } from '../../core/events/reviewDraft';
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
@@ -84,15 +86,25 @@ export default function RecipeEditor() {
     update('analysis', next);
   }
 
+  // If the chef arrived here from the New-Event review flow ("Create new
+  // recipe" on an unmatched dish), there's a draft in sessionStorage tagged
+  // with this recipe's id. Routing back to /events makes EventsLibrary
+  // rehydrate the review sheet with the freshly-saved stub already linked.
+  function returnRoute(): string {
+    const draft = loadReviewDraft();
+    return draft?.awaitingRecipeId === r.id ? '/events' : '/recipes';
+  }
+
   async function handleSave() {
+    if (!window.confirm('Save changes to this recipe?')) return;
     await saveRecipe({ ...r, updatedAt: Date.now() });
     setDirty(false);
-    navigate('/recipes');
+    navigate(returnRoute());
   }
 
   function handleCancel() {
     if (dirty && !window.confirm('Discard unsaved changes?')) return;
-    navigate('/recipes');
+    navigate(returnRoute());
   }
 
   return (
@@ -122,7 +134,7 @@ export default function RecipeEditor() {
           />
         </label>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <label className="block">
             <span className="text-sm font-medium">Yield (portions)</span>
             <input
@@ -131,6 +143,24 @@ export default function RecipeEditor() {
               value={r.originalYield}
               onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
               className="input mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium">Price / portion (£)</span>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={r.pricePerPortion ?? ''}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === '') return update('pricePerPortion', undefined);
+                const n = Number(raw);
+                if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
+              }}
+              placeholder="—"
+              className="input mt-1"
+              aria-label="Price per portion in GBP"
             />
           </label>
           <TimePicker
@@ -149,15 +179,22 @@ export default function RecipeEditor() {
           <fieldset>
             <legend className="text-sm font-medium">Ingredients</legend>
             <ul>
-              {r.ingredients.map((ing, i) => (
-                <IngredientRow
-                  key={ing.id}
-                  index={i}
-                  value={ing}
-                  onChange={(next) => updateIngredient(i, next)}
-                  onRemove={() => removeIngredient(i)}
-                />
-              ))}
+              {r.ingredients.map((ing, i) => {
+                // User override wins; otherwise fall back to regex auto-detect
+                // against the recipe's declared allergens.
+                const effective = ing.allergenFlags
+                  ?? findAllergensInIngredient(ing.name, r.analysis?.allergens ?? []);
+                return (
+                  <IngredientRow
+                    key={ing.id}
+                    index={i}
+                    value={ing}
+                    onChange={(next) => updateIngredient(i, next)}
+                    onRemove={() => removeIngredient(i)}
+                    allergenMatches={effective}
+                  />
+                );
+              })}
             </ul>
             <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
               Add ingredient

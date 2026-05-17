@@ -1,0 +1,14 @@
+name = "chefflow-llm-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-01-15"
+
+[ai]
+binding = "AI"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "6300f5a914fa4ea885b73ae1860d3a1e"
+
+[vars]
+CLERK_ISSUER = "https://engaging-bat-5.clerk.accounts.dev"
+DAILY_LIMIT = "30"

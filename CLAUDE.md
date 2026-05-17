@@ -10,7 +10,7 @@ CLAUDE (ChefFlow) is a mobile-first web application designed for professional ch
 - **Persistence**: IndexedDB (via Dexie.js) for offline kitchen use.
 
 ## 🎨 UI/UX Principles
-- **High Contrast**: Optimized for harsh kitchen lighting (True Black #000000 support).
+- **High Contrast**: Optimized for harsh kitchen lighting. Dark mode uses a neutral dark grey scale (base `#171717`), not pure black — the surface tokens `surface-0`/`1`/`2`/`3` in `chefflow/tailwind.config.ts` are the source of truth.
 - **Kitchen-Ready**: Large touch targets (min 44x44px) and Web Wake Lock API to keep the screen on.
 - **Mobile-First**: Primary focus on single-hand operation during active cooking.
 

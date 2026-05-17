@@ -1,6 +1,7 @@
 import type { KitchenEvent, Recipe, ScheduledStep, WorkflowStep } from '../../types';
 import { buildSystemPrompt, buildUserPrompt } from './prompt';
-import { complete, GroqClientError } from './groqClient';
+import { complete } from '../../llm/llmClient';
+import { GroqClientError } from './groqClient';
 import {
   parseLlmResponse,
   assertCoversEvent,
@@ -44,6 +45,7 @@ export async function scheduleEventLLM(input: LlmScheduleInput): Promise<LlmSche
   const userPrompt = buildUserPrompt(event, recipes);
 
   const rawJson = await complete({
+    endpoint: 'workflow',
     apiKey,
     model,
     systemPrompt,
