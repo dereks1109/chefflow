@@ -122,6 +122,10 @@ export default function EventEditor() {
     update('dishes', e.dishes.map((d) => (d.id === dishId ? { ...d, colorTag } : d)));
   }
 
+  function setDishStartAtById(dishId: string, startAt: string) {
+    update('dishes', e.dishes.map((d) => (d.id === dishId ? { ...d, startAt } : d)));
+  }
+
   function handleDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
     if (!destination) return;
@@ -367,6 +371,7 @@ export default function EventEditor() {
                     onStartEdit={() => startEditingById(d.id)}
                     onRemove={() => removeDishById(d.id)}
                     onColorChange={(c) => setDishColorById(d.id, c)}
+                    onTimeChange={(iso) => setDishStartAtById(d.id, iso)}
                     onConfirm={confirmDish}
                     onCancel={cancelDish}
                   />
@@ -408,6 +413,7 @@ export default function EventEditor() {
                         onStartEdit={() => startEditingById(d.id)}
                         onRemove={() => removeDishById(d.id)}
                         onColorChange={(c) => setDishColorById(d.id, c)}
+                        onTimeChange={(iso) => setDishStartAtById(d.id, iso)}
                         onConfirm={confirmDish}
                         onCancel={cancelDish}
                       />
@@ -551,6 +557,7 @@ interface DraggableDishProps {
   onStartEdit: () => void;
   onRemove: () => void;
   onColorChange: (c: ColorTag | undefined) => void;
+  onTimeChange: (nextIsoStartAt: string) => void;
   onConfirm: (next: Dish) => void;
   onCancel: () => void;
 }
@@ -564,6 +571,7 @@ function DraggableDish({
   onStartEdit,
   onRemove,
   onColorChange,
+  onTimeChange,
   onConfirm,
   onCancel,
 }: DraggableDishProps) {
@@ -602,6 +610,7 @@ function DraggableDish({
                   onEdit={onStartEdit}
                   onRemove={onRemove}
                   onColorChange={onColorChange}
+                  onTimeChange={onTimeChange}
                   onMoveUp={() => undefined}
                   onMoveDown={() => undefined}
                 />
