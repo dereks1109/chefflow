@@ -21,6 +21,12 @@ Public deploy + auth + LLM proxy + event/recipe UX shipped on `feat/public-deplo
 - [ ] **Worker prod bindings**: confirm `chefflow-llm-proxy` has `GROQ_API_KEY` + Clerk `SECRET_KEY` set against production (not just preview) and that the `RATE_LIMIT` KV is bound.
 - [ ] **Google Maps key restriction**: add prod domain + `*.chefflow-derek.workers.dev/*` to the Maps key's website-referrer allowlist (currently only `localhost:5173/*`). Places autocomplete silently fails otherwise.
 - [ ] **Rotate exposed keys**: Groq key + Google Maps key were pasted in chat — rotate both before going production-live (referrer restriction protects Maps, but the Groq key is fully exposed).
+- [ ] **Execute plans from 2026-05-18 parallel-agent dispatch** — five plans drafted in `docs/plans/`:
+  - `fullstack-workflow-fixes.md` — three fullstack sub-tasks (LLM fence migration in eventGen/menuCheck, EventCard workflow indicator + Workflow breadcrumb, click-to-edit dish time).
+  - `legal-policies-cookie-banner.md` — T&C / Cookie banner / Privacy / Disclaimer.
+  - `uk-regulatory-roadmap.md` — P0: ICO registration + Groq UK IDTA (biggest legal exposure).
+  - `qa-test-coverage.md` — Playwright suite; biggest gap is GenerateEventSheet Review-step state machine.
+  - `project-architecture-docs.md` — Mermaid diagram + agent-protocol cross-ref + deployment `_routes.json` TODO.
 
 ---
 
