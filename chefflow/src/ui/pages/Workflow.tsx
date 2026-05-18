@@ -340,11 +340,21 @@ export default function Workflow() {
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Workflows
-        </Link>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Workflows
+          </Link>
+          <Link
+            to={`/events/${event.id}`}
+            className="btn-secondary text-sm inline-flex items-center gap-1 w-fit"
+            title={`Back to ${event.title || 'this event'}`}
+          >
+            <Calendar className="h-4 w-4" aria-hidden="true" />
+            <span className="truncate max-w-[12rem]">{event.title || 'Event'}</span>
+          </Link>
+        </div>
       </div>
 
       <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">

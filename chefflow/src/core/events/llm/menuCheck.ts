@@ -14,6 +14,7 @@ import type {
   Recipe,
 } from '../../types';
 import { complete } from '../../llm/llmClient';
+import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import {
   buildMenuCheckSystemPrompt,
   buildMenuCheckUserPrompt,
@@ -97,7 +98,7 @@ export async function checkMenu(input: CheckMenuInput): Promise<MenuAnalysis> {
 // and stray prose around the JSON body.
 // ---------------------------------------------------------------------------
 export function parseMenuAnalysis(raw: string): MenuAnalysis {
-  const stripped = stripWrapper(raw);
+  const stripped = stripMarkdownFences(raw);
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripped);
@@ -115,24 +116,6 @@ export function parseMenuAnalysis(raw: string): MenuAnalysis {
     suggestions: parseStringArray(o.suggestions).slice(0, 5),
     analyzedAt: Date.now(),
   };
-}
-
-function stripWrapper(s: string): string {
-  let trimmed = s.trim();
-  if (trimmed.startsWith('```')) {
-    trimmed = trimmed
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-  if (!trimmed.startsWith('{')) {
-    const first = trimmed.indexOf('{');
-    const last = trimmed.lastIndexOf('}');
-    if (first >= 0 && last > first) {
-      trimmed = trimmed.slice(first, last + 1);
-    }
-  }
-  return trimmed;
 }
 
 function parseVerdict(v: unknown): MenuAnalysis['verdict'] {

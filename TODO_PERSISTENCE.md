@@ -12,7 +12,10 @@
 
 Plans written this session (all in `docs/plans/`):
 
-- [ ] **Fullstack workflow fixes (a + b)** — `docs/plans/fullstack-workflow-fixes.md`. (a) Migrate `chefflow/src/core/events/llm/eventGen.ts:124` and `chefflow/src/core/events/llm/menuCheck.ts:120` to the shared `stripMarkdownFences`. (b) Add workflow indicator to `chefflow/src/ui/components/EventCard.tsx` + back-to-event breadcrumb in `chefflow/src/ui/pages/Workflow.tsx`. ((c) click-to-edit dish time shipped — confirmed working when 4 unit tests passed.)
+<!-- All three sub-tasks from docs/plans/fullstack-workflow-fixes.md shipped this session:
+     (a) eventGen.ts + menuCheck.ts migrated to shared stripMarkdownFences.
+     (b) EventCard workflow indicator + Workflow back-to-event breadcrumb.
+     (c) Click-to-edit dish time in DishRow + EventEditor wiring + 4 unit tests. -->
 - [ ] **Legal pages + cookie banner** — `docs/plans/legal-policies-cookie-banner.md`. Add `chefflow/src/ui/components/ConsentBanner.tsx`, routes `/terms /privacy /cookies /disclaimer` via a `LegalLayout` in `chefflow/src/App.tsx`, persistence key `chefflow:cookie-consent-v1`.
 - [ ] **UK regulatory P0 items** — `docs/plans/uk-regulatory-roadmap.md`. ICO registration (legal-only). Groq UK IDTA / DPA outreach (legal-only, biggest exposure). DPA confirmation with Clerk/Cloudflare/Google.
 - [ ] **QA Playwright suite** — `docs/plans/qa-test-coverage.md`. Top-5 E2E tests; biggest gap is `GenerateEventSheet` Review-step state machine. Needs `data-testid` additions on drag handles + section name inputs.

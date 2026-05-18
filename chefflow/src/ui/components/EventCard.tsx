@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Calendar, Layers, Trash2 } from 'lucide-react';
+import { Calendar, Layers, Sparkles, Trash2 } from 'lucide-react';
 import type { KitchenEvent } from '../../core/types';
 import { formatDateTime } from '../../core/util/datetime';
 
@@ -15,11 +15,11 @@ function isDemo(event: KitchenEvent): boolean {
 export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
-    <article className="group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
+    <article className="flex flex-col min-h-[14rem] group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
       <header className="flex items-start justify-between gap-3">
         <Link
           to={`/events/${event.id}`}
-          className="text-lg font-semibold hover:text-accent flex-1 min-w-0"
+          className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2"
         >
           {event.title || 'Untitled event'}
         </Link>
@@ -43,6 +43,12 @@ export default function EventCard({ event, onDelete }: Props) {
           <Layers className="h-3.5 w-3.5" aria-hidden="true" />
           <span>{dishCount} dish{dishCount === 1 ? '' : 'es'}</span>
         </div>
+        {event.workflow && event.workflow.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Workflow · {event.workflow.length} step{event.workflow.length === 1 ? '' : 's'}</span>
+          </div>
+        )}
       </dl>
       {event.notes && (
         <p className="mt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">

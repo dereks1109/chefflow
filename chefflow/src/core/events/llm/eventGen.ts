@@ -9,6 +9,7 @@
 import type { KitchenEvent, Dish } from '../../types';
 import { randomId } from '../../util/id';
 import { complete } from '../../llm/llmClient';
+import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import {
   buildEventGenSystemPrompt,
   buildEventGenUserPrompt,
@@ -56,7 +57,7 @@ export async function generateEventFromText(input: GenerateEventInput): Promise<
 // Missing fields default to safe values; unknown extras are ignored.
 // ---------------------------------------------------------------------------
 export function parseLlmEvent(raw: string): KitchenEvent {
-  const stripped = stripWrapper(raw);
+  const stripped = stripMarkdownFences(raw);
   let parsed: unknown;
   try {
     parsed = JSON.parse(stripped);
@@ -121,20 +122,3 @@ function parseDishes(v: unknown, eventServeAt: string | undefined): Dish[] {
   return out;
 }
 
-function stripWrapper(s: string): string {
-  let trimmed = s.trim();
-  if (trimmed.startsWith('```')) {
-    trimmed = trimmed
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-  if (!trimmed.startsWith('{')) {
-    const first = trimmed.indexOf('{');
-    const last = trimmed.lastIndexOf('}');
-    if (first >= 0 && last > first) {
-      trimmed = trimmed.slice(first, last + 1);
-    }
-  }
-  return trimmed;
-}
