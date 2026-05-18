@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   AlertTriangle,
@@ -170,6 +170,7 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
 
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
+  const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>({ kind: 'idle' });
   const [scheduled, setScheduled] = useState<ScheduledStep[]>([]);
@@ -306,6 +307,9 @@ export default function Workflow() {
     await saveEvent(updated);
     setDirty(false);
     setState({ kind: 'ready', event: updated, recipes, loadedFromSnapshot: true });
+    // Return to the event page — its new "View workflow" CTA now reflects
+    // this saved snapshot so the chef can re-enter at will.
+    navigate(`/events/${updated.id}`);
   }
 
   async function handleRegenerate() {

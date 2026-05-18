@@ -1,6 +1,7 @@
 import type { KitchenEvent, Recipe, ScheduledStep, WorkflowStep } from '../../types';
 import { buildSystemPrompt, buildUserPrompt } from './prompt';
 import { complete } from '../../llm/llmClient';
+import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import { GroqClientError } from './groqClient';
 import {
   parseLlmResponse,
@@ -55,9 +56,13 @@ export async function scheduleEventLLM(input: LlmScheduleInput): Promise<LlmSche
     signal,
   });
 
+  // JSON-mode is usually reliable, but Groq occasionally wraps the body in
+  // ```json … ``` (esp. when the model is under load). Strip fences and any
+  // prose preamble before parsing — the LlmValidationError path is reserved
+  // for genuinely malformed bodies.
   let parsedJson: unknown;
   try {
-    parsedJson = JSON.parse(rawJson);
+    parsedJson = JSON.parse(stripMarkdownFences(rawJson));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new LlmValidationError(`LLM did not return valid JSON: ${message}`, 'root');

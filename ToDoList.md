@@ -6,17 +6,21 @@ Deferred work, in rough priority order. Tick items as you go; add new ones at th
 
 ## 🚀 Next session — pick up here
 
-The single biggest unfinished thread is **Plan 3 (the workflow scheduler)**. Task A is done (commit `f832dbc`); next up is wiring the algorithm into the UI. Recommended order:
+Public deploy + auth + LLM proxy + event/recipe UX shipped on `feat/public-deploy-with-auth`. Live preview URL at `https://feat-public-deploy-with-auth-chefflow.chefflow-derek.workers.dev`. Production cutover blocked on env-var setup in CF dashboard.
 
 - [x] **Plan 3 — Task A**: `core/scheduler/scheduleEvent.ts` pure-function core. ✅ Done — 27 tests, asserts against the Demo Event timeline. **Superseded by Plan 4**: deterministic scheduler is now a test oracle; production path is LLM-driven.
 - [x] **Plan 3 — Task B**: workflow page driven by the algorithm for every event. ✅ Done (commit `0c6a5cb`).
 - [x] **Plan 3 — Task C**: persistence + reorder + color tags. ✅ Done (commit `1ccb601`).
 - [x] **Plan 3 — Task D — filter**: chef filter chips + per-color read-only list. ✅ Done (commits `bd31b50` + `731b443`).
+- [x] **Plan 4 — Task B (LLM modules)**: prompt + responseSchema + groqClient + llmScheduler + llmSettingsStore. ✅ Done.
+- [x] **Plan 4 — Task C (LLM UI)**: `LlmSettingsSheet.tsx` modal + LLM-driven Workflow page. ✅ Done.
+- [x] **Plan 4 — Task D (manual smoke)**: Demo Event renders via the LLM on deployed preview URL. ✅ Done.
 - [ ] **Plan 3 — Task D — print**: dedicated `/workflows/:eventId/print/:color` route with `@media print` rules for paper handouts. (Small finisher.)
 - [ ] **Plan 3 — Task E**: `chefflow-mcp/` Node package so other LLMs can call `generate_workflow` as an MCP tool.
-- [ ] **Plan 4 — Task B (LLM modules)**: prompt + responseSchema + groqClient + llmScheduler + llmSettingsStore. See [docs/superpowers/plans/2026-05-15-chefflow-plan-4-llm-scheduler.md](docs/superpowers/plans/2026-05-15-chefflow-plan-4-llm-scheduler.md).
-- [ ] **Plan 4 — Task C (LLM UI)**: `LlmSettingsSheet.tsx` modal for the Groq API key + replace `scheduleEvent` call in `Workflow.tsx` with `llmScheduler.scheduleEventLLM`.
-- [ ] **Plan 4 — Task D (manual smoke)**: connect Groq, verify the Demo Event renders via the LLM.
+- [ ] **Production cutover**: set `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_LLM_MODE=proxy` under Variables and Secrets → Production in CF, then merge the `feat/public-deploy-with-auth` PR.
+- [ ] **Worker prod bindings**: confirm `chefflow-llm-proxy` has `GROQ_API_KEY` + Clerk `SECRET_KEY` set against production (not just preview) and that the `RATE_LIMIT` KV is bound.
+- [ ] **Google Maps key restriction**: add prod domain + `*.chefflow-derek.workers.dev/*` to the Maps key's website-referrer allowlist (currently only `localhost:5173/*`). Places autocomplete silently fails otherwise.
+- [ ] **Rotate exposed keys**: Groq key + Google Maps key were pasted in chat — rotate both before going production-live (referrer restriction protects Maps, but the Groq key is fully exposed).
 
 ---
 
@@ -77,6 +81,11 @@ These all belong inside Plan 3 Task A but are easy to forget:
 
 ## ✅ Recently done (for reference; trim periodically)
 
+- 2026-05-18: Workflow JSON parse fix — hoisted `stripMarkdownFences` to `src/core/llm/` so the scheduler unwraps ```` ```json ```` fences. EventView gained a "View workflow · N steps · starts HH:MM" CTA when `event.workflow` is set; Workflow.tsx routes back to `/events/:id` after Save. 7 new tests (274 total).
+- 2026-05-18: `fix(main): render a visible error when VITE_CLERK_PUBLISHABLE_KEY is missing` (`49575eb`) — `MissingEnvScreen` instead of a silent blank page when the build had no Clerk key.
+- 2026-05-18: `chore(deploy): commit wrangler autoconfig + Vite Cloudflare plugin` (`f885fca`) — `chefflow/wrangler.jsonc`, `@cloudflare/vite-plugin` in `vite.config.ts`, deploy + preview scripts.
+- 2026-05-18: Public deploy pipeline running on Cloudflare Workers Builds — Path `chefflow`, build `npm install && npm run build`, deploy `npx wrangler deploy`. Preview URL: `https://feat-public-deploy-with-auth-chefflow.chefflow-derek.workers.dev`.
+- 2026-05-17: `feat: pricing, budget, contacts, sections, and import-review for events` (`0d160af`) — Recipe.pricePerPortion (GBP) + per-dish + total on EventView. KitchenEvent.budget into menu-suitability prompt. contactName/Email/Phone on event with mailto/tel links. User-defined drag-and-drop dish sections via `@hello-pangea/dnd`. Google Places location autocomplete using AutocompleteSuggestion (Places API New). Describe-event flow now runs a Review step matching extracted dishes; unmatched offer Search / Create new / Ready-to-go, with Create-new detouring through RecipeEditor and returning via a sessionStorage draft. "I'll get the dish ready" → "The dish is ready to go". Demo seed refreshed.
 - 2026-05-14: Workflow tab + per-event workflow pages with DnD template (`a78c524`).
 - 2026-05-14: Nested drag-and-drop template at `/demo/nested-dnd` (`6864cc3`).
 - 2026-05-14: Plan 3 (workflow scheduler) drafted at `docs/superpowers/plans/2026-05-14-chefflow-plan-3-workflow-scheduler.md` (uncommitted).

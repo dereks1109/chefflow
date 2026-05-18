@@ -99,13 +99,7 @@ export default function EventView() {
             <Edit3 className="h-4 w-4" aria-hidden="true" />
             Edit
           </button>
-          <Link
-            to={`/workflows/${e.id}`}
-            className="btn-primary inline-flex items-center gap-2"
-          >
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            Generate Workflow
-          </Link>
+          <WorkflowCta event={e} />
         </div>
       </header>
 
@@ -209,6 +203,44 @@ export default function EventView() {
         )}
       </div>
     </section>
+  );
+}
+
+// Conditional workflow CTA — when the event has a saved workflow snapshot,
+// surface "View workflow" + a step count / timestamp so the chef knows it's
+// there and can jump straight in without re-running the LLM. Otherwise keep
+// the original "Generate Workflow" affordance.
+function WorkflowCta({ event }: { event: KitchenEvent }) {
+  const steps = event.workflow ?? [];
+  const hasWorkflow = steps.length > 0;
+  if (!hasWorkflow) {
+    return (
+      <Link
+        to={`/workflows/${event.id}`}
+        className="btn-primary inline-flex items-center gap-2"
+      >
+        <Sparkles className="h-4 w-4" aria-hidden="true" />
+        Generate Workflow
+      </Link>
+    );
+  }
+  // Use the first step's startAt as a stable "last generated" anchor; the
+  // schedule itself is the timestamp source we trust most.
+  const firstStart = steps[0]?.startAt;
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <Link
+        to={`/workflows/${event.id}`}
+        className="btn-primary inline-flex items-center gap-2"
+      >
+        <Sparkles className="h-4 w-4" aria-hidden="true" />
+        View workflow
+      </Link>
+      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+        {steps.length} step{steps.length === 1 ? '' : 's'}
+        {firstStart && <> · starts {formatDateTime(firstStart).split(',').slice(-1)[0].trim()}</>}
+      </span>
+    </div>
   );
 }
 

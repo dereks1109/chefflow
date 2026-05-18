@@ -63,6 +63,22 @@ describe('scheduleEventLLM — happy path', () => {
     expect(toss.thermalClass).toBe('flash');  // salad ss4 was marked flash in fixture
     expect(toss.endAt).toBe('2026-05-14T18:00:00.000Z');
   });
+
+  // Groq's JSON-mode is reliable but occasionally regresses to fenced output.
+  // The scheduler should still parse cleanly — the fence-strip util at
+  // src/core/llm/stripMarkdownFences.ts unwraps it before JSON.parse.
+  it('parses ```json … ```-wrapped responses (regression: Groq fenced output)', async () => {
+    const fenced = '```json\n' + VALID_DEMO_REPLY + '\n```';
+    const fetchImpl = mockFetchReturning(llmReplyWith(fenced));
+    const { steps } = await scheduleEventLLM({
+      event: DEMO_EVENT,
+      recipes: DEMO_RECIPES,
+      apiKey: 'gsk_test',
+      model: 'llama-3.3-70b-versatile',
+      fetchImpl,
+    });
+    expect(steps).toHaveLength(RIBEYE_RECIPE.steps.length + SALAD_RECIPE.steps.length);
+  });
 });
 
 describe('scheduleEventLLM — error surfaces', () => {
