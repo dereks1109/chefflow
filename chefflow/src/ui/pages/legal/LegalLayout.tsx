@@ -4,13 +4,14 @@ import { ChefHat, ArrowLeft } from 'lucide-react';
 
 interface LegalLayoutProps {
   title: string;
+  lastUpdated?: string;
   children: ReactNode;
 }
 
 // Plain shell used by the four legal pages. Lives outside the Clerk auth gates
 // in App.tsx so visitors can read terms / privacy / cookies / disclaimer
 // without signing in.
-export default function LegalLayout({ title, children }: LegalLayoutProps) {
+export default function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-surface-0 text-slate-900 dark:text-slate-100">
       <header className="border-b border-slate-200 dark:border-[rgba(255,255,255,0.06)]">
@@ -34,7 +35,10 @@ export default function LegalLayout({ title, children }: LegalLayoutProps) {
 
       <main className="flex-1">
         <section className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
-          <h1 className="text-3xl font-bold mb-6">{title}</h1>
+          <h1 className="text-3xl font-bold mb-2">{title}</h1>
+          {lastUpdated && (
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">Last updated: {lastUpdated}</p>
+          )}
           <div className="prose prose-slate dark:prose-invert max-w-none text-sm leading-relaxed">
             {children}
           </div>

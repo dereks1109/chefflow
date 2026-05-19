@@ -1,19 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Calendar, Clock, Edit3, ExternalLink, Hand, Layers, Mail, MapPin, Phone, Sparkles, StickyNote, User, Users, Wallet } from 'lucide-react';
-import { getEvent } from '../../db/eventsRepo';
+import { ArrowLeft, Calendar, Edit3, ExternalLink, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, User, Wallet } from 'lucide-react';
+import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { getRecipe } from '../../db/recipesRepo';
-import { swatchClassFor } from '../components/ColorPicker';
+import DishForm, { blankDish } from '../components/DishForm';
+import DishRow from '../components/DishRow';
 import MenuCheckPanel from '../components/MenuCheckPanel';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
-import { groupDishesBySections } from '../../core/events/sections';
-import type { Dish, KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
+import { groupDishesBySections, removeDishFromAllSections } from '../../core/events/sections';
+import type { ColorTag, Dish, KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'not-found' }
   | { kind: 'ready'; event: KitchenEvent };
+
+type AddDishUi = { open: false } | { open: true; draft: Dish };
 
 export default function EventView() {
   const { id = '' } = useParams<{ id: string }>();
@@ -23,6 +26,7 @@ export default function EventView() {
   // can be priced (recipe.pricePerPortion × dish.portions) for the per-dish
   // line + event-total summary.
   const [recipesById, setRecipesById] = useState<Map<string, Recipe>>(new Map());
+  const [addDishUi, setAddDishUi] = useState<AddDishUi>({ open: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +87,51 @@ export default function EventView() {
   const eventTotal = e.dishes.reduce((sum, d) => sum + (dishPrice(d) ?? 0), 0);
   const hasAnyPrice = e.dishes.some((d) => dishPrice(d) !== undefined);
 
+  async function removeDishById(dishId: string) {
+    const dish = e.dishes.find((d) => d.id === dishId);
+    const label = dish?.name.trim() || 'this dish';
+    if (!window.confirm(`Remove "${label}"?`)) return;
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.filter((d) => d.id !== dishId),
+      sections: removeDishFromAllSections(e.sections, dishId),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  async function setDishColorById(dishId: string, colorTag: ColorTag | undefined) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) => (d.id === dishId ? { ...d, colorTag } : d)),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  async function setDishStartAtById(dishId: string, startAt: string) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) => (d.id === dishId ? { ...d, startAt } : d)),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  async function confirmAddDish(newDish: Dish) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: [...e.dishes, newDish],
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+    setAddDishUi({ open: false });
+  }
+
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
       <header className="flex items-center justify-between gap-2">
@@ -90,21 +139,20 @@ export default function EventView() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Events
         </Link>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => navigate(`/events/${e.id}/edit`)}
-            className="btn-secondary inline-flex items-center gap-2"
-          >
-            <Edit3 className="h-4 w-4" aria-hidden="true" />
-            Edit
-          </button>
-          <WorkflowCta event={e} />
-        </div>
+        <WorkflowCta event={e} />
       </header>
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
-        <h1 className="text-3xl font-bold">{e.title || 'Untitled event'}</h1>
+      <div className="relative rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
+        <button
+          type="button"
+          onClick={() => navigate(`/events/${e.id}/edit`)}
+          aria-label="Edit event details"
+          className="absolute top-4 right-4 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          title="Edit event details"
+        >
+          <Edit3 className="h-4 w-4" aria-hidden="true" />
+        </button>
+        <h1 className="text-3xl font-bold pr-8">{e.title || 'Untitled event'}</h1>
         <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(e.serveAt)}</span>
@@ -183,24 +231,59 @@ export default function EventView() {
             </span>
           )}
         </div>
-        {dishGroups.length === 0 ? (
+        {dishGroups.length === 0 && !addDishUi.open ? (
           <p className="text-sm text-slate-500 italic">No dishes added.</p>
         ) : (
           <div className="space-y-5">
             {dishGroups.map((group) => (
               <section key={group.sectionId ?? 'unassigned'}>
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                  {group.label}
-                </h3>
+                {group.sectionId !== undefined && (
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                    {group.label}
+                  </h3>
+                )}
                 <ol className="space-y-3">
-                  {group.dishes.map((d) => (
-                    <TimelineRow key={d.id} dish={d} price={dishPrice(d)} />
+                  {group.dishes.map((d, i) => (
+                    <DishRow
+                      key={d.id}
+                      index={i}
+                      value={d}
+                      reorderMode={false}
+                      canMoveUp={false}
+                      canMoveDown={false}
+                      onEdit={() => navigate(`/events/${e.id}/edit`)}
+                      onRemove={() => void removeDishById(d.id)}
+                      onColorChange={(c) => void setDishColorById(d.id, c)}
+                      onTimeChange={(iso) => void setDishStartAtById(d.id, iso)}
+                      onMoveUp={() => undefined}
+                      onMoveDown={() => undefined}
+                    />
                   ))}
                 </ol>
               </section>
             ))}
           </div>
         )}
+
+        <div className="mt-4">
+          {addDishUi.open ? (
+            <DishForm
+              initial={addDishUi.draft}
+              eventServeAt={e.serveAt}
+              onConfirm={(next) => void confirmAddDish(next)}
+              onCancel={() => setAddDishUi({ open: false })}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddDishUi({ open: true, draft: blankDish(e.serveAt) })}
+              className="btn-secondary text-sm inline-flex items-center gap-1"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Add dish
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -244,63 +327,3 @@ function WorkflowCta({ event }: { event: KitchenEvent }) {
   );
 }
 
-function TimelineRow({ dish, price }: { dish: Dish; price?: number }) {
-  return (
-    <li className="flex gap-4 rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
-      <div className="w-28 shrink-0 text-sm text-slate-600 dark:text-slate-400 font-mono">
-        {formatDateTime(dish.startAt).split(',').slice(-1)[0].trim()}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {dish.colorTag && (
-            <span
-              className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(dish.colorTag)}`}
-              aria-label={`Color tag: ${dish.colorTag}`}
-              title={`Color tag: ${dish.colorTag}`}
-            />
-          )}
-          <h3 className="font-semibold">{dish.name || 'Untitled dish'}</h3>
-          {dish.recipeId && (
-            <Link
-              to={`/recipes/${dish.recipeId}/edit`}
-              className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-            >
-              <BookOpen className="h-3 w-3" aria-hidden="true" />
-              recipe
-            </Link>
-          )}
-          {dish.isPrepared && (
-            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-              <Hand className="h-3 w-3" aria-hidden="true" />
-              ready
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1">
-            <Users className="h-3 w-3" aria-hidden="true" />
-            {dish.portions} portion{dish.portions === 1 ? '' : 's'}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <Clock className="h-3 w-3" aria-hidden="true" />
-            {formatDateTime(dish.startAt)}
-          </span>
-          {price !== undefined && (
-            <span
-              className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-300"
-              title="Portions × price per portion"
-            >
-              <Wallet className="h-3 w-3" aria-hidden="true" />
-              {formatGBP(price)}
-            </span>
-          )}
-        </div>
-        {dish.notes && (
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
-            {dish.notes}
-          </p>
-        )}
-      </div>
-    </li>
-  );
-}
