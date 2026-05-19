@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import { Command } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
+import Logo from '../components/Logo';
 
 interface MobileTopBarProps {
   onOpenPalette: () => void;
@@ -22,15 +23,9 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
       <NavLink
         to="/recipes"
         aria-label="ChefFlow home"
-        className="flex items-center gap-1.5 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
+        className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
       >
-        <span className="font-display font-bold text-lg tracking-tight text-slate-900 dark:text-slate-100">
-          Chef
-        </span>
-        <span className="font-display font-bold text-lg tracking-tight text-accent">
-          Flow
-        </span>
-        <span className="ml-0.5 h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
+        <Logo variant="mark" className="h-6 text-slate-900 dark:text-slate-100" />
       </NavLink>
 
       <div className="ml-auto flex items-center gap-1">

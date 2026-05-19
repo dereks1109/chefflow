@@ -11,6 +11,7 @@ const baseDish: Dish = {
   name: 'Test Dish',
   portions: 4,
   startAt: '2026-06-15T18:00:00.000Z',
+  notes: 'Don\'t forget the lemon zest.',
 };
 
 function renderRow(extra: Partial<Parameters<typeof DishRow>[0]> = {}) {
@@ -63,5 +64,73 @@ describe('DishRow — click-to-edit start time', () => {
     expect(onTimeChange).not.toHaveBeenCalled();
     // Back to the read-only button label.
     expect(screen.getByRole('button', { name: /edit start time/i })).toBeInTheDocument();
+  });
+});
+
+describe('DishRow — click-to-edit name', () => {
+  it('commits via Enter and calls onNameChange with the trimmed value', async () => {
+    // Why: the name is the primary identifier; an empty/whitespace-only
+    // submission would silently rename to "Untitled dish" so we drop it.
+    // This test guards the happy path: non-empty, trimmed, different → commit.
+    const onNameChange = vi.fn();
+    renderRow({ onNameChange });
+    await userEvent.click(screen.getByRole('button', { name: /edit name for dish/i }));
+    const input = screen.getByLabelText(/dish 1 name/i) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, '  Beef Wellington  ');
+    await userEvent.keyboard('{Enter}');
+    expect(onNameChange).toHaveBeenCalledTimes(1);
+    expect(onNameChange).toHaveBeenCalledWith('Beef Wellington');
+  });
+
+  it('cancels via Esc without calling onNameChange', async () => {
+    // Why: Esc must be a no-op so the user can back out of an accidental
+    // click without persisting the (possibly empty) defaultValue.
+    const onNameChange = vi.fn();
+    renderRow({ onNameChange });
+    await userEvent.click(screen.getByRole('button', { name: /edit name for dish/i }));
+    const input = screen.getByLabelText(/dish 1 name/i) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, 'whoops');
+    await userEvent.keyboard('{Escape}');
+    expect(onNameChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /edit name for dish/i })).toBeInTheDocument();
+  });
+});
+
+describe('DishRow — click-to-edit portions', () => {
+  it('commits Enter and passes a number (not a string) clamped >= 1', async () => {
+    // Why: stores number on the Dish model; passing a string would corrupt
+    // downstream arithmetic (price = pricePerPortion * portions). The clamp
+    // guards against zero/negative input that the number control still allows
+    // (browsers vary on min-attribute enforcement).
+    const onPortionsChange = vi.fn();
+    renderRow({ onPortionsChange });
+    await userEvent.click(screen.getByRole('button', { name: /edit portions for dish/i }));
+    const input = screen.getByLabelText(/portions for dish/i) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, '12');
+    await userEvent.keyboard('{Enter}');
+    expect(onPortionsChange).toHaveBeenCalledTimes(1);
+    const arg = onPortionsChange.mock.calls[0][0];
+    expect(typeof arg).toBe('number');
+    expect(arg).toBe(12);
+  });
+});
+
+describe('DishRow — click-to-edit notes', () => {
+  it('commits via Enter and calls onNotesChange with the new value', async () => {
+    // Why: notes are the only multi-line inline editor; Enter commits while
+    // Shift+Enter inserts a newline. This guards the commit path so a chef
+    // can correct a quick typo without opening the full editor.
+    const onNotesChange = vi.fn();
+    renderRow({ onNotesChange });
+    await userEvent.click(screen.getByRole('button', { name: /edit notes for dish/i }));
+    const ta = screen.getByLabelText(/notes for dish/i) as HTMLTextAreaElement;
+    await userEvent.clear(ta);
+    await userEvent.type(ta, 'Lemon zest at the end.');
+    await userEvent.keyboard('{Enter}');
+    expect(onNotesChange).toHaveBeenCalledTimes(1);
+    expect(onNotesChange).toHaveBeenCalledWith('Lemon zest at the end.');
   });
 });

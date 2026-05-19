@@ -32,7 +32,7 @@ P0 regulatory (legal-owner work):
 
 ## Refactors pending
 
-_(none)_
+- [ ] `/events/:id/edit` is now the only path to manage sections and drag-reorder dishes — EventView's in-card pencil opens the new focused metadata modal (EventDetailsSheet) instead. Decide whether the full editor's section-management UI should migrate onto EventView (e.g. drag-and-drop inline) so the page can stand alone, or whether the "Advanced (sections, dishes)" link in the new sheet is the long-term shape — `chefflow/src/ui/pages/EventView.tsx`, `chefflow/src/ui/pages/EventEditor.tsx`, `chefflow/src/ui/components/EventDetailsSheet.tsx`.
 
 ## Bug states
 

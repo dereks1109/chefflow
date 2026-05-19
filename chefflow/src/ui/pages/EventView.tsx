@@ -5,6 +5,7 @@ import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { getRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
+import EventDetailsSheet from '../components/EventDetailsSheet';
 import MenuCheckPanel from '../components/MenuCheckPanel';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
@@ -27,6 +28,7 @@ export default function EventView() {
   // line + event-total summary.
   const [recipesById, setRecipesById] = useState<Map<string, Recipe>>(new Map());
   const [addDishUi, setAddDishUi] = useState<AddDishUi>({ open: false });
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,6 +123,44 @@ export default function EventView() {
     setState({ kind: 'ready', event: next });
   }
 
+  // Inline dish-field patch handlers — same shape as setDishStartAtById /
+  // setDishColorById. Each one immutably replaces a single field on a single
+  // dish, bumps updatedAt, persists, and re-renders. The DishRow inline editor
+  // is responsible for upstream validation (e.g. clamping portions to >= 1,
+  // dropping empty names) so we don't second-guess here.
+  async function setDishNameById(dishId: string, name: string) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) => (d.id === dishId ? { ...d, name } : d)),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  async function setDishPortionsById(dishId: string, portions: number) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) => (d.id === dishId ? { ...d, portions } : d)),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  async function setDishNotesById(dishId: string, notes: string) {
+    // Normalise '' → undefined so the Dish shape stays consistent with the
+    // schema (notes is optional) and read paths can keep checking truthy.
+    const nextNotes = notes.trim().length > 0 ? notes : undefined;
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) => (d.id === dishId ? { ...d, notes: nextNotes } : d)),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
   async function confirmAddDish(newDish: Dish) {
     const next: KitchenEvent = {
       ...e,
@@ -145,7 +185,7 @@ export default function EventView() {
       <div className="relative rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
         <button
           type="button"
-          onClick={() => navigate(`/events/${e.id}/edit`)}
+          onClick={() => setDetailsSheetOpen(true)}
           aria-label="Edit event details"
           className="absolute top-4 right-4 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           title="Edit event details"
@@ -255,6 +295,9 @@ export default function EventView() {
                       onRemove={() => void removeDishById(d.id)}
                       onColorChange={(c) => void setDishColorById(d.id, c)}
                       onTimeChange={(iso) => void setDishStartAtById(d.id, iso)}
+                      onNameChange={(next) => void setDishNameById(d.id, next)}
+                      onPortionsChange={(next) => void setDishPortionsById(d.id, next)}
+                      onNotesChange={(next) => void setDishNotesById(d.id, next)}
                       onMoveUp={() => undefined}
                       onMoveDown={() => undefined}
                     />
@@ -285,6 +328,18 @@ export default function EventView() {
           )}
         </div>
       </div>
+
+      <EventDetailsSheet
+        open={detailsSheetOpen}
+        event={e}
+        onClose={() => setDetailsSheetOpen(false)}
+        onSave={async (next) => {
+          const updated: KitchenEvent = { ...next, updatedAt: Date.now() };
+          await saveEvent(updated);
+          setState({ kind: 'ready', event: updated });
+          setDetailsSheetOpen(false);
+        }}
+      />
     </section>
   );
 }
