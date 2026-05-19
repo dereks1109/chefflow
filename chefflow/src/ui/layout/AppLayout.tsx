@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import TopNav from './TopNav';
 import MobileTopBar from './MobileTopBar';
 import CommandPalette from '../components/CommandPalette';
+import { reopenConsentBanner } from '../../state/consentStore';
 
 export default function AppLayout() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -45,6 +46,26 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Discreet legal footer — desktop only (mobile is covered by BottomNav) */}
+      <footer
+        className="hidden lg:block border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
+        aria-label="Legal"
+      >
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
+          <Link to="/terms" className="hover:text-accent">Terms</Link>
+          <Link to="/privacy" className="hover:text-accent">Privacy</Link>
+          <Link to="/cookies" className="hover:text-accent">Cookies</Link>
+          <Link to="/disclaimer" className="hover:text-accent">Disclaimer</Link>
+          <button
+            type="button"
+            onClick={reopenConsentBanner}
+            className="hover:text-accent"
+          >
+            Cookie preferences
+          </button>
+        </div>
+      </footer>
 
       {/* Mobile bottom nav — hidden on desktop */}
       <BottomNav />

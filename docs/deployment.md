@@ -115,9 +115,30 @@ The Worker enforces a per-user daily quota using Workers KV. The limit is set by
 
 ## Cloudflare Pages routing
 
-To route `/api/llm/*` to the Worker on the same domain as the SPA, configure a Pages Function or a `_routes.json` file.
+The routing configuration uses two committed files that work together:
 
-> **TODO: confirm with maintainer** — The exact `_routes.json` or Pages Functions configuration is defined in the deploy plan (`docs/superpowers/plans/2026-05-16-public-deploy-with-auth.md`, Tasks 18–22) but has not yet been committed to the repo.
+**`chefflow/public/_routes.json`** — tells Cloudflare Pages which paths invoke Functions (everything else is served as static assets):
+
+```json
+{
+  "version": 1,
+  "description": "Cloudflare Pages routing — only /api/llm/* invokes Functions; everything else is static.",
+  "include": ["/api/llm/*"],
+  "exclude": []
+}
+```
+
+**`functions/api/llm/[[path]].ts`** — the catch-all Pages Function that forwards every `/api/llm/*` request to the `chefflow-llm-proxy` Worker via a service binding named `LLM_PROXY`:
+
+```typescript
+export const onRequest = async ({ request, env }) => {
+  return env.LLM_PROXY.fetch(request);
+};
+```
+
+The `LLM_PROXY` service binding must be configured in Cloudflare Pages → Settings → Functions → Service bindings, pointing at the `chefflow-llm-proxy` Worker (deployed separately via `wrangler deploy` from `chefflow-worker/`).
+
+> **NOTE:** There is no `_routes.json` wiring for a Workers Builds deployment. `chefflow/wrangler.jsonc` is the SPA's Cloudflare Pages Build configuration (assets + SPA fallback routing), not a Worker deploy target. The live routing path is Pages Functions + service binding — not a standalone `wrangler deploy` of the SPA.
 
 ## Local development with proxy mode
 

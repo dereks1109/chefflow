@@ -104,6 +104,22 @@ This project uses a two-file state-persistence protocol for autonomous agent ses
 
 When you complete a task that appears in `TODO_PERSISTENCE.md`, remove that line immediately to keep the file lean.
 
+## Agent protocol
+
+This project uses Claude Code agents for autonomous development sessions. The agent rules, state-persistence protocol, and product cycle are defined in [`CLAUDE.md`](../CLAUDE.md) at the repo root — read it before starting any non-trivial task. The 12 engineering rules there govern both agent and human work; they are not restated here.
+
+Named agents and where their definitions live:
+
+- **Project manager** — `~/.claude/agents/` (user-level)
+- **Blueprint Architect** — `~/.claude/agents/` (user-level)
+- **Fullstack Engineer** — `~/.claude/agents/` (user-level)
+- **UI-engineer** — `~/.claude/agents/` (user-level)
+- **QA-engineer** — `~/.claude/agents/` (user-level)
+- **Security Auditor** — `~/.claude/agents/` (user-level)
+- **Docs-engineer** — `~/.claude/agents/` (user-level)
+
+Project-level agent overrides (if any) live in `.claude/agents/` at the repo root.
+
 ## Pull request checklist
 
 Before opening a PR:

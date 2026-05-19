@@ -4,27 +4,30 @@
 >
 > See [CLAUDE.md § Agent Protocol — State Persistence](CLAUDE.md#-agent-protocol--state-persistence) for the contract.
 
-**Last dumped:** 2026-05-18 — five parallel-agent plans landed, awaiting implementation choice.
+**Last dumped:** 2026-05-19 — post parallel-dispatch (cookie banner + Playwright + docs).
 
 ---
 
 ## In-flight tasks
 
-Plans written this session (all in `docs/plans/`):
+Surfaced by the cookie-banner + legal-pages agent:
 
-<!-- All three sub-tasks from docs/plans/fullstack-workflow-fixes.md shipped this session:
-     (a) eventGen.ts + menuCheck.ts migrated to shared stripMarkdownFences.
-     (b) EventCard workflow indicator + Workflow back-to-event breadcrumb.
-     (c) Click-to-edit dish time in DishRow + EventEditor wiring + 4 unit tests. -->
-- [ ] **Legal pages + cookie banner** — `docs/plans/legal-policies-cookie-banner.md`. Add `chefflow/src/ui/components/ConsentBanner.tsx`, routes `/terms /privacy /cookies /disclaimer` via a `LegalLayout` in `chefflow/src/App.tsx`, persistence key `chefflow:cookie-consent-v1`.
-- [ ] **UK regulatory P0 items** — `docs/plans/uk-regulatory-roadmap.md`. ICO registration (legal-only). Groq UK IDTA / DPA outreach (legal-only, biggest exposure). DPA confirmation with Clerk/Cloudflare/Google.
-- [ ] **QA Playwright suite** — `docs/plans/qa-test-coverage.md`. Top-5 E2E tests; biggest gap is `GenerateEventSheet` Review-step state machine. Needs `data-testid` additions on drag handles + section name inputs.
-- [ ] **Docs additions** — `docs/plans/project-architecture-docs.md`. Mermaid sequence diagram in `docs/architecture.md`; agent-protocol cross-ref in `docs/contributing.md`; resolve `_routes.json` TODO in `docs/deployment.md`.
+- [ ] Draft real legal copy for the four placeholder pages — `chefflow/src/ui/pages/legal/{Terms,Privacy,Cookies,Disclaimer}Page.tsx`.
+- [ ] Add legal links + acceptance line to the sign-in screen — `chefflow/src/ui/components/SignInScreen.tsx`.
+- [ ] Surface a DSAR / privacy contact email constant once provided — `chefflow/src/ui/pages/legal/PrivacyPage.tsx`.
+- [ ] Decide static-HTML vs. Vite-bundled rendering for legal pages (plan §Open Items) — `chefflow/src/App.tsx` + Cloudflare Worker config.
 
-Production cutover items (still pending from previous session):
+Production cutover items (still pending):
 
 - [ ] Set production env vars in Cloudflare project: `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_GOOGLE_MAPS_API_KEY`, `VITE_LLM_MODE=proxy`.
+- [ ] **Never** set `VITE_E2E_MODE=true` in production (it bypasses Clerk auth). Only test environments.
 - [ ] Add prod referrer to Google Maps API key in GCP — `https://*.chefflow-derek.workers.dev/*` + any custom domain.
+
+P0 regulatory (legal-owner work, can't be coded):
+
+- [ ] Register with ICO as a UK data controller (per `docs/plans/uk-regulatory-roadmap.md`).
+- [ ] Confirm Groq UK IDTA / DPA before public launch — largest legal exposure.
+- [ ] Sign DPAs with Clerk + Cloudflare + Google Maps.
 
 ## Refactors pending
 

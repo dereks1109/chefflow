@@ -29,3 +29,7 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+
+# Playwright output — test files in e2e/ are NOT ignored
+test-results/
+playwright-report/

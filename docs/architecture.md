@@ -194,3 +194,38 @@ React Router 7 defines all routes in `chefflow/src/App.tsx`. Every route is wrap
 | `/workflows` | WorkflowsLibrary |
 | `/workflows/:eventId` | Workflow |
 | `/demo/nested-dnd` | NestedDndDemo |
+
+## Request lifecycle (Mermaid)
+
+The diagram below traces a "Generate workflow" LLM request end to end, covering the proxy path (`VITE_LLM_MODE=proxy`).
+
+```mermaid
+sequenceDiagram
+    participant UI as React UI<br/>(EventView.tsx)
+    participant Client as llmClient.ts<br/>(core/llm/)
+    participant Proxy as proxyClient.ts<br/>(core/llm/)
+    participant Worker as index.ts<br/>(chefflow-worker/src/)
+    participant Auth as auth.ts<br/>(chefflow-worker/src/)
+    participant RL as rateLimit.ts<br/>(chefflow-worker/src/)
+    participant AI as Workers AI<br/>(env.AI)
+    participant DB as Dexie<br/>(db/eventsRepo.ts)
+
+    UI->>Client: generateWorkflow(event, dishes)
+    Client->>Client: check VITE_LLM_MODE
+    Note over Client: proxy mode → proxyClient
+    Client->>Proxy: post("/api/llm/workflow", body)
+    Proxy->>Proxy: attach Clerk Bearer token
+    Proxy->>Worker: POST /api/llm/workflow
+    Worker->>Auth: verifyClerkRequest(request, env, verify)
+    Auth-->>Worker: userId or 401
+    Worker->>RL: consumeDailyQuota(env.RATE_LIMIT, userId, limit)
+    RL-->>Worker: QuotaResult or 429
+    Worker->>AI: handleEndpoint("workflow", env.AI, body)
+    AI-->>Worker: raw JSON string
+    Worker-->>Proxy: { content: "..." }
+    Proxy-->>Client: response body
+    Client->>Client: stripMarkdownFences(content)
+    Client-->>UI: ScheduledStep[]
+    UI->>DB: saveEvent({ ...event, workflow })
+    UI->>UI: render Workflow page
+```

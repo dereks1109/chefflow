@@ -6,9 +6,22 @@ import App from './App';
 import './index.css';
 
 const publishableKey = (import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined) ?? '';
+// E2E_MODE skips Clerk entirely so Playwright tests can exercise the app
+// without a live Clerk account. NEVER set this in production builds.
+const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
 const root = createRoot(document.getElementById('root')!);
 
-if (!publishableKey) {
+if (e2eMode) {
+  // In E2E mode the app renders directly — Clerk is bypassed. App.tsx must
+  // also skip <SignedIn>/<SignedOut> gating; see App.tsx e2eMode branch.
+  root.render(
+    <StrictMode>
+      <BrowserRouter>
+        <App e2eMode />
+      </BrowserRouter>
+    </StrictMode>,
+  );
+} else if (!publishableKey) {
   // Clerk throws on an empty publishableKey, which used to leave the page
   // blank. Render an explicit error instead so deploys without env vars are
   // visibly broken rather than silently broken.

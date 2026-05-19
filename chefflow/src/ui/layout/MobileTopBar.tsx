@@ -53,9 +53,12 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
 
         <ThemeToggle />
 
-        <div className="flex items-center justify-center min-h-touch min-w-touch">
-          <UserButton afterSignOutUrl="/" />
-        </div>
+        {/* UserButton requires ClerkProvider — omit in E2E mode where Clerk is bypassed */}
+        {(import.meta.env.VITE_E2E_MODE as string | undefined) !== 'true' && (
+          <div className="flex items-center justify-center min-h-touch min-w-touch">
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        )}
       </div>
     </header>
   );

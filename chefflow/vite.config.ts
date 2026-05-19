@@ -16,6 +16,9 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/vitest.setup.ts'],
+    // Exclude Playwright E2E specs — they live in e2e/ and use @playwright/test,
+    // not vitest. Without this exclusion vitest tries to run them and throws.
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**'],
     server: {
       deps: {
         // Same parent-dir allowlist for Vitest's transform pipeline.
