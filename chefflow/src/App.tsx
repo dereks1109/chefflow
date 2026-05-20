@@ -13,6 +13,7 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SignInScreen from './ui/components/SignInScreen';
 import ConsentBanner from './ui/components/ConsentBanner';
+import TierSync from './ui/components/TierSync';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
 import CookiesPage from './ui/pages/legal/CookiesPage';
@@ -31,6 +32,7 @@ function GatedApp() {
         <SignInScreen />
       </SignedOut>
       <SignedIn>
+        <TierSync />
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/recipes" replace />} />

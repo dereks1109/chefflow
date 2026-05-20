@@ -10,6 +10,15 @@
 
 ## In-flight tasks
 
+Monetisation follow-ups (foundation just landed — Stripe still needed):
+
+- [ ] Wire `<TierGate require="pro">` around every Pro feature: `LocationAutocomplete` mount, "Generate Workflow" CTA, recipe-count check in `RecipesLibrary.tsx`, event-count check in `EventsLibrary.tsx`, LLM call count check in `chefflow-worker/`.
+- [ ] Add usage meter pill to `TopNav.tsx` + `MobileTopBar.tsx` (X / N LLM calls this month).
+- [ ] `chefflow/src/ui/components/UpgradeSheet.tsx` — modal triggered when a cap is hit, links to pricing.
+- [ ] Stripe Customer Portal integration — `chefflow-worker/src/index.ts` webhook handler + tier write-back to Clerk `publicMetadata.tier` via Clerk Backend API.
+- [ ] `chefflow/src/ui/pages/SettingsPage.tsx` (new) — link to Stripe Customer Portal for billing.
+- [ ] Marketing site at chefflow.com (single-page Astro pointing at signup).
+
 EventView design question (from Fullstack Engineer agent):
 
 - [ ] Decide whether section management and drag-reorder should migrate onto `chefflow/src/ui/pages/EventView.tsx`, or stay behind the "Advanced (sections, dishes)" link in `chefflow/src/ui/components/EventDetailsSheet.tsx`. Currently `/events/:id/edit` (full EventEditor) is the only path for those capabilities.
