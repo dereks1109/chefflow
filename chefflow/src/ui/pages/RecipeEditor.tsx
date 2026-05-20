@@ -131,6 +131,7 @@ export default function RecipeEditor() {
             value={r.title}
             onChange={(e) => update('title', e.target.value)}
             className="input mt-1"
+            data-testid="recipe-editor-title-input"
           />
         </label>
 

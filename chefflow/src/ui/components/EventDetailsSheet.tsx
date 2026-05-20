@@ -189,6 +189,7 @@ export default function EventDetailsSheet({ open, event, onClose, onSave }: Prop
               className="input mt-1"
               placeholder="e.g. Sunday family dinner"
               aria-label="Event title"
+              data-testid="event-details-title-input"
             />
           </label>
 
@@ -339,6 +340,7 @@ export default function EventDetailsSheet({ open, event, onClose, onSave }: Prop
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
+              data-testid="event-details-save"
               className="btn-primary text-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving ? 'Saving…' : 'Save'}

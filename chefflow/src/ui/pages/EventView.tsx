@@ -187,12 +187,13 @@ export default function EventView() {
           type="button"
           onClick={() => setDetailsSheetOpen(true)}
           aria-label="Edit event details"
+          data-testid="event-view-edit-details"
           className="absolute top-4 right-4 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           title="Edit event details"
         >
           <Edit3 className="h-4 w-4" aria-hidden="true" />
         </button>
-        <h1 className="text-3xl font-bold pr-8">{e.title || 'Untitled event'}</h1>
+        <h1 className="text-3xl font-bold pr-8" data-testid="event-view-title">{e.title || 'Untitled event'}</h1>
         <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(e.serveAt)}</span>

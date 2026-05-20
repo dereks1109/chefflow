@@ -4,19 +4,31 @@
 >
 > See [CLAUDE.md § Agent Protocol — State Persistence](CLAUDE.md#-agent-protocol--state-persistence) for the contract.
 
-**Last dumped:** 2026-05-19 — post second parallel-dispatch (legal copy + architecture doc + EventView restructure).
+**Last dumped:** 2026-05-20 — post logo + event-page refinements + QA re-test batch.
 
 ---
 
 ## In-flight tasks
 
-Legal pages — pre-launch blockers:
+EventView design question (from Fullstack Engineer agent):
 
-- [ ] Replace `privacy contact email pending` placeholder in `chefflow/src/ui/pages/legal/PrivacyPage.tsx` with a real DSAR address (UK GDPR Article 13 requirement).
-- [ ] Confirm Groq UK IDTA / DPA status and update `PrivacyPage.tsx` + `TermsPage.tsx` copy (current draft flags it as pending — largest legal exposure).
-- [ ] UK-qualified solicitor review of all four pages — especially allergen-liability waivers in `TermsPage.tsx` + `DisclaimerPage.tsx`.
+- [ ] Decide whether section management and drag-reorder should migrate onto `chefflow/src/ui/pages/EventView.tsx`, or stay behind the "Advanced (sections, dishes)" link in `chefflow/src/ui/components/EventDetailsSheet.tsx`. Currently `/events/:id/edit` (full EventEditor) is the only path for those capabilities.
+
+QA gaps (from QA-engineer agent, also in `chefflow/e2e/TEST_CASES.md` "Open coverage gaps"):
+
+- [ ] Photo-upload recipe gen — `chefflow/e2e/recipe-new.spec.ts` flags this but doesn't end-to-end test it (no real file upload).
+- [ ] Workflow page interactions — `chefflow/src/ui/pages/Workflow.tsx` has no E2E coverage.
+- [ ] Drag-and-drop section management on EventEditor — `@hello-pangea/dnd` interactions not covered.
+- [ ] Sign-in flow — Clerk-bypassed in all current specs; no real auth round-trip.
+- [ ] "Create new recipe → return to review" full resume path — mount-order race in `chefflow/src/ui/pages/EventsLibrary.tsx` makes deterministic testing brittle.
+
+Legal pages (carried over — pre-launch blockers):
+
+- [ ] Replace `privacy contact email pending` placeholder in `chefflow/src/ui/pages/legal/PrivacyPage.tsx` with a real DSAR address.
+- [ ] Confirm Groq UK IDTA / DPA status and update `PrivacyPage.tsx` + `TermsPage.tsx` copy.
+- [ ] UK-qualified solicitor review of all four pages — especially allergen-liability waivers.
 - [ ] Verify Clerk DPA URL `https://clerk.com/legal/dpa` still resolves before launch.
-- [ ] Implement JSON export for IndexedDB data — `PrivacyPage.tsx` "Right to Portability" is aspirational until this lands.
+- [ ] Implement JSON export for IndexedDB data — Right-to-Portability copy is aspirational until this lands.
 - [ ] Add legal links + acceptance line to `chefflow/src/ui/components/SignInScreen.tsx`.
 
 Production cutover:
@@ -27,12 +39,12 @@ Production cutover:
 
 P0 regulatory (legal-owner work):
 
-- [ ] Register with ICO as a UK data controller (per `docs/plans/uk-regulatory-roadmap.md`).
+- [ ] Register with ICO as a UK data controller.
 - [ ] Sign DPAs with Clerk + Cloudflare + Google Maps.
 
 ## Refactors pending
 
-- [ ] `/events/:id/edit` is now the only path to manage sections and drag-reorder dishes — EventView's in-card pencil opens the new focused metadata modal (EventDetailsSheet) instead. Decide whether the full editor's section-management UI should migrate onto EventView (e.g. drag-and-drop inline) so the page can stand alone, or whether the "Advanced (sections, dishes)" link in the new sheet is the long-term shape — `chefflow/src/ui/pages/EventView.tsx`, `chefflow/src/ui/pages/EventEditor.tsx`, `chefflow/src/ui/components/EventDetailsSheet.tsx`.
+_(none)_
 
 ## Bug states
 

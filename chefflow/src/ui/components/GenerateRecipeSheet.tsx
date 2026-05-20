@@ -171,13 +171,13 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props)
           {/* Mode picker */}
           <div className="px-5 pt-3" role="tablist" aria-label="Input mode">
             <div className="grid grid-cols-3 gap-1 rounded-md border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <TabButton active={tab === 'manual'} onClick={() => setTab('manual')} icon={<Pencil className="h-3.5 w-3.5" />}>
+              <TabButton active={tab === 'manual'} onClick={() => setTab('manual')} icon={<Pencil className="h-3.5 w-3.5" />} testId="recipe-tab-manual">
                 Manual
               </TabButton>
-              <TabButton active={tab === 'describe'} onClick={() => setTab('describe')} icon={<Type className="h-3.5 w-3.5" />}>
+              <TabButton active={tab === 'describe'} onClick={() => setTab('describe')} icon={<Type className="h-3.5 w-3.5" />} testId="recipe-tab-describe">
                 Describe
               </TabButton>
-              <TabButton active={tab === 'photo'} onClick={() => setTab('photo')} icon={<Camera className="h-3.5 w-3.5" />}>
+              <TabButton active={tab === 'photo'} onClick={() => setTab('photo')} icon={<Camera className="h-3.5 w-3.5" />} testId="recipe-tab-photo">
                 Photo
               </TabButton>
             </div>
@@ -202,6 +202,7 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props)
                   rows={4}
                   className="input mt-1"
                   aria-label="Recipe description"
+                  data-testid="recipe-sheet-describe-textarea"
                 />
                 <span className="block mt-1 text-xs text-slate-500">
                   Anything goes — dish name, dietary notes, cuisine, constraints.
@@ -220,11 +221,13 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props)
                   onChange={onPickPhoto}
                   className="hidden"
                   aria-label="Pick recipe photo"
+                  data-testid="recipe-sheet-photo-input"
                 />
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className="btn-secondary text-sm inline-flex items-center gap-2 w-full justify-center"
+                  data-testid="recipe-sheet-photo-pick-button"
                 >
                   <Camera className="h-4 w-4" aria-hidden="true" />
                   {imageFilename ? `Replace photo (${truncate(imageFilename, 28)})` : 'Choose / snap a recipe photo'}
@@ -280,6 +283,7 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props)
               type="button"
               onClick={() => void handleSubmit()}
               disabled={submitting}
+              data-testid={tab === 'manual' ? 'recipe-sheet-create-blank' : 'recipe-sheet-submit'}
               className="btn-primary text-sm inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {tab === 'manual' ? (
@@ -308,11 +312,13 @@ function TabButton({
   onClick,
   icon,
   children,
+  testId,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   children: React.ReactNode;
+  testId?: string;
 }) {
   return (
     <button
@@ -320,6 +326,7 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onClick}
+      data-testid={testId}
       className={[
         'px-3 py-1.5 text-xs inline-flex items-center gap-1.5',
         active

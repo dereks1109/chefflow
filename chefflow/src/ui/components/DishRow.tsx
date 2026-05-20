@@ -153,7 +153,11 @@ export default function DishRow({
   }
 
   return (
-    <li className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-3">
+    <li
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-3"
+      data-testid="dish-row"
+      data-dish-id={value.id}
+    >
       <div className="flex items-start gap-3">
         <span className="text-xs font-semibold text-slate-500 w-6 pt-1">{index + 1}.</span>
         <div className="flex-1 min-w-0">
@@ -370,6 +374,7 @@ export default function DishRow({
                 onClick={onEdit}
                 className="touch-target px-2 rounded-md text-slate-500 hover:text-accent"
                 aria-label={`Edit dish ${index + 1}`}
+                data-testid="dish-row-edit"
               >
                 <Edit3 className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -378,6 +383,7 @@ export default function DishRow({
                 onClick={onRemove}
                 className="touch-target px-2 rounded-md text-slate-500 hover:text-danger"
                 aria-label={`Remove dish ${index + 1}`}
+                data-testid="dish-row-remove"
               >
                 <Trash2 className="h-4 w-4" aria-hidden="true" />
               </button>
