@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users, Wallet } from 'lucide-react';
 import type { ColorTag, Dish } from '../../core/types';
-import { formatDateTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
+import { formatTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
+import { formatGBP } from '../../core/util/money';
 import ColorPicker from './ColorPicker';
 
 interface Props {
@@ -45,6 +46,14 @@ interface Props {
    * normalising '' → undefined before persisting).
    */
   onNotesChange?: (next: string) => void;
+  /**
+   * Price per portion in GBP, looked up by the caller from the linked
+   * recipe. When set, the row displays `£X.XX/portion` and a derived
+   * `£Y total` (portions × pricePerPortion). When undefined, both cells
+   * are omitted — callers without recipe context (e.g. plain editor)
+   * don't need to pass anything.
+   */
+  pricePerPortion?: number;
 }
 
 export default function DishRow({
@@ -62,6 +71,7 @@ export default function DishRow({
   onNameChange,
   onPortionsChange,
   onNotesChange,
+  pricePerPortion,
 }: Props) {
   // Each inline-edit mode is independent so opening one doesn't disrupt the
   // others. They share the same stop-propagation guards to keep @hello-pangea/dnd
@@ -161,60 +171,111 @@ export default function DishRow({
       <div className="flex items-start gap-3">
         <span className="text-xs font-semibold text-slate-500 w-6 pt-1">{index + 1}.</span>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {editingName && onNameChange ? (
-              <input
-                ref={nameInputRef}
-                type="text"
-                defaultValue={value.name}
-                onBlur={(e) => commitName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    commitName(e.currentTarget.value);
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    setEditingName(false);
-                  }
-                  e.stopPropagation();
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-                className="font-semibold bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5 min-w-0 flex-1"
-                aria-label={`Dish ${index + 1} name`}
-                placeholder="Dish name"
-              />
-            ) : onNameChange ? (
-              <button
-                type="button"
-                onClick={() => setEditingName(true)}
-                className="font-semibold text-left hover:text-accent hover:underline focus:outline-none focus:underline truncate max-w-full"
-                aria-label={`Edit name for dish ${index + 1}`}
-                title="Click to edit dish name"
-              >
-                {value.name || 'Untitled dish'}
-              </button>
-            ) : (
-              <h3 className="font-semibold">{value.name || 'Untitled dish'}</h3>
-            )}
-            {value.recipeId && (
-              <Link
-                to={`/recipes/${value.recipeId}/edit`}
-                className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
-              >
-                <BookOpen className="h-3 w-3" aria-hidden="true" />
-                recipe
-              </Link>
-            )}
-            {value.isPrepared && (
-              <span className="inline-flex items-center gap-1 text-xs text-slate-500">
-                <Hand className="h-3 w-3" aria-hidden="true" />
-                ready
-              </span>
-            )}
-          </div>
-          <dl className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
+          {/* Single-row layout: time · name (+ recipe link / ready badge) ·
+              portions · £/portion · £ total. Notes ride on the row below. */}
+          <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-xs text-slate-600 dark:text-slate-400">
+            {/* Time — HH:MM display, datetime-local editor (dish can fall
+                on a different day from the event's serveAt). */}
+            <div className="inline-flex items-center gap-1 font-mono">
+              <Clock className="h-3 w-3" aria-hidden="true" />
+              {editingTime && onTimeChange ? (
+                <input
+                  ref={timeInputRef}
+                  type="datetime-local"
+                  defaultValue={toLocalInputValue(value.startAt)}
+                  onBlur={(e) => commitTime(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitTime(e.currentTarget.value);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setEditingTime(false);
+                    }
+                    // Block keys propagating to DnD's keyboard sensors.
+                    e.stopPropagation();
+                  }}
+                  // Stop the drag sensor picking up clicks/drags inside the input.
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="text-xs bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5"
+                  aria-label={`Start time for dish ${index + 1}`}
+                />
+              ) : onTimeChange ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingTime(true)}
+                  className="hover:text-accent hover:underline focus:outline-none focus:underline"
+                  aria-label={`Edit start time for dish ${index + 1}`}
+                  title="Click to edit start time"
+                >
+                  {formatTime(value.startAt)}
+                </button>
+              ) : (
+                <span>{formatTime(value.startAt)}</span>
+              )}
+            </div>
+
+            {/* Name — promoted in size; recipe link + ready badge stay
+                attached so they read as a single unit. */}
+            <div className="inline-flex items-center gap-2 min-w-0">
+              {editingName && onNameChange ? (
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  defaultValue={value.name}
+                  onBlur={(e) => commitName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitName(e.currentTarget.value);
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setEditingName(false);
+                    }
+                    e.stopPropagation();
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  className="text-sm font-semibold text-slate-900 dark:text-slate-100 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5 min-w-0"
+                  aria-label={`Dish ${index + 1} name`}
+                  placeholder="Dish name"
+                />
+              ) : onNameChange ? (
+                <button
+                  type="button"
+                  onClick={() => setEditingName(true)}
+                  className="text-sm font-semibold text-slate-900 dark:text-slate-100 text-left hover:text-accent hover:underline focus:outline-none focus:underline truncate"
+                  aria-label={`Edit name for dish ${index + 1}`}
+                  title="Click to edit dish name"
+                >
+                  {value.name || 'Untitled dish'}
+                </button>
+              ) : (
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                  {value.name || 'Untitled dish'}
+                </h3>
+              )}
+              {value.recipeId && (
+                <Link
+                  to={`/recipes/${value.recipeId}/edit`}
+                  className="inline-flex items-center gap-1 text-xs text-accent hover:underline shrink-0"
+                >
+                  <BookOpen className="h-3 w-3" aria-hidden="true" />
+                  recipe
+                </Link>
+              )}
+              {value.isPrepared && (
+                <span className="inline-flex items-center gap-1 text-xs text-slate-500 shrink-0">
+                  <Hand className="h-3 w-3" aria-hidden="true" />
+                  ready
+                </span>
+              )}
+            </div>
+
+            {/* Portions — click to edit. */}
             <div className="inline-flex items-center gap-1">
               <Users className="h-3 w-3" aria-hidden="true" />
               {editingPortions && onPortionsChange ? (
@@ -254,47 +315,28 @@ export default function DishRow({
                 <span>{value.portions} portion{value.portions === 1 ? '' : 's'}</span>
               )}
             </div>
-            <div className="inline-flex items-center gap-1">
-              <Clock className="h-3 w-3" aria-hidden="true" />
-              {editingTime && onTimeChange ? (
-                <input
-                  ref={timeInputRef}
-                  type="datetime-local"
-                  defaultValue={toLocalInputValue(value.startAt)}
-                  onBlur={(e) => commitTime(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commitTime(e.currentTarget.value);
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      setEditingTime(false);
-                    }
-                    // Block keys propagating to DnD's keyboard sensors.
-                    e.stopPropagation();
-                  }}
-                  // Stop the drag sensor picking up clicks/drags inside the input.
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  className="text-xs bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5"
-                  aria-label={`Start time for dish ${index + 1}`}
-                />
-              ) : onTimeChange ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingTime(true)}
-                  className="hover:text-accent hover:underline focus:outline-none focus:underline"
-                  aria-label={`Edit start time for dish ${index + 1}`}
-                  title="Click to edit start time"
-                >
-                  {formatDateTime(value.startAt)}
-                </button>
-              ) : (
-                <span>{formatDateTime(value.startAt)}</span>
-              )}
-            </div>
-          </dl>
+
+            {/* Price / portion — recipe-derived, read-only. */}
+            {pricePerPortion !== undefined && (
+              <div
+                className="inline-flex items-center gap-1"
+                title="Price per portion (from the linked recipe)"
+              >
+                <Wallet className="h-3 w-3" aria-hidden="true" />
+                <span>{formatGBP(pricePerPortion)}/portion</span>
+              </div>
+            )}
+
+            {/* Total — portions × pricePerPortion. */}
+            {pricePerPortion !== undefined && (
+              <div
+                className="inline-flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-200"
+                title="Portions × price per portion"
+              >
+                <span>{formatGBP(pricePerPortion * value.portions)} total</span>
+              </div>
+            )}
+          </div>
           {/* Notes block:
               - editing → autosized textarea (Enter commits, Shift+Enter newline)
               - notes present + onNotesChange → clickable paragraph

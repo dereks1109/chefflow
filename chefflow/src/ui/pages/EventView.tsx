@@ -299,6 +299,11 @@ export default function EventView() {
                       onNameChange={(next) => void setDishNameById(d.id, next)}
                       onPortionsChange={(next) => void setDishPortionsById(d.id, next)}
                       onNotesChange={(next) => void setDishNotesById(d.id, next)}
+                      pricePerPortion={
+                        d.recipeId
+                          ? recipesById.get(d.recipeId)?.pricePerPortion
+                          : undefined
+                      }
                       onMoveUp={() => undefined}
                       onMoveDown={() => undefined}
                     />
