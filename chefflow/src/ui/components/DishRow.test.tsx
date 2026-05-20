@@ -134,3 +134,44 @@ describe('DishRow — click-to-edit notes', () => {
     expect(onNotesChange).toHaveBeenCalledWith('Lemon zest at the end.');
   });
 });
+
+describe('DishRow — click-to-edit price per portion', () => {
+  it('shows "+ Add price" when the recipe has no price and an edit handler is provided', () => {
+    const onPricePerPortionChange = vi.fn();
+    renderRow({ onPricePerPortionChange });
+    expect(
+      screen.getByRole('button', { name: /edit price per portion for dish/i }),
+    ).toHaveTextContent(/\+ Add price/);
+  });
+
+  it('sets a numeric price on Enter — calls handler with the number', async () => {
+    const onPricePerPortionChange = vi.fn();
+    renderRow({ pricePerPortion: 12, onPricePerPortionChange });
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit price per portion for dish/i }),
+    );
+    const input = screen.getByLabelText(
+      /price per portion for dish .* \(GBP\)/i,
+    ) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, '15.50');
+    await userEvent.keyboard('{Enter}');
+    expect(onPricePerPortionChange).toHaveBeenCalledTimes(1);
+    expect(onPricePerPortionChange).toHaveBeenCalledWith(15.5);
+  });
+
+  it('clears the price when the input is emptied + Enter — calls handler with undefined', async () => {
+    const onPricePerPortionChange = vi.fn();
+    renderRow({ pricePerPortion: 12, onPricePerPortionChange });
+    await userEvent.click(
+      screen.getByRole('button', { name: /edit price per portion for dish/i }),
+    );
+    const input = screen.getByLabelText(
+      /price per portion for dish .* \(GBP\)/i,
+    ) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.keyboard('{Enter}');
+    expect(onPricePerPortionChange).toHaveBeenCalledTimes(1);
+    expect(onPricePerPortionChange).toHaveBeenCalledWith(undefined);
+  });
+});

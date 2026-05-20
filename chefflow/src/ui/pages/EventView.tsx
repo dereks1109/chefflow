@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Calendar, Edit3, ExternalLink, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, User, Wallet } from 'lucide-react';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
-import { getRecipe } from '../../db/recipesRepo';
+import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import EventDetailsSheet from '../components/EventDetailsSheet';
@@ -161,6 +161,21 @@ export default function EventView() {
     setState({ kind: 'ready', event: next });
   }
 
+  // Writes back to the LINKED RECIPE, not the dish — there's no dish-level
+  // price field. Refreshes recipesById in place so the affected timeline row
+  // re-renders without a round-trip through the recipe-loading useEffect.
+  async function setRecipePricePerPortion(recipeId: string, next: number | undefined) {
+    const existing = recipesById.get(recipeId);
+    if (!existing) return;
+    const updated: Recipe = { ...existing, pricePerPortion: next, updatedAt: Date.now() };
+    await saveRecipe(updated);
+    setRecipesById((prev) => {
+      const copy = new Map(prev);
+      copy.set(recipeId, updated);
+      return copy;
+    });
+  }
+
   async function confirmAddDish(newDish: Dish) {
     const next: KitchenEvent = {
       ...e,
@@ -302,6 +317,11 @@ export default function EventView() {
                       pricePerPortion={
                         d.recipeId
                           ? recipesById.get(d.recipeId)?.pricePerPortion
+                          : undefined
+                      }
+                      onPricePerPortionChange={
+                        d.recipeId
+                          ? (next) => void setRecipePricePerPortion(d.recipeId!, next)
                           : undefined
                       }
                       onMoveUp={() => undefined}

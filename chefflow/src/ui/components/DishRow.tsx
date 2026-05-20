@@ -50,10 +50,18 @@ interface Props {
    * Price per portion in GBP, looked up by the caller from the linked
    * recipe. When set, the row displays `£X.XX/portion` and a derived
    * `£Y total` (portions × pricePerPortion). When undefined, both cells
-   * are omitted — callers without recipe context (e.g. plain editor)
-   * don't need to pass anything.
+   * are omitted unless `onPricePerPortionChange` is also provided — in
+   * which case an "+ Add price" affordance is shown.
    */
   pricePerPortion?: number;
+  /**
+   * Inline edit hook for price per portion. Mutates the LINKED RECIPE,
+   * not the dish — there is no dish-level price field. Pass `undefined`
+   * on commit to clear the recipe's price. Callers should warn the user
+   * (via a tooltip on the cell) that the change applies to every event
+   * using that recipe. Omit when the dish has no linked recipe to edit.
+   */
+  onPricePerPortionChange?: (next: number | undefined) => void;
 }
 
 export default function DishRow({
@@ -72,6 +80,7 @@ export default function DishRow({
   onPortionsChange,
   onNotesChange,
   pricePerPortion,
+  onPricePerPortionChange,
 }: Props) {
   // Each inline-edit mode is independent so opening one doesn't disrupt the
   // others. They share the same stop-propagation guards to keep @hello-pangea/dnd
@@ -80,11 +89,13 @@ export default function DishRow({
   const [editingName, setEditingName] = useState(false);
   const [editingPortions, setEditingPortions] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
+  const [editingPrice, setEditingPrice] = useState(false);
 
   const timeInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
   const portionsInputRef = useRef<HTMLInputElement>(null);
   const notesTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const priceInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (editingTime) timeInputRef.current?.focus();
@@ -116,6 +127,13 @@ export default function DishRow({
       }
     }
   }, [editingNotes]);
+
+  useEffect(() => {
+    if (editingPrice) {
+      priceInputRef.current?.focus();
+      priceInputRef.current?.select();
+    }
+  }, [editingPrice]);
 
   function commitTime(raw: string) {
     if (!onTimeChange) {
@@ -160,6 +178,25 @@ export default function DishRow({
     }
     if (raw !== (value.notes ?? '')) onNotesChange(raw);
     setEditingNotes(false);
+  }
+
+  function commitPrice(raw: string) {
+    if (!onPricePerPortionChange) {
+      setEditingPrice(false);
+      return;
+    }
+    const trimmed = raw.trim();
+    // Empty string clears the price (recipe.pricePerPortion → undefined).
+    if (trimmed.length === 0) {
+      if (pricePerPortion !== undefined) onPricePerPortionChange(undefined);
+      setEditingPrice(false);
+      return;
+    }
+    const n = Number(trimmed);
+    if (Number.isFinite(n) && n >= 0 && n !== pricePerPortion) {
+      onPricePerPortionChange(n);
+    }
+    setEditingPrice(false);
   }
 
   return (
@@ -316,18 +353,64 @@ export default function DishRow({
               )}
             </div>
 
-            {/* Price / portion — recipe-derived, read-only. */}
-            {pricePerPortion !== undefined && (
+            {/* Price / portion — sourced from the linked recipe. Editable
+                in place when onPricePerPortionChange is provided; writes back
+                to the recipe (NOT a dish-level override), so the change
+                propagates to every event using that recipe. */}
+            {(pricePerPortion !== undefined || onPricePerPortionChange) && (
               <div
                 className="inline-flex items-center gap-1"
-                title="Price per portion (from the linked recipe)"
+                title={
+                  onPricePerPortionChange
+                    ? 'Edits the linked recipe — change applies to every event using it'
+                    : 'Price per portion (from the linked recipe)'
+                }
               >
                 <Wallet className="h-3 w-3" aria-hidden="true" />
-                <span>{formatGBP(pricePerPortion)}/portion</span>
+                {editingPrice && onPricePerPortionChange ? (
+                  <input
+                    ref={priceInputRef}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    defaultValue={pricePerPortion ?? ''}
+                    onBlur={(e) => commitPrice(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitPrice(e.currentTarget.value);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setEditingPrice(false);
+                      }
+                      e.stopPropagation();
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    className="w-20 text-xs bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5"
+                    aria-label={`Price per portion for dish ${index + 1} (GBP)`}
+                    placeholder="0.00"
+                  />
+                ) : onPricePerPortionChange ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditingPrice(true)}
+                    className="hover:text-accent hover:underline focus:outline-none focus:underline"
+                    aria-label={`Edit price per portion for dish ${index + 1}`}
+                    title="Click to edit price per portion"
+                  >
+                    {pricePerPortion !== undefined
+                      ? `${formatGBP(pricePerPortion)}/portion`
+                      : '+ Add price'}
+                  </button>
+                ) : (
+                  <span>{formatGBP(pricePerPortion as number)}/portion</span>
+                )}
               </div>
             )}
 
-            {/* Total — portions × pricePerPortion. */}
+            {/* Total — portions × pricePerPortion. Read-only (derived). */}
             {pricePerPortion !== undefined && (
               <div
                 className="inline-flex items-center gap-1 font-semibold text-slate-700 dark:text-slate-200"
