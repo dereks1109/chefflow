@@ -8,6 +8,7 @@ import {
   Settings2,
   StickyNote,
   User,
+  Users,
   Wallet,
   X,
 } from 'lucide-react';
@@ -45,6 +46,7 @@ interface FormState {
   contactEmail: string;
   contactPhone: string;
   budget: string; // raw input string so '' / partial typing is preserved
+  numberOfGuests: string; // raw input string — same reasoning as budget
   notes: string;
 }
 
@@ -57,6 +59,7 @@ function eventToForm(e: KitchenEvent): FormState {
     contactEmail: e.contactEmail ?? '',
     contactPhone: e.contactPhone ?? '',
     budget: e.budget !== undefined ? String(e.budget) : '',
+    numberOfGuests: e.numberOfGuests !== undefined ? String(e.numberOfGuests) : '',
     notes: e.notes,
   };
 }
@@ -70,6 +73,7 @@ function formsEqual(a: FormState, b: FormState): boolean {
     a.contactEmail === b.contactEmail &&
     a.contactPhone === b.contactPhone &&
     a.budget === b.budget &&
+    a.numberOfGuests === b.numberOfGuests &&
     a.notes === b.notes
   );
 }
@@ -83,6 +87,12 @@ function applyForm(base: KitchenEvent, f: FormState): KitchenEvent {
     const n = Number(raw);
     if (Number.isFinite(n) && n >= 0) budget = n;
   }
+  let numberOfGuests: number | undefined;
+  const rawGuests = f.numberOfGuests.trim();
+  if (rawGuests !== '') {
+    const n = Number(rawGuests);
+    if (Number.isFinite(n) && n >= 1) numberOfGuests = Math.floor(n);
+  }
   return {
     ...base,
     title: f.title,
@@ -92,6 +102,7 @@ function applyForm(base: KitchenEvent, f: FormState): KitchenEvent {
     contactEmail: f.contactEmail.trim() || undefined,
     contactPhone: f.contactPhone.trim() || undefined,
     budget,
+    numberOfGuests,
     notes: f.notes,
   };
 }
@@ -269,6 +280,26 @@ export default function EventDetailsSheet({ open, event, onClose, onSave }: Prop
               />
             </label>
           </fieldset>
+
+          <label className="block">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Users className="h-4 w-4" aria-hidden="true" />
+              Number of guests — optional
+            </span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={form.numberOfGuests}
+              onChange={(ev) => setForm({ ...form, numberOfGuests: ev.target.value })}
+              placeholder="—"
+              className="input mt-1"
+              aria-label="Number of guests"
+            />
+            <span className="block mt-1 text-xs text-slate-500">
+              Headcount for the menu suitability check. Keep dietary requirements in Notes below.
+            </span>
+          </label>
 
           <label className="block">
             <span className="text-sm font-medium flex items-center gap-2">

@@ -6,8 +6,9 @@ import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, R
 // overwritten on next load so chefs see the new fields. v3 adds analysis +
 // pricePerPortion to the three demo recipes.
 const SEED_FLAG = 'chefflow:seeded-demo-v3';
-// v4 adds contact name / email / phone on the demo event.
-const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v4';
+// v5 adds numberOfGuests on the demo event (now a structured field instead
+// of being buried in the freeform notes).
+const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v5';
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -197,6 +198,7 @@ function demoEvents(): KitchenEvent[] {
       serveAt: serve.toISOString(),
       location: 'Home kitchen',
       budget: 50,
+      numberOfGuests: 6,
       contactName: 'Alex Johnson',
       contactEmail: 'alex@example.com',
       contactPhone: '+44 7700 900123',

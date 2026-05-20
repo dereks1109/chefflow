@@ -5,6 +5,7 @@ import type { ColorTag, Dish } from '../../core/types';
 import { formatTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
 import ColorPicker from './ColorPicker';
+import NotesList from './NotesList';
 
 interface Props {
   index: number;
@@ -450,17 +451,30 @@ export default function DishRow({
               placeholder="Notes (Enter to save, Shift+Enter for newline, Esc to cancel)"
             />
           ) : value.notes && onNotesChange ? (
-            <button
-              type="button"
+            // Clickable region wrapping a NotesList — using <div role="button">
+            // rather than <button> because <button> can't legally contain the
+            // block-level <ul> NotesList renders for multi-line notes.
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setEditingNotes(true)}
-              className="mt-2 text-left text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap hover:text-accent focus:outline-none focus:text-accent w-full"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setEditingNotes(true);
+                }
+              }}
+              className="mt-2 text-sm text-slate-600 dark:text-slate-400 hover:text-accent focus:outline-none focus:text-accent cursor-text"
               aria-label={`Edit notes for dish ${index + 1}`}
               title="Click to edit notes"
             >
-              {value.notes}
-            </button>
+              <NotesList notes={value.notes} />
+            </div>
           ) : value.notes ? (
-            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{value.notes}</p>
+            <NotesList
+              notes={value.notes}
+              className="mt-2 text-sm text-slate-600 dark:text-slate-400"
+            />
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">

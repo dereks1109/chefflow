@@ -115,6 +115,10 @@ export interface KitchenEvent {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  // Number of expected guests. Optional — older events leave it undefined.
+  // Surfaced on the EventView detail card and used by the LLM menu check as
+  // an explicit signal (previously buried inside the notes free-text).
+  numberOfGuests?: number;
   // Combined freeform field: general event notes + guest dietary requirements.
   // The LLM menu-suitability check reads dietary intent from here.
   notes: string;

@@ -1,16 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, Edit3, ExternalLink, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, User, Wallet } from 'lucide-react';
+import {
+  DragDropContext,
+  Droppable,
+  Draggable,
+  type DropResult,
+  type DroppableProvided,
+  type DraggableProvided,
+} from '@hello-pangea/dnd';
+import { randomId } from '../../core/util/id';
+import { ArrowLeft, Calendar, Edit3, ExternalLink, GripVertical, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, Trash2, User, Users, Wallet } from 'lucide-react';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import EventDetailsSheet from '../components/EventDetailsSheet';
+import NotesList from '../components/NotesList';
 import MenuCheckPanel from '../components/MenuCheckPanel';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
-import { groupDishesBySections, removeDishFromAllSections } from '../../core/events/sections';
-import type { ColorTag, Dish, KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
+import { groupDishesBySections, moveDishToSection, removeDishFromAllSections } from '../../core/events/sections';
+import type { ColorTag, Dish, EventSection, KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
+
+// Synthetic id for the Unassigned bucket — dnd needs a non-null string,
+// but `moveDishToSection` treats null as "clear section assignment".
+const UNASSIGNED_DROPPABLE = '__unassigned__';
 
 type LoadState =
   | { kind: 'loading' }
@@ -161,6 +175,52 @@ export default function EventView() {
     setState({ kind: 'ready', event: next });
   }
 
+  // Sections + DnD — mirrors EventEditor's pattern so chefs don't need to
+  // navigate to the editor to reorder dishes or organise sections. Every
+  // mutation persists the whole event via saveEvent.
+  async function setSections(nextSections: EventSection[]) {
+    const next: KitchenEvent = { ...e, sections: nextSections, updatedAt: Date.now() };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
+  }
+
+  function addSection() {
+    const current = e.sections ?? [];
+    const fresh: EventSection = {
+      id: `sec_${randomId()}`,
+      name: `Section ${current.length + 1}`,
+      dishIds: [],
+    };
+    void setSections([...current, fresh]);
+  }
+
+  function renameSection(sectionId: string, name: string) {
+    const current = e.sections ?? [];
+    void setSections(current.map((s) => (s.id === sectionId ? { ...s, name } : s)));
+  }
+
+  function removeSection(sectionId: string) {
+    const current = e.sections ?? [];
+    const target = current.find((s) => s.id === sectionId);
+    if (!target) return;
+    const label = target.name.trim() || 'this section';
+    const msg = target.dishIds.length
+      ? `Remove "${label}"? Its ${target.dishIds.length} dish${target.dishIds.length === 1 ? '' : 'es'} will return to Unassigned.`
+      : `Remove "${label}"?`;
+    if (!window.confirm(msg)) return;
+    void setSections(current.filter((s) => s.id !== sectionId));
+  }
+
+  function handleDragEnd(result: DropResult) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    const destSectionId =
+      destination.droppableId === UNASSIGNED_DROPPABLE ? null : destination.droppableId;
+    const next = moveDishToSection(e.sections, draggableId, destSectionId, destination.index);
+    void setSections(next);
+  }
+
   // Writes back to the LINKED RECIPE, not the dish — there's no dish-level
   // price field. Refreshes recipesById in place so the affected timeline row
   // re-renders without a round-trip through the recipe-loading useEffect.
@@ -256,10 +316,20 @@ export default function EventView() {
             )}
           </div>
         )}
+        {e.numberOfGuests !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            <span>
+              {e.numberOfGuests} guest{e.numberOfGuests === 1 ? '' : 's'}
+            </span>
+          </div>
+        )}
         {e.notes && (
           <div className="mt-3 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
-            <p className="whitespace-pre-wrap">{e.notes}</p>
+            <div className="min-w-0 flex-1">
+              <NotesList notes={e.notes} />
+            </div>
           </div>
         )}
       </div>
@@ -290,51 +360,110 @@ export default function EventView() {
         {dishGroups.length === 0 && !addDishUi.open ? (
           <p className="text-sm text-slate-500 italic">No dishes added.</p>
         ) : (
-          <div className="space-y-5">
-            {dishGroups.map((group) => (
-              <section key={group.sectionId ?? 'unassigned'}>
-                {group.sectionId !== undefined && (
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
-                    {group.label}
-                  </h3>
-                )}
-                <ol className="space-y-3">
-                  {group.dishes.map((d, i) => (
-                    <DishRow
-                      key={d.id}
-                      index={i}
-                      value={d}
-                      reorderMode={false}
-                      canMoveUp={false}
-                      canMoveDown={false}
-                      onEdit={() => navigate(`/events/${e.id}/edit`)}
-                      onRemove={() => void removeDishById(d.id)}
-                      onColorChange={(c) => void setDishColorById(d.id, c)}
-                      onTimeChange={(iso) => void setDishStartAtById(d.id, iso)}
-                      onNameChange={(next) => void setDishNameById(d.id, next)}
-                      onPortionsChange={(next) => void setDishPortionsById(d.id, next)}
-                      onNotesChange={(next) => void setDishNotesById(d.id, next)}
-                      pricePerPortion={
-                        d.recipeId
-                          ? recipesById.get(d.recipeId)?.pricePerPortion
-                          : undefined
-                      }
-                      onPricePerPortionChange={
-                        d.recipeId
-                          ? (next) => void setRecipePricePerPortion(d.recipeId!, next)
-                          : undefined
-                      }
-                      onMoveUp={() => undefined}
-                      onMoveDown={() => undefined}
-                    />
-                  ))}
-                </ol>
-              </section>
-            ))}
-          </div>
+          <DragDropContext onDragEnd={handleDragEnd}>
+            <div className="space-y-5">
+              {dishGroups.map((group) => {
+                const droppableId = group.sectionId ?? UNASSIGNED_DROPPABLE;
+                const sectionRecord = group.sectionId
+                  ? (e.sections ?? []).find((s) => s.id === group.sectionId)
+                  : undefined;
+                return (
+                  <section key={droppableId}>
+                    {sectionRecord ? (
+                      <div className="flex items-center gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={sectionRecord.name}
+                          onChange={(ev) => renameSection(sectionRecord.id, ev.target.value)}
+                          className="flex-1 bg-transparent text-xs font-semibold uppercase tracking-wide
+                                     text-slate-700 dark:text-slate-200 border-0 border-b border-transparent
+                                     hover:border-slate-300 focus:border-accent focus:outline-none
+                                     px-1 py-0.5"
+                          aria-label="Section name"
+                          placeholder="Section name"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeSection(sectionRecord.id)}
+                          aria-label={`Remove section "${sectionRecord.name}"`}
+                          className="touch-target text-slate-400 hover:text-red-600 px-2 rounded"
+                          title="Remove section"
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">
+                        {group.label}
+                      </h3>
+                    )}
+                    <Droppable droppableId={droppableId}>
+                      {(dropProvided: DroppableProvided) => (
+                        <ol
+                          ref={dropProvided.innerRef}
+                          {...dropProvided.droppableProps}
+                          className="space-y-3 min-h-[2.5rem]"
+                        >
+                          {group.dishes.map((d, i) => (
+                            <Draggable key={d.id} draggableId={d.id} index={i}>
+                              {(dragProvided: DraggableProvided) => (
+                                <div
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  className="flex items-start gap-2"
+                                >
+                                  <span
+                                    {...dragProvided.dragHandleProps}
+                                    className="touch-target text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 pt-3 cursor-grab"
+                                    aria-label={`Drag dish ${d.name || 'Untitled'}`}
+                                    title="Drag to reorder or move between sections"
+                                  >
+                                    <GripVertical className="h-4 w-4" aria-hidden="true" />
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <DishRow
+                                      index={i}
+                                      value={d}
+                                      reorderMode={false}
+                                      canMoveUp={false}
+                                      canMoveDown={false}
+                                      onEdit={() => navigate(`/events/${e.id}/edit`)}
+                                      onRemove={() => void removeDishById(d.id)}
+                                      onColorChange={(c) => void setDishColorById(d.id, c)}
+                                      onTimeChange={(iso) => void setDishStartAtById(d.id, iso)}
+                                      onNameChange={(next) => void setDishNameById(d.id, next)}
+                                      onPortionsChange={(next) => void setDishPortionsById(d.id, next)}
+                                      onNotesChange={(next) => void setDishNotesById(d.id, next)}
+                                      pricePerPortion={
+                                        d.recipeId
+                                          ? recipesById.get(d.recipeId)?.pricePerPortion
+                                          : undefined
+                                      }
+                                      onPricePerPortionChange={
+                                        d.recipeId
+                                          ? (next) => void setRecipePricePerPortion(d.recipeId!, next)
+                                          : undefined
+                                      }
+                                      onMoveUp={() => undefined}
+                                      onMoveDown={() => undefined}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {dropProvided.placeholder}
+                        </ol>
+                      )}
+                    </Droppable>
+                  </section>
+                );
+              })}
+            </div>
+          </DragDropContext>
         )}
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2 items-start">
           {addDishUi.open ? (
             <DishForm
               initial={addDishUi.draft}
@@ -343,14 +472,24 @@ export default function EventView() {
               onCancel={() => setAddDishUi({ open: false })}
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setAddDishUi({ open: true, draft: blankDish(e.serveAt) })}
-              className="btn-secondary text-sm inline-flex items-center gap-1"
-            >
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-              Add dish
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setAddDishUi({ open: true, draft: blankDish(e.serveAt) })}
+                className="btn-secondary text-sm inline-flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Add dish
+              </button>
+              <button
+                type="button"
+                onClick={addSection}
+                className="btn-secondary text-sm inline-flex items-center gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                Add section
+              </button>
+            </>
           )}
         </div>
       </div>
