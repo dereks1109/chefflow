@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users, Wallet } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Plus, StickyNote, Trash2, Users, Wallet } from 'lucide-react';
 import type { ColorTag, Dish, Recipe } from '../../core/types';
 import { formatTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
@@ -13,7 +13,13 @@ interface Props {
   reorderMode?: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
-  onEdit: () => void;
+  /**
+   * Opens the full edit modal (e.g. DishForm). Optional — when the row is
+   * mounted in a context that already exposes inline editors for every
+   * field (e.g. EventView's timeline), omit this prop and the Edit3 button
+   * is suppressed.
+   */
+  onEdit?: () => void;
   onRemove: () => void;
   onColorChange?: (color: ColorTag | undefined) => void;
   onMoveUp?: () => void;
@@ -78,6 +84,20 @@ interface Props {
    * recipe's title) so the row reflects the link immediately.
    */
   onLinkRecipe?: (recipe: Recipe) => void;
+  /**
+   * Called from the autocomplete dropdown when the chef typed a name with
+   * no library match and chose "Create new recipe". The caller should
+   * mint a stub Recipe (title = typed name), persist it, link the dish,
+   * and refresh the local recipes list. Receives the typed name (trimmed).
+   */
+  onCreateNewRecipe?: (name: string) => void;
+  /**
+   * Called from the autocomplete dropdown when the chef picks
+   * "Dish is ready to go" — the dish has no recipe but the chef will
+   * bring it themselves. Caller should set isPrepared=true and clear
+   * recipeId. Mirrors DishForm's `markPrepared`.
+   */
+  onMarkPrepared?: () => void;
 }
 
 export default function DishRow({
@@ -99,6 +119,8 @@ export default function DishRow({
   onPricePerPortionChange,
   recipes,
   onLinkRecipe,
+  onCreateNewRecipe,
+  onMarkPrepared,
 }: Props) {
   // Each inline-edit mode is independent so opening one doesn't disrupt the
   // others. They share the same stop-propagation guards to keep @hello-pangea/dnd
@@ -126,9 +148,34 @@ export default function DishRow({
     return recipes.filter((r) => r.title.toLowerCase().includes(q)).slice(0, 6);
   }, [recipes, editingName, nameQuery]);
 
+  // Mirror DishForm: when query is meaningful and there's no exact match,
+  // surface the "Create new" / "Ready to go" affordances alongside any
+  // partial matches. Threshold of 2 chars avoids noise on single keystrokes.
+  const trimmedQuery = nameQuery.trim();
+  const hasExactMatch = recipeMatches.some(
+    (r) => r.title.toLowerCase() === trimmedQuery.toLowerCase(),
+  );
+  const showNameActions =
+    editingName &&
+    trimmedQuery.length >= 2 &&
+    !hasExactMatch &&
+    (Boolean(onCreateNewRecipe) || Boolean(onMarkPrepared));
+
   function pickRecipe(r: Recipe) {
     if (!onLinkRecipe) return;
     onLinkRecipe(r);
+    setEditingName(false);
+  }
+
+  function pickCreateNew() {
+    if (!onCreateNewRecipe || trimmedQuery.length === 0) return;
+    onCreateNewRecipe(trimmedQuery);
+    setEditingName(false);
+  }
+
+  function pickMarkPrepared() {
+    if (!onMarkPrepared) return;
+    onMarkPrepared();
     setEditingName(false);
   }
 
@@ -355,34 +402,66 @@ export default function DishRow({
                   ready
                 </span>
               )}
-              {/* Recipe-name autocomplete — mirrors DishForm's behaviour
-                  so the inline editor matches the modal. Uses
-                  onMouseDown.preventDefault on each row so the input's
-                  blur doesn't fire before the click handler. */}
-              {editingName && onLinkRecipe && recipeMatches.length > 0 && (
-                <ul
-                  className="absolute top-full left-0 z-20 mt-1 w-72 max-w-[18rem] max-h-48 overflow-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink shadow-lg"
-                  role="listbox"
-                  aria-label={`Recipe suggestions for dish ${index + 1}`}
-                >
-                  {recipeMatches.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => pickRecipe(r)}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
-                      >
-                        <BookOpen className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-                        <span className="flex-1 truncate">{r.title}</span>
-                        <span className="text-xs text-slate-500 shrink-0">
-                          {r.originalYield} portion{r.originalYield === 1 ? '' : 's'}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {/* Recipe-name autocomplete — mirrors DishForm's full
+                  behaviour: matching library recipes appear as clickable
+                  rows; if the chef typed a name without an exact match,
+                  the "Create new recipe" + "Dish is ready to go"
+                  affordances appear below. Each row uses
+                  onMouseDown.preventDefault so the input's blur doesn't
+                  fire before the click registers. */}
+              {editingName &&
+                (recipeMatches.length > 0 || showNameActions) && (
+                  <ul
+                    className="absolute top-full left-0 z-20 mt-1 w-72 max-w-[18rem] max-h-64 overflow-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink shadow-lg"
+                    role="listbox"
+                    aria-label={`Recipe suggestions for dish ${index + 1}`}
+                  >
+                    {recipeMatches.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => pickRecipe(r)}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <BookOpen className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                          <span className="flex-1 truncate">{r.title}</span>
+                          <span className="text-xs text-slate-500 shrink-0">
+                            {r.originalYield} portion{r.originalYield === 1 ? '' : 's'}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                    {showNameActions && onCreateNewRecipe && (
+                      <li className={recipeMatches.length > 0 ? 'border-t border-slate-200 dark:border-slate-700' : ''}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={pickCreateNew}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <Plus className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                          <span className="flex-1 truncate">
+                            Create new recipe: <span className="font-medium text-slate-700 dark:text-slate-200">{trimmedQuery}</span>
+                          </span>
+                        </button>
+                      </li>
+                    )}
+                    {showNameActions && onMarkPrepared && (
+                      <li>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={pickMarkPrepared}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <Hand className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                          <span className="flex-1 truncate">The dish is ready to go</span>
+                        </button>
+                      </li>
+                    )}
+                  </ul>
+                )}
             </div>
 
             {/* Portions — click to edit. */}
@@ -495,9 +574,10 @@ export default function DishRow({
           </div>
           {/* Notes block:
               - editing → autosized textarea (Enter commits, Shift+Enter newline)
-              - notes present + onNotesChange → clickable paragraph
-              - notes present, no handler → plain paragraph (existing behavior)
-              - no notes → render nothing (brief: don't force a "+ Add note") */}
+              - notes present + onNotesChange → clickable region wrapping NotesList
+              - notes present, no handler → plain NotesList (existing behavior)
+              - notes absent + onNotesChange → "+ Add note" affordance
+              - notes absent, no handler → render nothing */}
           {editingNotes && onNotesChange ? (
             <textarea
               ref={notesTextareaRef}
@@ -547,6 +627,17 @@ export default function DishRow({
               notes={value.notes}
               className="mt-2 text-sm text-slate-600 dark:text-slate-400"
             />
+          ) : onNotesChange ? (
+            <button
+              type="button"
+              onClick={() => setEditingNotes(true)}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-slate-500 hover:text-accent focus:outline-none focus:text-accent"
+              aria-label={`Add notes for dish ${index + 1}`}
+              title="Add a note for this dish"
+            >
+              <StickyNote className="h-3 w-3" aria-hidden="true" />
+              + Add note
+            </button>
           ) : null}
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -580,15 +671,17 @@ export default function DishRow({
                   label={`Color tag for dish ${index + 1}`}
                 />
               )}
-              <button
-                type="button"
-                onClick={onEdit}
-                className="touch-target px-2 rounded-md text-slate-500 hover:text-accent"
-                aria-label={`Edit dish ${index + 1}`}
-                data-testid="dish-row-edit"
-              >
-                <Edit3 className="h-4 w-4" aria-hidden="true" />
-              </button>
+              {onEdit && (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="touch-target px-2 rounded-md text-slate-500 hover:text-accent"
+                  aria-label={`Edit dish ${index + 1}`}
+                  data-testid="dish-row-edit"
+                >
+                  <Edit3 className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onRemove}
