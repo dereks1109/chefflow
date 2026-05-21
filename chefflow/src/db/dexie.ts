@@ -44,6 +44,20 @@ class ChefFlowDB extends Dexie {
       events: 'id, updatedAt, title, serveAt',
       menus: 'id, updatedAt, title',
     });
+    // v5: shape change to recipes — Ingredient gained an optional
+    // `componentRecipeId` field for the `#` sub-recipe reference feature
+    // (see chefflow/src/core/recipes/flattenSubRecipes.ts). Field is
+    // optional + nested, so this is a no-op upgrader documenting the
+    // boundary. No new index added — the only cross-reference query
+    // (RecipesLibrary's "used in N" badge) is fast enough as an in-memory
+    // O(R×I) scan at current scale (<1k recipes × <20 ingredients each).
+    // If recipe lists grow past ~5k, add a multi-entry index here:
+    //   recipes: 'id, updatedAt, title, *ingredients.componentRecipeId'
+    this.version(5).stores({
+      recipes: 'id, updatedAt, title',
+      events: 'id, updatedAt, title, serveAt',
+      menus: 'id, updatedAt, title',
+    });
   }
 }
 

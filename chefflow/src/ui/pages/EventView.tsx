@@ -9,7 +9,8 @@ import {
   type DraggableProvided,
 } from '@hello-pangea/dnd';
 import { randomId } from '../../core/util/id';
-import { ArrowLeft, Calendar, Edit3, ExternalLink, GripVertical, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, Trash2, User, Users, Wallet } from 'lucide-react';
+import { ArrowLeft, Calendar, Edit3, ExternalLink, GripVertical, Layers, MapPin, Plus, Sparkles, StickyNote, Trash2, Users, Wallet } from 'lucide-react';
+import EventContactRow from '../components/EventContactRow';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
@@ -313,34 +314,7 @@ export default function EventView() {
             </a>
           </div>
         )}
-        {(e.contactName || e.contactEmail || e.contactPhone) && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600 dark:text-slate-400">
-            {e.contactName && (
-              <span className="inline-flex items-center gap-2">
-                <User className="h-4 w-4" aria-hidden="true" />
-                {e.contactName}
-              </span>
-            )}
-            {e.contactEmail && (
-              <a
-                href={`mailto:${e.contactEmail}`}
-                className="inline-flex items-center gap-2 hover:text-accent hover:underline"
-              >
-                <Mail className="h-4 w-4" aria-hidden="true" />
-                {e.contactEmail}
-              </a>
-            )}
-            {e.contactPhone && (
-              <a
-                href={`tel:${e.contactPhone.replace(/[^+\d]/g, '')}`}
-                className="inline-flex items-center gap-2 hover:text-accent hover:underline"
-              >
-                <Phone className="h-4 w-4" aria-hidden="true" />
-                {e.contactPhone}
-              </a>
-            )}
-          </div>
-        )}
+        <EventContactRow name={e.contactName} email={e.contactEmail} phone={e.contactPhone} />
         {e.numberOfGuests !== undefined && (
           <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
             <Users className="h-4 w-4" aria-hidden="true" />
