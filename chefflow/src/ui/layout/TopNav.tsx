@@ -1,20 +1,18 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, ListChecks, Command } from 'lucide-react';
-import ThemeToggle from '../components/ThemeToggle';
+import { BookOpen, CalendarDays, ListChecks, Info, Settings, Tag } from 'lucide-react';
 import Logo from '../components/Logo';
+import UsageMeter from '../components/UsageMeter';
+import UpgradeButton from '../components/UpgradeButton';
 
 const navItems = [
+  { to: '/about', label: 'About', icon: Info },
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
 ];
 
-interface TopNavProps {
-  onOpenPalette: () => void;
-}
-
-export default function TopNav({ onOpenPalette }: TopNavProps) {
+export default function TopNav() {
   return (
     <header
       className={[
@@ -22,15 +20,12 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
         'sticky top-0 z-30',
         'h-14 w-full',
         'items-center gap-4 px-6',
-        // Glass morphism over True Black
         'bg-surface-0/80 backdrop-blur-md',
         'border-b border-[rgba(255,255,255,0.06)]',
         'dark:bg-surface-0/80',
-        // Light mode fallback
         'light:bg-white/90 light:border-slate-200',
       ].join(' ')}
     >
-      {/* Logo */}
       <NavLink
         to="/recipes"
         className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
@@ -38,7 +33,6 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
         <Logo variant="wordmark" className="h-7 text-slate-100 dark:text-slate-100" />
       </NavLink>
 
-      {/* Primary nav links */}
       <nav aria-label="Primary" className="flex items-center gap-1 ml-2">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
@@ -61,48 +55,38 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
         ))}
       </nav>
 
-      {/* Right side actions */}
       <div className="ml-auto flex items-center gap-2">
-        {/* Cmd-K hint button */}
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          aria-label="Open command palette"
-          className={[
-            'hidden xl:flex items-center gap-2 px-3 h-9 rounded-md',
-            'text-sm text-slate-500 hover:text-slate-300',
-            'border border-[rgba(255,255,255,0.08)] hover:border-[rgba(255,255,255,0.14)]',
-            'bg-surface-2 hover:bg-surface-3',
-            'transition-colors duration-150',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-          ].join(' ')}
+        <NavLink
+          to="/about#pricing"
+          data-testid="nav-plans-cta"
+          className="btn-primary inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-semibold"
         >
-          <Command size={14} aria-hidden="true" />
-          <span>Search</span>
-          <kbd className="ml-1 rounded bg-surface-3 px-1.5 py-0.5 text-xs font-mono text-slate-500">
-            ⌘K
-          </kbd>
-        </button>
+          <Tag size={14} aria-hidden="true" />
+          Plans
+        </NavLink>
 
-        {/* Icon-only Cmd-K for xl- screens */}
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          aria-label="Open command palette"
-          className={[
-            'xl:hidden flex items-center justify-center',
-            'min-h-touch min-w-touch rounded-lg',
-            'text-slate-400 hover:text-slate-100 hover:bg-surface-3',
-            'transition-colors duration-150',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-          ].join(' ')}
+        <UpgradeButton />
+
+        <NavLink
+          to="/settings"
+          aria-label="Settings"
+          className={({ isActive }) =>
+            [
+              'flex items-center justify-center',
+              'min-h-touch min-w-touch rounded-lg',
+              'transition-colors duration-150',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              isActive
+                ? 'text-accent bg-accent/10'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-surface-3',
+            ].join(' ')
+          }
         >
-          <Command size={20} aria-hidden="true" />
-        </button>
+          <Settings size={20} aria-hidden="true" />
+        </NavLink>
 
-        <ThemeToggle />
+        <UsageMeter />
 
-        {/* UserButton requires ClerkProvider — omit in E2E mode where Clerk is bypassed */}
         {(import.meta.env.VITE_E2E_MODE as string | undefined) !== 'true' && (
           <div className="flex items-center justify-center min-h-touch min-w-touch">
             <UserButton afterSignOutUrl="/" />

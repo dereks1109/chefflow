@@ -17,6 +17,7 @@
     "wrangler": "^4.92.0"
   },
   "dependencies": {
-    "@clerk/backend": "^1.20.0"
+    "@clerk/backend": "^1.20.0",
+    "stripe": "^22.1.1"
   }
 }

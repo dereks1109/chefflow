@@ -7,12 +7,20 @@ import {
   generateRecipeFromPhoto,
 } from '../../core/recipes/llm/recipeGen';
 import { randomId } from '../../core/util/id';
+import { downscaleToDataUrl } from '../../core/util/image';
 import type { Recipe } from '../../core/types';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   onCreated: (recipe: Recipe) => void;
+  /**
+   * Pre-fills the title of a newly-created blank recipe (manual tab). Used
+   * when the chef typed a dish name in the event timeline and clicked
+   * "Create new recipe: <name>" — that name is carried over here instead
+   * of defaulting to "Untitled recipe".
+   */
+  initialTitle?: string;
 }
 
 type Tab = 'manual' | 'describe' | 'photo';
@@ -24,7 +32,7 @@ type Status =
 
 const MAX_IMAGE_EDGE = 1600;
 
-export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props) {
+export default function GenerateRecipeSheet({ open, onClose, onCreated, initialTitle }: Props) {
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
   // See Workflow.tsx comment — proxy mode skips the Groq-key gate.
@@ -100,7 +108,7 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated }: Props)
   async function handleSubmit() {
     // Manual mode never calls the LLM — just emits a blank Recipe.
     if (tab === 'manual') {
-      onCreated(buildBlankRecipe(parsedPortions() ?? 1));
+      onCreated(buildBlankRecipe(parsedPortions() ?? 1, initialTitle?.trim() || undefined));
       return;
     }
     if (!hasKey) {
@@ -354,43 +362,11 @@ function friendlyError(err: unknown): string {
   return String(err);
 }
 
-// ---------------------------------------------------------------------------
-// Downscale a picked image to <=maxEdge px on its longest side, encoded as a
-// base64 data URL. Keeps the request body inside Groq's token budget for
-// phone photos that can be 3–6 MB on disk.
-// ---------------------------------------------------------------------------
-async function downscaleToDataUrl(file: File, maxEdge: number): Promise<string> {
-  const objectUrl = URL.createObjectURL(file);
-  try {
-    const img = await loadImage(objectUrl);
-    const { width, height } = scaleTo(img.naturalWidth, img.naturalHeight, maxEdge);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('No 2D canvas context');
-    ctx.drawImage(img, 0, 0, width, height);
-    // JPEG keeps the payload small; quality 0.85 is plenty for OCR.
-    return canvas.toDataURL('image/jpeg', 0.85);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = src;
-  });
-}
-
-function buildBlankRecipe(yieldCount: number): Recipe {
+function buildBlankRecipe(yieldCount: number, title?: string): Recipe {
   const now = Date.now();
   return {
     id: randomId(),
-    title: 'Untitled recipe',
+    title: title && title.length > 0 ? title : 'Untitled recipe',
     originalYield: Math.max(1, yieldCount),
     ingredients: [],
     steps: [],
@@ -399,10 +375,3 @@ function buildBlankRecipe(yieldCount: number): Recipe {
   };
 }
 
-function scaleTo(w: number, h: number, maxEdge: number): { width: number; height: number } {
-  if (w <= maxEdge && h <= maxEdge) return { width: w, height: h };
-  if (w >= h) {
-    return { width: maxEdge, height: Math.round((h * maxEdge) / w) };
-  }
-  return { width: Math.round((w * maxEdge) / h), height: maxEdge };
-}

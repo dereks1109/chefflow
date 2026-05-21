@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarPlus, Sparkles } from 'lucide-react';
+import { CalendarPlus, Plus, Sparkles } from 'lucide-react';
 import EventCard from '../components/EventCard';
 import GenerateEventSheet, { type ResumeReview } from '../components/GenerateEventSheet';
 import { listEvents, saveEvent, deleteEvent } from '../../db/eventsRepo';
 import { listRecipes } from '../../db/recipesRepo';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
+import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import type { KitchenEvent } from '../../core/types';
 
 export default function EventsLibrary() {
@@ -40,6 +42,15 @@ export default function EventsLibrary() {
   }
 
   async function handleCreated(fresh: KitchenEvent) {
+    try {
+      await consumeDailyQuota({ kind: 'event' });
+    } catch (err) {
+      if (err instanceof QuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('event');
+        return;
+      }
+      throw err;
+    }
     await saveEvent(fresh);
     setSheetOpen(false);
     setResumeReview(undefined);
@@ -94,13 +105,13 @@ export default function EventsLibrary() {
           onClick={() => setSheetOpen(true)}
           className="btn-primary inline-flex items-center gap-2"
         >
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           New event
         </button>
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {events.map((e) => (
-          <li key={e.id}>
+          <li key={e.id} className="h-full">
             <EventCard event={e} onDelete={handleDelete} />
           </li>
         ))}

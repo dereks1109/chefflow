@@ -7,6 +7,9 @@ import AnalysisSection from '../components/AnalysisSection';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import { findAllergensInIngredient } from '../../core/recipes/llm/allergens';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
+import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
+import { usePublishedSet } from '../../state/usePublishedSet';
+import { useProfileStore } from '../../state/useProfileStore';
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
@@ -19,6 +22,12 @@ export default function RecipeEditor() {
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [dirty, setDirty] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const displayName = useProfileStore((s) => s.displayName);
+  const communityId = usePublishedSet((s) => s.map[id]);
+  const linkPublished = usePublishedSet((s) => s.link);
+  const unlinkPublished = usePublishedSet((s) => s.unlink);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,11 +116,68 @@ export default function RecipeEditor() {
     navigate(returnRoute());
   }
 
+  async function handlePublish() {
+    setShareError(null);
+    setShareBusy(true);
+    try {
+      const { id: newCommunityId } = await publishRecipe(r, displayName);
+      linkPublished(r.id, newCommunityId);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Failed to publish');
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function handleUnpublish() {
+    if (!communityId) return;
+    if (!window.confirm('Unpublish this recipe from the community?')) return;
+    setShareError(null);
+    setShareBusy(true);
+    try {
+      await unpublishRecipe(communityId);
+      unlinkPublished(r.id);
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Failed to unpublish');
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   return (
     <section className="p-4 md:p-6">
       <header className="flex items-center justify-between mb-4 gap-2">
         <h1 className="text-2xl font-bold">Edit recipe</h1>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {communityId ? (
+            <>
+              <span
+                className="text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                data-testid="recipe-editor-published-badge"
+              >
+                Published
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleUnpublish()}
+                disabled={shareBusy}
+                className="btn-secondary disabled:opacity-60"
+                data-testid="recipe-editor-unpublish-btn"
+              >
+                Unpublish
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handlePublish()}
+              disabled={shareBusy}
+              className="btn-secondary disabled:opacity-60"
+              data-testid="recipe-editor-publish-btn"
+            >
+              {shareBusy ? 'Publishing…' : 'Share publicly'}
+            </button>
+          )}
           <button type="button" onClick={handleCancel} className="btn-secondary">
             Cancel
           </button>
@@ -120,6 +186,11 @@ export default function RecipeEditor() {
           </button>
         </div>
       </header>
+      {shareError && (
+        <p className="mb-3 text-sm text-rose-600 dark:text-rose-400" role="alert">
+          {shareError}
+        </p>
+      )}
 
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <AnalysisSection recipe={r} onChange={updateAnalysis} />

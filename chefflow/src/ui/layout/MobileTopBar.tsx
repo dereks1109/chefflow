@@ -1,14 +1,11 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { Command } from 'lucide-react';
-import ThemeToggle from '../components/ThemeToggle';
+import { Settings, Tag } from 'lucide-react';
 import Logo from '../components/Logo';
+import UsageMeter from '../components/UsageMeter';
+import UpgradeButton from '../components/UpgradeButton';
 
-interface MobileTopBarProps {
-  onOpenPalette: () => void;
-}
-
-export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
+export default function MobileTopBar() {
   return (
     <header
       className={[
@@ -29,26 +26,53 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
       </NavLink>
 
       <div className="ml-auto flex items-center gap-1">
-        <button
-          type="button"
-          onClick={onOpenPalette}
-          aria-label="Open command palette"
-          className={[
-            'flex items-center justify-center',
-            'min-h-touch min-w-touch rounded-lg',
-            'text-slate-500 hover:text-slate-900',
-            'dark:text-slate-400 dark:hover:text-slate-100',
-            'hover:bg-slate-100 dark:hover:bg-surface-3',
-            'transition-colors duration-150',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-          ].join(' ')}
+        <NavLink
+          to="/about#pricing"
+          data-testid="nav-plans-cta"
+          className="btn-primary inline-flex items-center gap-1 px-2.5 h-8 rounded-md text-xs font-semibold"
         >
-          <Command size={20} aria-hidden="true" />
-        </button>
+          <Tag size={12} aria-hidden="true" />
+          Plans
+        </NavLink>
 
-        <ThemeToggle />
+        <UpgradeButton />
 
-        {/* UserButton requires ClerkProvider — omit in E2E mode where Clerk is bypassed */}
+        <NavLink
+          to="/about"
+          className={({ isActive }) =>
+            [
+              'flex items-center px-2 h-9 rounded-md text-sm font-medium',
+              'transition-colors duration-150',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              isActive
+                ? 'text-accent'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+            ].join(' ')
+          }
+        >
+          About
+        </NavLink>
+
+        <NavLink
+          to="/settings"
+          aria-label="Settings"
+          className={({ isActive }) =>
+            [
+              'flex items-center justify-center',
+              'min-h-touch min-w-touch rounded-lg',
+              'transition-colors duration-150',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              isActive
+                ? 'text-accent bg-accent/10 dark:bg-accent/10'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-surface-3',
+            ].join(' ')
+          }
+        >
+          <Settings size={20} aria-hidden="true" />
+        </NavLink>
+
+        <UsageMeter />
+
         {(import.meta.env.VITE_E2E_MODE as string | undefined) !== 'true' && (
           <div className="flex items-center justify-center min-h-touch min-w-touch">
             <UserButton afterSignOutUrl="/" />

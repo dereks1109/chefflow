@@ -87,6 +87,21 @@ All `data-testid` attributes live in the component files under `chefflow/src/` �
 
 ---
 
+## `profile-settings.spec.ts` — SettingsPage: Profile section
+
+**User story**: As a chef, I can navigate to Settings via the gear icon, set a display name and profile photo, and both values survive a page reload because they are persisted to localStorage via Zustand.
+
+| Test name | Intent |
+|---|---|
+| gear icon in TopNav navigates to /settings | Navigation: desktop TopNav Settings link routes correctly to /settings |
+| display name: type + blur → persists in localStorage and survives reload | Persistence: onBlur writes to Zustand store → localStorage; reload rehydrates |
+| avatar: pick a photo → avatar img appears; clear → placeholder restored | Upload: setInputFiles delivers PNG to hidden input; downscaleToDataUrl produces JPEG data URL; Remove clears img |
+| avatar persists in localStorage and survives reload | Persistence: avatar data URL written to chefflow:profile:v1 and rehydrated on reload |
+
+**Mocks / fixtures**: No LLM mock needed. Inline 1×1 PNG buffer (69 bytes, valid PNG, synthesised in-spec) delivered via `setInputFiles`. Profile store state cleared via `localStorage.removeItem('chefflow:profile:v1')` in `resetAppState`.
+
+---
+
 ## Open coverage gaps
 
 The following paths are NOT covered by the current E2E suite:
@@ -99,3 +114,5 @@ The following paths are NOT covered by the current E2E suite:
 6. **Menu suitability analysis** (MenuCheckPanel): the LLM-powered analysis button and verdict display.
 7. **Recipe analysis** (RecipeEditor → "Analyse with AI"): the analysis LLM call and allergen/calorie display.
 8. **Firebase / offline sync** (if ever added): no coverage of network-split or conflict-resolution scenarios.
+9. **Recipe cover photo E2E**: RecipeEditor cover-photo pick → save → RecipeCard banner display. The unit tests cover the component in isolation; an E2E test would require creating a recipe, opening the editor, uploading via setInputFiles, saving, and asserting the card banner — not yet added.
+10. **AboutPage routing from nav**: clicking the About link in TopNav/MobileTopBar and verifying the page renders end-to-end — covered at unit level (TopNav/MobileTopBar tests assert hrefs); not yet a Playwright spec.

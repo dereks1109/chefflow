@@ -1,9 +1,10 @@
 import Dexie, { type Table } from 'dexie';
-import type { Recipe, KitchenEvent } from '../core/types';
+import type { Recipe, KitchenEvent, Menu } from '../core/types';
 
 class ChefFlowDB extends Dexie {
   recipes!: Table<Recipe, string>;
   events!: Table<KitchenEvent, string>;
+  menus!: Table<Menu, string>;
 
   constructor() {
     super('chefflow');
@@ -36,6 +37,13 @@ class ChefFlowDB extends Dexie {
         delete event.sessions;
       })
     );
+    // v4: menus table — named collections of recipeIds. Standalone from
+    // events; no migration needed since this is a brand-new store.
+    this.version(4).stores({
+      recipes: 'id, updatedAt, title',
+      events: 'id, updatedAt, title, serveAt',
+      menus: 'id, updatedAt, title',
+    });
   }
 }
 

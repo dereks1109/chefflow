@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   DragDropContext,
   Droppable,
@@ -35,6 +35,7 @@ type AddDishUi = { open: false } | { open: true; draft: Dish };
 
 export default function EventView() {
   const { id = '' } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   // Full recipe library — loaded once per mount. Used three ways:
   //   1) `recipesById` (derived Map) prices dishes for the per-dish line +
@@ -242,37 +243,6 @@ export default function EventView() {
     };
     await saveEvent(next);
     setState({ kind: 'ready', event: next });
-  }
-
-  // "Create new recipe" branch of the autocomplete dropdown. Mints a stub
-  // recipe with the typed name (mirrors DishForm.createRecipeStub), links
-  // the dish, and adds the stub to allRecipes so the autocomplete sees it
-  // immediately + the recipe chip on the row resolves.
-  async function createStubRecipeForDish(dishId: string, recipeName: string) {
-    const newId = randomId();
-    const now = Date.now();
-    const stub: Recipe = {
-      id: newId,
-      title: recipeName,
-      originalYield: 1,
-      ingredients: [],
-      steps: [],
-      createdAt: now,
-      updatedAt: now,
-    };
-    await saveRecipe(stub);
-    const nextEvent: KitchenEvent = {
-      ...e,
-      dishes: e.dishes.map((d) =>
-        d.id === dishId
-          ? { ...d, recipeId: newId, name: recipeName, isPrepared: false }
-          : d,
-      ),
-      updatedAt: Date.now(),
-    };
-    await saveEvent(nextEvent);
-    setAllRecipes((prev) => [stub, ...prev]);
-    setState({ kind: 'ready', event: nextEvent });
   }
 
   // "Dish is ready to go" branch — chef will bring the dish themselves, no
@@ -503,7 +473,9 @@ export default function EventView() {
                                         void linkRecipeToDish(d.id, recipe)
                                       }
                                       onCreateNewRecipe={(name) =>
-                                        void createStubRecipeForDish(d.id, name)
+                                        navigate('/recipes', {
+                                          state: { openNewRecipe: true, prefillTitle: name },
+                                        })
                                       }
                                       onMarkPrepared={() => void markDishPrepared(d.id)}
                                       onMoveUp={() => undefined}

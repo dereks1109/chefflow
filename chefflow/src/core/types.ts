@@ -77,6 +77,8 @@ export interface Recipe {
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().
   pricePerPortion?: number;
+  /** Base64 JPEG data URL, downscaled to <=1600px. Stored in Dexie. */
+  coverPhoto?: string;
 }
 
 export interface Dish {
@@ -146,6 +148,15 @@ export type MenuIssueSeverity = 'warning' | 'blocker';
 export interface MenuIssue {
   severity: MenuIssueSeverity;
   message: string;
+}
+
+export interface Menu {
+  id: string;
+  title: string;
+  description?: string;
+  recipeIds: string[];
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface MenuAnalysis {

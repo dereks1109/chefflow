@@ -1,10 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { BookOpen, CalendarDays, ListChecks } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks } from 'lucide-react';
 
 const tabs = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
+  { to: '/community', label: 'Community', icon: Globe2 },
 ];
 
 export default function BottomNav() {
@@ -14,17 +15,15 @@ export default function BottomNav() {
     <nav
       aria-label="Primary"
       className={[
-        'lg:hidden',
         'fixed bottom-0 inset-x-0 z-30',
         'border-t border-[rgba(255,255,255,0.06)]',
         'bg-surface-0/90 backdrop-blur-md',
-        // Light mode fallback
         'dark:bg-surface-0/90',
-        'safe-area-pb', // handled via padding below on the list
+        'safe-area-pb',
       ].join(' ')}
     >
       <ul
-        className="flex items-stretch"
+        className="flex items-stretch max-w-screen-2xl mx-auto"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {tabs.map(({ to, label, icon: Icon }) => {

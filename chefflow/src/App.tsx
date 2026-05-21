@@ -11,6 +11,10 @@ import EventEditor from './ui/pages/EventEditor';
 import NestedDndDemo from './ui/pages/NestedDndDemo';
 import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
+import SettingsPage from './ui/pages/SettingsPage';
+import AboutPage from './ui/pages/AboutPage';
+import CommunityLibrary from './ui/pages/CommunityLibrary';
+import CommunityRecipeView from './ui/pages/CommunityRecipeView';
 import SignInScreen from './ui/components/SignInScreen';
 import ConsentBanner from './ui/components/ConsentBanner';
 import TierSync from './ui/components/TierSync';
@@ -44,7 +48,11 @@ function GatedApp() {
             <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
             <Route path="/workflows" element={<WorkflowsLibrary />} />
             <Route path="/workflows/:eventId" element={<Workflow />} />
+            <Route path="/community" element={<CommunityLibrary />} />
+            <Route path="/community/:id" element={<CommunityRecipeView />} />
             <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
             <Route path="*" element={<div className="p-6">Not found.</div>} />
           </Route>
         </Routes>
@@ -73,7 +81,11 @@ function UngatedApp() {
         <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
         <Route path="/workflows" element={<WorkflowsLibrary />} />
         <Route path="/workflows/:eventId" element={<Workflow />} />
+        <Route path="/community" element={<CommunityLibrary />} />
+        <Route path="/community/:id" element={<CommunityRecipeView />} />
         <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="*" element={<div className="p-6">Not found.</div>} />
       </Route>
     </Routes>

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Plus, StickyNote, Trash2, Users, Wallet } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Plus, StickyNote, Trash2, Users, Wallet } from 'lucide-react';
 import type { ColorTag, Dish, Recipe } from '../../core/types';
 import { formatTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
@@ -387,19 +386,19 @@ export default function DishRow({
                   {value.name || 'Untitled dish'}
                 </h3>
               )}
-              {value.recipeId && (
-                <Link
-                  to={`/recipes/${value.recipeId}/edit`}
-                  className="inline-flex items-center gap-1 text-xs text-accent hover:underline shrink-0"
-                >
-                  <BookOpen className="h-3 w-3" aria-hidden="true" />
-                  recipe
-                </Link>
-              )}
               {value.isPrepared && (
                 <span className="inline-flex items-center gap-1 text-xs text-slate-500 shrink-0">
                   <Hand className="h-3 w-3" aria-hidden="true" />
                   ready
+                </span>
+              )}
+              {!value.recipeId && !value.isPrepared && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 shrink-0"
+                  title="Link a recipe or mark the dish as ready to go"
+                >
+                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                  needs recipe
                 </span>
               )}
               {/* Recipe-name autocomplete — mirrors DishForm's full

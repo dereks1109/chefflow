@@ -23,48 +23,47 @@ describe('tier limits', () => {
     expect(TIER_PRICE_GBP.business.annual).toBe(390);
   });
 
-  it('free tier caps recipes at 5 and events at 1', () => {
-    expect(TIER_LIMITS.free.maxRecipes).toBe(5);
-    expect(TIER_LIMITS.free.maxActiveEvents).toBe(1);
-    expect(TIER_LIMITS.free.maxLlmCallsPerMonth).toBe(10);
+  it('free tier rate-limits recipes to 5/day and events to 1/day', () => {
+    expect(TIER_LIMITS.free.maxRecipesPerDay).toBe(5);
+    expect(TIER_LIMITS.free.maxEventsPerDay).toBe(1);
+    expect(TIER_LIMITS.free.maxLlmCallsPerDay).toBe(10);
   });
 
-  it('pro tier unlocks unlimited recipes and events', () => {
-    expect(TIER_LIMITS.pro.maxRecipes).toBe(UNLIMITED);
-    expect(TIER_LIMITS.pro.maxActiveEvents).toBe(UNLIMITED);
+  it('pro tier unlocks unlimited recipe + event creation per day', () => {
+    expect(TIER_LIMITS.pro.maxRecipesPerDay).toBe(UNLIMITED);
+    expect(TIER_LIMITS.pro.maxEventsPerDay).toBe(UNLIMITED);
+    expect(TIER_LIMITS.pro.maxLlmCallsPerDay).toBe(50);
   });
 
-  it('business tier unlocks 5 seats', () => {
+  it('business tier unlocks unlimited LLM calls + 5 seats', () => {
+    expect(TIER_LIMITS.business.maxLlmCallsPerDay).toBe(UNLIMITED);
     expect(TIER_LIMITS.business.maxSeats).toBe(5);
   });
 });
 
 describe('isUnderLimit', () => {
   it('returns true when usage is below the cap', () => {
-    expect(isUnderLimit('free', 'maxRecipes', 3)).toBe(true);
+    expect(isUnderLimit('free', 'maxRecipesPerDay', 3)).toBe(true);
   });
 
   it('returns false when usage equals the cap (next add would exceed it)', () => {
-    expect(isUnderLimit('free', 'maxRecipes', 5)).toBe(false);
+    expect(isUnderLimit('free', 'maxRecipesPerDay', 5)).toBe(false);
   });
 
   it('always returns true for unlimited caps', () => {
-    expect(isUnderLimit('pro', 'maxRecipes', 9999)).toBe(true);
-    expect(isUnderLimit('business', 'maxActiveEvents', 1000)).toBe(true);
+    expect(isUnderLimit('pro', 'maxRecipesPerDay', 9999)).toBe(true);
+    expect(isUnderLimit('business', 'maxEventsPerDay', 1000)).toBe(true);
   });
 });
 
 describe('hasFeature', () => {
-  it('free lacks places autocomplete + workflow scheduler', () => {
-    expect(hasFeature('free', 'hasPlacesAutocomplete')).toBe(false);
-    expect(hasFeature('free', 'hasWorkflowScheduler')).toBe(false);
-  });
-
-  it('pro and business unlock both', () => {
-    expect(hasFeature('pro', 'hasPlacesAutocomplete')).toBe(true);
-    expect(hasFeature('pro', 'hasWorkflowScheduler')).toBe(true);
-    expect(hasFeature('business', 'hasPlacesAutocomplete')).toBe(true);
-    expect(hasFeature('business', 'hasWorkflowScheduler')).toBe(true);
+  // V1 leaves Places + Workflow ungated — flags stay in the schema for
+  // future tiers to flip. This test pins the V1 commitment.
+  it('every tier has Places autocomplete + Workflow scheduler in V1', () => {
+    for (const tier of ['free', 'pro', 'business'] as const) {
+      expect(hasFeature(tier, 'hasPlacesAutocomplete')).toBe(true);
+      expect(hasFeature(tier, 'hasWorkflowScheduler')).toBe(true);
+    }
   });
 });
 

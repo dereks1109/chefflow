@@ -24,10 +24,14 @@ const TIER_RANK: Record<Tier, number> = {
 };
 
 export interface TierLimits {
-  /** -1 means unlimited; non-negative ints are hard caps. */
-  maxRecipes: number;
-  maxActiveEvents: number;
-  maxLlmCallsPerMonth: number;
+  /**
+   * Per-UTC-day creation rate limit. -1 means unlimited. Existing data
+   * never counts against this cap — it's a rate on NEW creates today,
+   * not a total. Resets at UTC midnight via the chefflow-worker KV counter.
+   */
+  maxRecipesPerDay: number;
+  maxEventsPerDay: number;
+  maxLlmCallsPerDay: number;
   /** -1 means unlimited; otherwise a chef-seat count. */
   maxSeats: number;
   hasPlacesAutocomplete: boolean;
@@ -38,25 +42,25 @@ export const UNLIMITED = -1 as const;
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
   free: {
-    maxRecipes: 5,
-    maxActiveEvents: 1,
-    maxLlmCallsPerMonth: 10,
+    maxRecipesPerDay: 5,
+    maxEventsPerDay: 1,
+    maxLlmCallsPerDay: 10,
     maxSeats: 1,
-    hasPlacesAutocomplete: false,
-    hasWorkflowScheduler: false,
+    hasPlacesAutocomplete: true,
+    hasWorkflowScheduler: true,
   },
   pro: {
-    maxRecipes: UNLIMITED,
-    maxActiveEvents: UNLIMITED,
-    maxLlmCallsPerMonth: 100,
+    maxRecipesPerDay: UNLIMITED,
+    maxEventsPerDay: UNLIMITED,
+    maxLlmCallsPerDay: 50,
     maxSeats: 1,
     hasPlacesAutocomplete: true,
     hasWorkflowScheduler: true,
   },
   business: {
-    maxRecipes: UNLIMITED,
-    maxActiveEvents: UNLIMITED,
-    maxLlmCallsPerMonth: 500,
+    maxRecipesPerDay: UNLIMITED,
+    maxEventsPerDay: UNLIMITED,
+    maxLlmCallsPerDay: UNLIMITED,
     maxSeats: 5,
     hasPlacesAutocomplete: true,
     hasWorkflowScheduler: true,
@@ -79,7 +83,7 @@ export const TIER_PRICE_GBP: Record<Tier, { monthly: number; annual: number }> =
 /** True when `current < TIER_LIMITS[tier][key]` or the limit is UNLIMITED. */
 export function isUnderLimit(
   tier: Tier,
-  key: 'maxRecipes' | 'maxActiveEvents' | 'maxLlmCallsPerMonth' | 'maxSeats',
+  key: 'maxRecipesPerDay' | 'maxEventsPerDay' | 'maxLlmCallsPerDay' | 'maxSeats',
   current: number,
 ): boolean {
   const max = TIER_LIMITS[tier][key];
