@@ -147,6 +147,25 @@ export default function RecipesLibrary() {
     return filterRecipes(byMenu, debouncedQuery);
   }, [recipes, activeMenu, debouncedQuery]);
 
+  // Map of recipeId → number of OTHER recipes that reference it via an
+  // ingredient's componentRecipeId. Lets RecipeCard render a "used in N"
+  // badge so chefs see which recipes are sub-components before they delete
+  // one and silently orphan another's #-reference.
+  const usedByCount = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!recipes) return counts;
+    for (const parent of recipes) {
+      const seenInThisParent = new Set<string>();
+      for (const ing of parent.ingredients) {
+        if (!ing.componentRecipeId) continue;
+        if (seenInThisParent.has(ing.componentRecipeId)) continue;
+        seenInThisParent.add(ing.componentRecipeId);
+        counts.set(ing.componentRecipeId, (counts.get(ing.componentRecipeId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [recipes]);
+
   const selectedRecipes = useMemo(
     () => (recipes ?? []).filter((r) => selectedIds.has(r.id)),
     [recipes, selectedIds]
@@ -331,7 +350,7 @@ export default function RecipesLibrary() {
             : `No recipes match “${trimmedQuery}”`}
         </p>
       ) : (
-        <ul className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <ul className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
           {filtered.map((r) => {
             const checked = selectedIds.has(r.id);
             return (
@@ -367,6 +386,7 @@ export default function RecipesLibrary() {
                 )}
                 <RecipeCard
                   recipe={r}
+                  usedByCount={usedByCount.get(r.id) ?? 0}
                   onTogglePin={handleTogglePin}
                   onDuplicate={handleDuplicate}
                   onDelete={handleDelete}

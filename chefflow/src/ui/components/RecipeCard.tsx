@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImageOff, MoreVertical } from 'lucide-react';
+import { ImageOff, Layers, MoreVertical, Pin } from 'lucide-react';
 import { AllergenPill, KeyTagPill } from './AllergenBadge';
 import { formatGBP } from '../../core/util/money';
 import { downscaleToDataUrl } from '../../core/util/image';
@@ -10,6 +10,9 @@ const COVER_PHOTO_MAX_EDGE = 1600;
 
 interface Props {
   recipe: Recipe;
+  /** Number of OTHER recipes that reference this one via `#` (componentRecipeId).
+   *  Drives a "used in N" badge so deleting a component is a visible decision. */
+  usedByCount?: number;
   onTogglePin: (r: Recipe) => void;
   onDuplicate: (r: Recipe) => void;
   onDelete: (r: Recipe) => void;
@@ -22,6 +25,7 @@ function isDemo(recipe: Recipe): boolean {
 
 export default function RecipeCard({
   recipe,
+  usedByCount = 0,
   onTogglePin,
   onDuplicate,
   onDelete,
@@ -30,22 +34,45 @@ export default function RecipeCard({
   const pinned = Boolean(recipe.isPinned);
   return (
     <article className="flex flex-col h-full border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-kitchen-ink">
-      {recipe.coverPhoto ? (
-        <img
-          src={recipe.coverPhoto}
-          alt={`${recipe.title || 'Recipe'} cover photo`}
-          className="w-full aspect-video object-cover rounded-md mb-2"
-          data-testid="recipe-card-cover-photo-img"
-        />
-      ) : (
-        <div
-          className="w-full aspect-video rounded-md mb-2 bg-slate-100 dark:bg-slate-800 flex items-center justify-center"
-          data-testid="recipe-card-cover-placeholder"
-          aria-hidden="true"
-        >
-          <ImageOff className="h-6 w-6 text-slate-300 dark:text-slate-600" />
-        </div>
-      )}
+      <div className="relative">
+        {recipe.coverPhoto ? (
+          <img
+            src={recipe.coverPhoto}
+            alt={`${recipe.title || 'Recipe'} cover photo`}
+            className="w-full aspect-video object-cover rounded-md mb-2"
+            data-testid="recipe-card-cover-photo-img"
+          />
+        ) : (
+          <div
+            className="w-full aspect-video rounded-md mb-2 bg-slate-100 dark:bg-slate-800 flex items-center justify-center"
+            data-testid="recipe-card-cover-placeholder"
+            aria-hidden="true"
+          >
+            <ImageOff className="h-6 w-6 text-slate-300 dark:text-slate-600" />
+          </div>
+        )}
+        {pinned && (
+          <span
+            data-testid="recipe-card-pinned-badge"
+            aria-label="Pinned"
+            className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent text-white text-[10px] font-semibold uppercase tracking-wide shadow-sm"
+          >
+            <Pin className="h-3 w-3" aria-hidden="true" />
+            Pinned
+          </span>
+        )}
+        {usedByCount > 0 && (
+          <span
+            data-testid="recipe-card-used-by-badge"
+            aria-label={`Used by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'}`}
+            title={`Referenced by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'} via #`}
+            className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800/80 dark:bg-slate-900/80 text-white text-[10px] font-medium shadow-sm"
+          >
+            <Layers className="h-3 w-3" aria-hidden="true" />
+            Used in {usedByCount}
+          </span>
+        )}
+      </div>
       <header className="flex items-start justify-between gap-1.5">
         <Link
           to={`/recipes/${recipe.id}/edit`}
