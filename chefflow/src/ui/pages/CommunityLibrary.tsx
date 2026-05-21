@@ -60,7 +60,7 @@ export default function CommunityLibrary() {
       <header className="flex items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl font-bold">Community</h1>
       </header>
-      <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
         {state.items.map((r) => (
           <li key={r.id} className="h-full">
             <CommunityRecipeCard recipe={r} />
