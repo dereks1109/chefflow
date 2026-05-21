@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Settings } from 'lucide-react';
-import Logo from '../components/Logo';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Settings, Shield } from 'lucide-react';
+import BrandLogo from '../components/BrandLogo';
 import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
+import { useAdminStore } from '../../state/useAdminStore';
 
 const navItems = [
   { to: '/about', label: 'About', icon: Info },
@@ -14,6 +15,7 @@ const navItems = [
 ];
 
 export default function TopNav() {
+  const isAdmin = useAdminStore((s) => s.isAdmin);
   return (
     <header
       className={[
@@ -29,9 +31,10 @@ export default function TopNav() {
     >
       <NavLink
         to="/recipes"
-        className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md"
+        aria-label="ChefFlow home"
+        className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-md px-1 py-1 hover:text-accent"
       >
-        <Logo variant="wordmark" className="h-7 text-slate-100 dark:text-slate-100" />
+        <BrandLogo showText textClassName="text-sm font-semibold" />
       </NavLink>
 
       <nav aria-label="Primary" className="flex items-center gap-1 ml-2">
@@ -57,6 +60,26 @@ export default function TopNav() {
       </nav>
 
       <div className="ml-auto flex items-center gap-2">
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            aria-label="Admin dashboard"
+            className={({ isActive }) =>
+              [
+                'flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-medium',
+                'transition-colors duration-150',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-slate-400 hover:text-slate-100 hover:bg-surface-3',
+              ].join(' ')
+            }
+          >
+            <Shield size={16} aria-hidden="true" />
+            Admin
+          </NavLink>
+        )}
+
         <UpgradeButton />
 
         <NavLink

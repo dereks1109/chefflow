@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChefHat, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import BrandLogo from '../../components/BrandLogo';
 
 interface LegalLayoutProps {
   title: string;
@@ -18,10 +19,10 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link
             to="/"
-            className="flex items-center gap-2 text-sm font-medium hover:text-accent"
+            aria-label="ChefFlow home"
+            className="text-sm hover:text-accent"
           >
-            <ChefHat className="h-5 w-5 text-accent" aria-hidden="true" />
-            <span>ChefFlow</span>
+            <BrandLogo showText textClassName="text-sm font-semibold" />
           </Link>
           <Link
             to="/"

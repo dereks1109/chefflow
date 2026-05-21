@@ -1,5 +1,5 @@
 import { SignIn } from '@clerk/clerk-react';
-import { ChefHat } from 'lucide-react';
+import BrandLogo from './BrandLogo';
 
 export default function SignInScreen() {
   return (
@@ -8,11 +8,14 @@ export default function SignInScreen() {
                  bg-slate-50 dark:bg-kitchen-ink"
     >
       <header className="text-center mb-8">
-        <ChefHat className="h-10 w-10 mx-auto text-accent" aria-hidden="true" />
-        <h1 className="mt-3 text-3xl font-bold text-slate-900 dark:text-slate-100">
-          ChefFlow
+        <h1 className="inline-flex items-center justify-center text-3xl font-bold text-slate-900 dark:text-slate-100">
+          <BrandLogo
+            showText
+            iconClassName="h-10 w-10 text-accent"
+            textClassName="ml-2"
+          />
         </h1>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+        <p className="mt-3 text-sm text-slate-600 dark:text-slate-400">
           Sign in to plan recipes, build workflows, and run service.
         </p>
       </header>

@@ -13,6 +13,7 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SettingsPage from './ui/pages/SettingsPage';
 import AboutPage from './ui/pages/AboutPage';
+import AdminDashboard from './ui/pages/AdminDashboard';
 import CommunityLibrary from './ui/pages/CommunityLibrary';
 import CommunityRecipeView from './ui/pages/CommunityRecipeView';
 import SignInScreen from './ui/components/SignInScreen';
@@ -53,6 +54,7 @@ function GatedApp() {
             <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/about" element={<AboutPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<div className="p-6">Not found.</div>} />
           </Route>
         </Routes>

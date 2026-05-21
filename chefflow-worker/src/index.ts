@@ -5,6 +5,18 @@ import { fetchUserTier, type FetchLike } from './tier';
 import { TIER_LIMITS } from './limits';
 import { createCheckoutSession, createPortalSession, makeStripe, type Interval } from './billing';
 import { handleStripeWebhook } from './stripeWebhook';
+import {
+  requireAdmin,
+  listMembers,
+  getMetrics,
+  getActivity,
+  grantPro,
+  revokePro,
+  cancelUserSubscription,
+  refundLatestCharge,
+  AdminForbiddenError,
+  type StripeAdminLike,
+} from './admin';
 import { handleEndpoint, ENDPOINTS, type EndpointName } from './endpoints';
 import type { ProxyRequestBody, ProxyResponseBody } from './types';
 import {
@@ -164,6 +176,82 @@ export async function handleRequest(
     }
   }
 
+  // ---- Admin routes — all gated by Clerk publicMetadata.role === 'admin'. ----
+  if (url.pathname.startsWith('/admin/')) {
+    try {
+      await requireAdmin(userId, env.CLERK_SECRET_KEY, fetchImpl);
+    } catch (err) {
+      if (err instanceof AdminForbiddenError) return json({ error: err.message }, 403);
+      if (err instanceof UnauthorizedError) return json({ error: err.message }, 401);
+      throw err;
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/members') {
+      const offset = parseInt(url.searchParams.get('offset') ?? '0', 10) || 0;
+      const limit = Math.max(1, Math.min(200, parseInt(url.searchParams.get('limit') ?? '50', 10) || 50));
+      try {
+        const stripe = makeStripe(env.STRIPE_SECRET_KEY) as unknown as StripeAdminLike;
+        const out = await listMembers(env, stripe, fetchImpl, offset, limit);
+        return json(out, 200);
+      } catch (err) {
+        return json({ error: errMsg(err) }, 502);
+      }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/metrics') {
+      try {
+        const stripe = makeStripe(env.STRIPE_SECRET_KEY) as unknown as StripeAdminLike;
+        const out = await getMetrics(env, stripe, fetchImpl);
+        return json(out, 200);
+      } catch (err) {
+        return json({ error: errMsg(err) }, 502);
+      }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/activity') {
+      const since = url.searchParams.get('since');
+      const sinceSeconds = since ? parseInt(since, 10) || undefined : undefined;
+      try {
+        const stripe = makeStripe(env.STRIPE_SECRET_KEY) as unknown as StripeAdminLike;
+        const out = await getActivity(stripe, sinceSeconds);
+        return json({ events: out }, 200);
+      } catch (err) {
+        return json({ error: errMsg(err) }, 502);
+      }
+    }
+
+    const memberActionMatch = /^\/admin\/members\/([^/]+)\/(grant-pro|revoke-pro|cancel-subscription|refund)$/.exec(url.pathname);
+    if (req.method === 'POST' && memberActionMatch) {
+      const targetUserId = memberActionMatch[1];
+      const action = memberActionMatch[2];
+      try {
+        if (action === 'grant-pro') {
+          await grantPro(targetUserId, env, fetchImpl);
+          return json({ ok: true, tier: 'pro' }, 200);
+        }
+        if (action === 'revoke-pro') {
+          await revokePro(targetUserId, env, fetchImpl);
+          return json({ ok: true, tier: 'free' }, 200);
+        }
+        const stripe = makeStripe(env.STRIPE_SECRET_KEY) as unknown as StripeAdminLike;
+        if (action === 'cancel-subscription') {
+          const body = (await readJson(req)) as { atPeriodEnd?: unknown } | null;
+          const atPeriodEnd = body?.atPeriodEnd === true;
+          const out = await cancelUserSubscription(targetUserId, env, stripe, fetchImpl, atPeriodEnd);
+          return json({ ok: true, ...out }, 200);
+        }
+        if (action === 'refund') {
+          const out = await refundLatestCharge(targetUserId, env, stripe, fetchImpl);
+          return json({ ok: true, ...out }, 200);
+        }
+      } catch (err) {
+        return json({ error: errMsg(err) }, 502);
+      }
+    }
+
+    return json({ error: 'Not found' }, 404);
+  }
+
   // POST /billing/portal-session — mint a Customer Portal URL.
   if (req.method === 'POST' && url.pathname === '/billing/portal-session') {
     const origin = req.headers.get('Origin') ?? '';
@@ -283,6 +371,10 @@ export async function handleRequest(
 
 async function readJson(req: Request): Promise<unknown> {
   try { return await req.json(); } catch { return null; }
+}
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // JSON.stringify drops Infinity to null already, but doing it explicitly

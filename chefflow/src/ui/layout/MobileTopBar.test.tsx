@@ -13,7 +13,7 @@ vi.mock('../components/UsageMeter', () => ({
   default: () => <div data-testid="usage-meter-stub" />,
 }));
 
-vi.mock('../components/Logo', () => ({
+vi.mock('../components/BrandLogo', () => ({
   default: ({ className }: { className?: string }) => (
     <span className={className}>ChefFlow</span>
   ),

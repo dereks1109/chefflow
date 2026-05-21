@@ -322,3 +322,44 @@ describe('worker router — GET /quota/snapshot', () => {
     expect(await env.RATE_LIMIT.get(`q:recipe:user_a:${today}`)).toBe(null);
   });
 });
+
+// Stub Clerk to return a specific role for /admin/* gate tests.
+function stubFetchClerkRole(role: string | null): FetchLike {
+  return vi.fn(async () =>
+    new Response(JSON.stringify({ public_metadata: role !== null ? { role } : {} }), {
+      status: 200, headers: { 'Content-Type': 'application/json' },
+    }),
+  );
+}
+
+describe('worker router — /admin/* gating', () => {
+  it('401 when no Authorization header is sent', async () => {
+    const req = new Request('https://api.test/admin/members', { method: 'GET' });
+    const res = await handleRequest(req, env, verifyAccepts('user_a'), stubFetchClerkRole('admin'));
+    expect(res.status).toBe(401);
+  });
+
+  it('403 when authenticated user lacks role=admin', async () => {
+    const res = await handleRequest(
+      authedReq('/admin/members', undefined, 'GET'),
+      env, verifyAccepts('user_a'), stubFetchClerkRole(null),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('403 when role is some other string', async () => {
+    const res = await handleRequest(
+      authedReq('/admin/members', undefined, 'GET'),
+      env, verifyAccepts('user_a'), stubFetchClerkRole('manager'),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('404 for an unknown /admin path even when admin', async () => {
+    const res = await handleRequest(
+      authedReq('/admin/nope', undefined, 'GET'),
+      env, verifyAccepts('user_a'), stubFetchClerkRole('admin'),
+    );
+    expect(res.status).toBe(404);
+  });
+});

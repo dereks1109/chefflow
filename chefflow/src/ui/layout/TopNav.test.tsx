@@ -16,8 +16,8 @@ vi.mock('../components/UsageMeter', () => ({
   default: () => <div data-testid="usage-meter-stub" />,
 }));
 
-// Logo renders an SVG — a text stub is sufficient.
-vi.mock('../components/Logo', () => ({
+// BrandLogo renders an icon + text — a text stub is sufficient.
+vi.mock('../components/BrandLogo', () => ({
   default: ({ className }: { className?: string }) => (
     <span className={className}>ChefFlow</span>
   ),
