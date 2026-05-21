@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Download, Heart, ImageOff } from 'lucide-react';
+import { AllergenPill, KeyTagPill } from './AllergenBadge';
 import type { CommunityRecipeSummary } from '../../core/community/communityClient';
 
 interface Props {
@@ -51,7 +52,13 @@ export default function CommunityRecipeCard({ recipe }: Props) {
         </p>
       </header>
 
-      <dl className="mt-2 flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
+      <dl className="mt-1.5 text-xs text-slate-600 dark:text-slate-400 flex flex-wrap gap-x-3 gap-y-0.5">
+        {typeof recipe.originalYield === 'number' && (
+          <div>
+            <dt className="sr-only">Yield</dt>
+            <dd>{recipe.originalYield} portion{recipe.originalYield === 1 ? '' : 's'}</dd>
+          </div>
+        )}
         <div className="flex items-center gap-1" title={`${recipe.likes} like${recipe.likes === 1 ? '' : 's'}`}>
           <Heart className="h-3.5 w-3.5" aria-hidden="true" />
           <dt className="sr-only">Likes</dt>
@@ -63,6 +70,20 @@ export default function CommunityRecipeCard({ recipe }: Props) {
           <dd>{recipe.copies}</dd>
         </div>
       </dl>
+
+      <CommunityCardTags tags={recipe.tags} />
     </article>
+  );
+}
+
+function CommunityCardTags({ tags }: { tags?: CommunityRecipeSummary['tags'] }) {
+  const allergens = tags?.allergens ?? [];
+  const keyTags = tags?.keyIngredientTags ?? [];
+  if (allergens.length === 0 && keyTags.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1">
+      {allergens.map((a) => <AllergenPill key={`a-${a}`} tag={a} />)}
+      {keyTags.map((t) => <KeyTagPill key={`k-${t}`}>{t}</KeyTagPill>)}
+    </div>
   );
 }

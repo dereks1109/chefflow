@@ -46,6 +46,16 @@ export interface CommunityRecipeSummary {
   likes: number;
   copies: number;
   publishedAt: number;
+  /** Portion count from the source recipe — surfaced on the card so chefs
+   *  see "yields 4" at a glance. */
+  originalYield: number;
+  /** Tags surfaced on the card: UK-14 allergens + key ingredient tags.
+   *  Trimmed projection of the full RecipeAnalysis to keep the list
+   *  endpoint payload small. */
+  tags?: {
+    allergens?: string[];
+    keyIngredientTags?: string[];
+  };
 }
 
 interface IndexEntry {
@@ -208,6 +218,18 @@ export async function listRecent(
   const out: CommunityRecipeSummary[] = [];
   for (const r of records) {
     if (!r) continue;
+    const analysis = (r.analysis ?? null) as null | {
+      allergens?: unknown;
+      keyIngredientTags?: unknown;
+    };
+    const tags = analysis ? {
+      allergens: Array.isArray(analysis.allergens)
+        ? analysis.allergens.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
+        ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
+        : undefined,
+    } : undefined;
     out.push({
       id: r.id,
       title: r.title,
@@ -216,6 +238,8 @@ export async function listRecent(
       likes: r.likes,
       copies: r.copies,
       publishedAt: r.publishedAt,
+      originalYield: r.originalYield,
+      tags,
     });
   }
   return out;

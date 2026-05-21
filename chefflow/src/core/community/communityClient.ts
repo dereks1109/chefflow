@@ -1,7 +1,7 @@
 // Client for the chefflow-worker /community/* endpoints. Mirrors the shape
 // of `quotaClient` — same Clerk JWT fetch, same E2E bypass.
 
-import type { Recipe } from '../types';
+import type { AllergenTag, Recipe } from '../types';
 import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 
 export interface CommunityRecipe {
@@ -28,6 +28,15 @@ export interface CommunityRecipeSummary {
   likes: number;
   copies: number;
   publishedAt: number;
+  /** Portion count from the source recipe. Optional for backward-compat
+   *  with summaries cached before this field was added. */
+  originalYield?: number;
+  /** Tags surfaced on the card — allergens (UK-14) + key ingredient tags.
+   *  Optional + tolerant: any missing field renders no chips. */
+  tags?: {
+    allergens?: AllergenTag[];
+    keyIngredientTags?: string[];
+  };
 }
 
 export class CommunityClientError extends Error {

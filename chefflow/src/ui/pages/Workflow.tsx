@@ -357,9 +357,14 @@ export default function Workflow() {
   const visibleSteps = chefFilter
     ? scheduled.filter((s) => dishById.get(s.dishId)?.colorTag === chefFilter)
     : scheduled;
-  // Order list is event-wide (every chef shops the same list) — only show
-  // in the All view; suppress when filtering by chef to avoid confusion.
-  const orderList = chefFilter ? undefined : aggregateIngredients({ event, recipes: recipesMap });
+  // Order list — show event-wide in the All view, AND a per-chef filtered
+  // list when a chef colour is selected (their shopping list, not the
+  // entire event's). Filter dishes by colorTag before aggregating; the
+  // function is pure so we just feed it a slimmer event.
+  const orderListEvent: KitchenEvent = chefFilter
+    ? { ...event, dishes: event.dishes.filter((d) => d.colorTag === chefFilter) }
+    : event;
+  const orderList = aggregateIngredients({ event: orderListEvent, recipes: recipesMap });
   const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes, orderList);
 
   function handleBuilderChange(nextMilestones: DndMilestone[]) {
