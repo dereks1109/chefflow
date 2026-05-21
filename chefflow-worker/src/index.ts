@@ -2,7 +2,7 @@ import { verifyToken } from '@clerk/backend';
 import { verifyClerkRequest, UnauthorizedError } from './auth';
 import { consumeQuota, snapshotQuota, isQuotaKind, QuotaExceeded, type QuotaKind } from './quota';
 import { fetchUserTier, type FetchLike } from './tier';
-import { TIER_LIMITS } from './limits';
+import { TIER_LIMITS } from '../../chefflow/src/core/tier/limits';
 import { cancelOwnSubscription, createCheckoutSession, createPortalSession, makeStripe, type Interval } from './billing';
 import { handleStripeWebhook } from './stripeWebhook';
 import {

@@ -1,16 +1,16 @@
 // ---------------------------------------------------------------------------
-// Subscription tier definitions — single source of truth for what each
+// Subscription tier definitions — the SINGLE SOURCE OF TRUTH for what each
 // tier allows, how much it costs, and what the user sees.
+//
+// SHARED BETWEEN APPS. The Cloudflare Worker at chefflow-worker/ imports
+// from this same file (via a relative `../../chefflow/src/core/tier/limits`
+// path) so SPA quotas and worker-enforced caps stay in lockstep. Drift here
+// is a billing-correctness bug — never duplicate this content elsewhere.
 //
 // Limits are checked at use sites via `isUnderLimit()` / `hasFeature()`.
 // Tier upgrades flip a Clerk publicMetadata.tier field; the
 // `useTierStore` Zustand store mirrors that into React state via the
 // `TierSync` component mounted inside `<SignedIn>`.
-//
-// Lives in `chefflow/src/core/tier/` (parallel to `core/recipes/`,
-// `core/events/`, etc.) so domain logic can import the same constants
-// the UI does. See the business model plan at
-// /Users/derekshek/.claude/plans/giggly-marinating-spindle.md
 // ---------------------------------------------------------------------------
 
 export type Tier = 'free' | 'pro' | 'business';

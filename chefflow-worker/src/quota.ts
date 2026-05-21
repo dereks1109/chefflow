@@ -1,4 +1,4 @@
-import { UNLIMITED } from './limits';
+import { UNLIMITED } from '../../chefflow/src/core/tier/limits';
 
 const TTL_SECONDS = 26 * 60 * 60; // 26h — survives the UTC-day boundary
 

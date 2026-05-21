@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
 import { UnauthorizedError } from './auth';
 import { invalidateTierCache, type FetchLike } from './tier';
-import { parseTier, type Tier } from './limits';
+import { parseTier, type Tier } from '../../chefflow/src/core/tier/limits';
 
 // ---------------------------------------------------------------------------
 // Admin endpoints — backs the /admin dashboard. Gated by Clerk

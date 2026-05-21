@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { consumeQuota, snapshotQuota, QuotaExceeded, isQuotaKind } from './quota';
-import { UNLIMITED } from './limits';
+import { UNLIMITED } from '../../chefflow/src/core/tier/limits';
 
 // Same in-memory KV stub the legacy rateLimit tests used.
 function makeKv(): KVNamespace {
