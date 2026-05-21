@@ -217,6 +217,30 @@ describe('Workflow page — chef filter', () => {
   });
 });
 
+describe('Workflow page — local-scheduler fallback', () => {
+  it('falls back to the local scheduler when the LLM call rejects', async () => {
+    await db.events.put(DEMO_EVENT);
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    // Override the global fetch stub set in beforeEach with a 500 so
+    // scheduleEventLLM throws — runLlm should then call scheduleEvent.
+    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve(new Response('Internal error', { status: 500 })),
+    ));
+
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    // Local scheduler produces step text verbatim from RIBEYE_RECIPE / SALAD_RECIPE,
+    // so the same "Rest" / "Toss" probes used elsewhere prove the fallback ran.
+    await waitFor(() => {
+      expect(screen.getByText(/Rest steaks 5 minutes/)).toBeInTheDocument();
+      expect(screen.getByText(/Toss leaves, tomatoes, and cucumber/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Fallback timeline/i)).toBeInTheDocument();
+  });
+
+});
+
 describe('Workflow page — persistence', () => {
   it('uses event.workflow when present (skipping the algorithm)', async () => {
     // Plant a saved snapshot with custom step text that wouldn't come from the algorithm.

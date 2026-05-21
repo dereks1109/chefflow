@@ -21,6 +21,7 @@ import { saveEvent } from '../../db/eventsRepo';
 import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import { formatDateTime } from '../../core/util/datetime';
 import { scheduleEventLLM, GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
+import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
 import { hashDishes } from '../../core/scheduler/hash';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
@@ -178,6 +179,10 @@ export default function Workflow() {
   const [loadedFromSnapshot, setLoadedFromSnapshot] = useState(false);
   // AbortController for in-flight LLM calls (so Regenerate can cancel).
   const inflight = useRef<AbortController | null>(null);
+  // True when the currently-displayed timeline came from the local
+  // deterministic scheduler (no API key, or LLM threw). Drives an inline
+  // notice + a hint to click Regenerate once the LLM is reachable.
+  const [isFallback, setIsFallback] = useState(false);
   // Tracks the event-version we last synced our local UI state to. The
   // initial-load effect only acts when this changes — so live-query updates
   // we triggered ourselves (Save / Regenerate) don't cause a re-init loop.
@@ -224,12 +229,33 @@ export default function Workflow() {
       });
       if (controller.signal.aborted) return;
       setScheduled(steps);
+      setIsFallback(false);
       setDirty(false);
       setWorkflowStatus({ kind: 'ready' });
     } catch (err) {
       if (controller.signal.aborted) return;
+      // LLM failed — fall back to the local deterministic scheduler so the
+      // chef still gets a usable timeline. If the fallback also throws,
+      // surface the original LLM error.
+      const fallbackSteps = tryLocalSchedule(eventToSchedule, recipes);
+      if (fallbackSteps) {
+        setScheduled(fallbackSteps);
+        setIsFallback(true);
+        setDirty(false);
+        setWorkflowStatus({ kind: 'ready' });
+        return;
+      }
       setWorkflowStatus({ kind: 'error', message: friendlyError(err) });
     }
+  }
+
+  function runLocalFallback(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
+    const steps = tryLocalSchedule(eventToSchedule, recipes);
+    if (!steps) return;
+    setScheduled(steps);
+    setIsFallback(true);
+    setDirty(false);
+    setWorkflowStatus({ kind: 'ready' });
   }
 
   // -------------------------------------------------------------------------
@@ -259,7 +285,9 @@ export default function Workflow() {
 
     setLoadedFromSnapshot(false);
     if (!isReady) {
-      setWorkflowStatus({ kind: 'needs-key' });
+      // No Groq key — still render a usable timeline via the local
+      // deterministic scheduler instead of a dead "Connect Groq" screen.
+      runLocalFallback(live, recipesMap);
       return;
     }
     void runLlm(live, recipesMap);
@@ -472,6 +500,33 @@ export default function Workflow() {
           </div>
         )}
 
+        {isFallback && workflowStatus.kind === 'ready' && (
+          <div
+            role="status"
+            className="mb-3 flex items-start gap-2 rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm text-slate-700 dark:text-slate-300"
+          >
+            <Compass className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-medium text-slate-800 dark:text-slate-200">Fallback timeline</p>
+              <p className="mt-1 text-xs">
+                {isReady
+                  ? <>The LLM scheduler was unavailable — this timeline is built by the local deterministic scheduler. Click <strong>Regenerate</strong> to try the LLM again.</>
+                  : <>No Groq API key — this timeline is built by the local deterministic scheduler. Click <strong>Connect Groq</strong> below for the LLM-scheduled version.</>}
+              </p>
+              {!isReady && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="btn-secondary text-xs mt-2 inline-flex items-center gap-1"
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  Connect Groq
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {isStale && workflowStatus.kind === 'ready' && (
           <div
             role="status"
@@ -581,6 +636,23 @@ export default function Workflow() {
 // one-liner. Keeps the original message for context but strips stack frames
 // and adds a hint when the cause is well-known.
 // ---------------------------------------------------------------------------
+// Defensive wrapper around the local deterministic scheduler. Returns
+// null on any failure (caller falls back to its existing error path) —
+// the scheduler is pure but can throw on degenerate inputs and we'd rather
+// degrade gracefully than crash the page.
+function tryLocalSchedule(
+  event: KitchenEvent,
+  recipes: Map<string, Recipe>,
+): ScheduledStep[] | null {
+  try {
+    const steps = scheduleEvent({ event, recipes });
+    if (steps.length === 0) return null;
+    return steps;
+  } catch {
+    return null;
+  }
+}
+
 function friendlyError(err: unknown): string {
   if (err instanceof GroqClientError) {
     if (err.status === 401) return 'Invalid API key. Check your Groq key in settings.';
