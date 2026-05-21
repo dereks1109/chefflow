@@ -9,7 +9,7 @@ import {
   type DraggableProvided,
   type DraggableStateSnapshot,
 } from '@hello-pangea/dnd';
-import { GripVertical, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, GripVertical, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import ColorPicker, { swatchClassFor } from './ColorPicker';
 import type { ColorTag } from '../../core/types';
@@ -79,6 +79,20 @@ interface Props {
    * shuffle the order.
    */
   allowStepDrag?: boolean;
+  /**
+   * When false, milestones themselves are NOT drag-reorderable. Instead the
+   * grip handle is replaced with a chevron that collapses/expands the
+   * milestone's step list. Used by the workflow page where the scheduler
+   * owns milestone ordering — chefs collapse phases they're done with.
+   */
+  allowMilestoneDrag?: boolean;
+  /**
+   * When false, step text is rendered as a read-only paragraph (wrapping
+   * to multiple lines for long content) instead of a single-line input.
+   * Color picker + delete button are also hidden. Used by the workflow
+   * page where step text is scheduler-owned, not user-edited.
+   */
+  allowStepEdit?: boolean;
 }
 
 // Two drop types so milestones can only land in the milestone column and
@@ -104,8 +118,19 @@ export default function NestedDragDropBuilder({
   allowAddStep = true,
   allowColorPicker = true,
   allowStepDrag = true,
+  allowMilestoneDrag = true,
+  allowStepEdit = true,
 }: Props) {
   const [milestones, setMilestones] = useState<DndMilestone[]>(initialMilestones);
+  const [collapsedMilestoneIds, setCollapsedMilestoneIds] = useState<Set<string>>(new Set());
+
+  function toggleMilestoneCollapsed(id: string) {
+    setCollapsedMilestoneIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
   // Tick-off state for non-draggable steps. Local-only — resets on remount
   // (e.g. after Regenerate or page reload). Persisting per-step "done" would
   // need a new field on ScheduledStep + a save path; out of scope here.
@@ -272,32 +297,34 @@ export default function NestedDragDropBuilder({
       <Droppable droppableId="all-milestones" type={TYPE_MILESTONE} direction="vertical">
         {(provided: DroppableProvided) => (
           <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-3">
-            {milestones.map((milestone, milestoneIndex) => (
-              <Draggable
-                key={milestone.id}
-                draggableId={milestone.id}
-                index={milestoneIndex}
-              >
-                {(dragProvided: DraggableProvided, dragSnapshot: DraggableStateSnapshot) => (
-                  <div
-                    ref={dragProvided.innerRef}
-                    {...dragProvided.draggableProps}
-                    className={[
-                      'rounded-lg border bg-white dark:bg-kitchen-ink overflow-hidden',
-                      dragSnapshot.isDragging
-                        ? 'border-accent shadow-lg ring-1 ring-accent/30'
-                        : 'border-slate-200 dark:border-slate-700',
-                    ].join(' ')}
-                  >
-                    <MilestoneHeader
-                      milestone={milestone}
-                      dragHandleProps={dragProvided.dragHandleProps ?? undefined}
-                      onRename={(title) => renameMilestone(milestone.id, title)}
-                      onDelete={() => removeMilestone(milestone.id)}
-                    />
+            {milestones.map((milestone, milestoneIndex) => {
+              const collapsed = collapsedMilestoneIds.has(milestone.id);
+              const renderCard = (
+                dragProvided?: DraggableProvided,
+                dragSnapshot?: DraggableStateSnapshot,
+              ) => (
+                <div
+                  ref={dragProvided?.innerRef}
+                  {...(dragProvided?.draggableProps ?? {})}
+                  className={[
+                    'rounded-lg border bg-white dark:bg-kitchen-ink overflow-hidden',
+                    dragSnapshot?.isDragging
+                      ? 'border-accent shadow-lg ring-1 ring-accent/30'
+                      : 'border-slate-200 dark:border-slate-700',
+                  ].join(' ')}
+                >
+                  <MilestoneHeader
+                    milestone={milestone}
+                    dragHandleProps={dragProvided?.dragHandleProps ?? undefined}
+                    collapsed={allowMilestoneDrag ? undefined : collapsed}
+                    onToggleCollapsed={allowMilestoneDrag ? undefined : () => toggleMilestoneCollapsed(milestone.id)}
+                    onRename={(title) => renameMilestone(milestone.id, title)}
+                    onDelete={() => removeMilestone(milestone.id)}
+                  />
 
-                    {/* Nested Droppable for steps. type={STEP} restricts this list
-                        to only accept Step Draggables — milestones won't land here. */}
+                  {/* Steps list. When the milestone is collapsed (expand/collapse
+                      mode only), skip rendering entirely so the card shrinks. */}
+                  {!collapsed && (
                     <Droppable droppableId={milestone.id} type={TYPE_STEP}>
                       {(stepsProvided: DroppableProvided, stepsSnapshot: DroppableStateSnapshot) => (
                         <ul
@@ -319,19 +346,30 @@ export default function NestedDragDropBuilder({
                             const isChecked = checkedStepIds.has(step.id);
                             const stepBody = (leadingControl: ReactNode): ReactNode => (
                               <>
-                                <div className="flex items-center gap-2">
-                                  {leadingControl}
-                                  <input
-                                    type="text"
-                                    value={step.content}
-                                    onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
-                                    placeholder="Step description…"
-                                    className={[
-                                      'flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1',
-                                      isChecked ? 'line-through text-slate-400 dark:text-slate-500' : '',
-                                    ].join(' ')}
-                                    aria-label="Step content"
-                                  />
+                                <div className="flex items-start gap-2">
+                                  <span className="shrink-0 pt-0.5">{leadingControl}</span>
+                                  {allowStepEdit ? (
+                                    <input
+                                      type="text"
+                                      value={step.content}
+                                      onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
+                                      placeholder="Step description…"
+                                      className={[
+                                        'flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1',
+                                        isChecked ? 'line-through text-slate-400 dark:text-slate-500' : '',
+                                      ].join(' ')}
+                                      aria-label="Step content"
+                                    />
+                                  ) : (
+                                    <p
+                                      className={[
+                                        'flex-1 text-sm px-2 py-1 whitespace-pre-wrap break-words leading-relaxed',
+                                        isChecked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200',
+                                      ].join(' ')}
+                                    >
+                                      {step.content}
+                                    </p>
+                                  )}
                                   {allowColorPicker ? (
                                     <ColorPicker
                                       value={step.meta?.colorTag}
@@ -340,19 +378,21 @@ export default function NestedDragDropBuilder({
                                     />
                                   ) : step.meta?.colorTag ? (
                                     <span
-                                      className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(step.meta.colorTag)}`}
+                                      className={`h-3 w-3 rounded-full shrink-0 mt-1.5 ${swatchClassFor(step.meta.colorTag)}`}
                                       aria-label={`Color: ${step.meta.colorTag}`}
                                       title={`Color: ${step.meta.colorTag}`}
                                     />
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => removeStep(milestone.id, step.id)}
-                                    className="touch-target px-2 text-slate-400 hover:text-danger rounded"
-                                    aria-label="Delete step"
-                                  >
-                                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                  </button>
+                                  {allowStepEdit && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeStep(milestone.id, step.id)}
+                                      className="touch-target px-2 text-slate-400 hover:text-danger rounded shrink-0"
+                                      aria-label="Delete step"
+                                    >
+                                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                    </button>
+                                  )}
                                 </div>
                                 {step.meta && <StepMetaLine meta={step.meta} />}
                               </>
@@ -432,10 +472,27 @@ export default function NestedDragDropBuilder({
                         </ul>
                       )}
                     </Droppable>
-                  </div>
-                )}
-              </Draggable>
-            ))}
+                  )}
+                </div>
+              );
+
+              if (!allowMilestoneDrag) {
+                // Static (non-draggable) card. Outer Droppable still wraps it
+                // but never receives a Draggable, so it stays inert.
+                return <div key={milestone.id}>{renderCard()}</div>;
+              }
+              return (
+                <Draggable
+                  key={milestone.id}
+                  draggableId={milestone.id}
+                  index={milestoneIndex}
+                >
+                  {(dragProvided: DraggableProvided, dragSnapshot: DraggableStateSnapshot) =>
+                    renderCard(dragProvided, dragSnapshot)
+                  }
+                </Draggable>
+              );
+            })}
             {provided.placeholder}
 
             {allowAddMilestone && (
@@ -461,34 +518,62 @@ export default function NestedDragDropBuilder({
 function MilestoneHeader({
   milestone,
   dragHandleProps,
+  collapsed,
+  onToggleCollapsed,
   onRename,
   onDelete,
 }: {
   milestone: DndMilestone;
   dragHandleProps: DraggableProvided['dragHandleProps'] | undefined;
+  /** When defined, renders an expand/collapse chevron INSTEAD of the drag handle. */
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
 }) {
+  const useExpander = onToggleCollapsed !== undefined;
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
-      <span
-        {...dragHandleProps}
-        className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
-        aria-label="Drag milestone"
-      >
-        <GripVertical className="h-5 w-5" aria-hidden="true" />
-      </span>
+    <div
+      className="flex items-center gap-2 px-3 py-2 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40"
+      onClick={useExpander ? onToggleCollapsed : undefined}
+      role={useExpander ? 'button' : undefined}
+      aria-expanded={useExpander ? !collapsed : undefined}
+    >
+      {useExpander ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleCollapsed?.(); }}
+          className="touch-target px-1 text-slate-500 hover:text-accent"
+          aria-label={collapsed ? `Expand ${milestone.title}` : `Collapse ${milestone.title}`}
+        >
+          {collapsed ? <ChevronRight className="h-5 w-5" aria-hidden="true" /> : <ChevronDown className="h-5 w-5" aria-hidden="true" />}
+        </button>
+      ) : (
+        <span
+          {...dragHandleProps}
+          className="touch-target px-1 text-slate-400 hover:text-slate-700 cursor-grab active:cursor-grabbing"
+          aria-label="Drag milestone"
+        >
+          <GripVertical className="h-5 w-5" aria-hidden="true" />
+        </span>
+      )}
       <input
         type="text"
         value={milestone.title}
         onChange={(e) => onRename(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
         placeholder="Milestone title…"
         className="flex-1 bg-transparent font-semibold text-base outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1"
         aria-label="Milestone title"
       />
+      {useExpander && (
+        <span className="text-xs text-slate-500 tabular-nums">
+          {milestone.steps.length} step{milestone.steps.length === 1 ? '' : 's'}
+        </span>
+      )}
       <button
         type="button"
-        onClick={onDelete}
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
         className="touch-target px-2 text-slate-400 hover:text-danger rounded"
         aria-label="Delete milestone"
       >

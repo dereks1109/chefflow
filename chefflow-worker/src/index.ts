@@ -3,7 +3,7 @@ import { verifyClerkRequest, UnauthorizedError } from './auth';
 import { consumeQuota, snapshotQuota, isQuotaKind, QuotaExceeded, type QuotaKind } from './quota';
 import { fetchUserTier, type FetchLike } from './tier';
 import { TIER_LIMITS } from './limits';
-import { createCheckoutSession, createPortalSession, makeStripe, type Interval } from './billing';
+import { cancelOwnSubscription, createCheckoutSession, createPortalSession, makeStripe, type Interval } from './billing';
 import { handleStripeWebhook } from './stripeWebhook';
 import {
   requireAdmin,
@@ -176,6 +176,19 @@ export async function handleRequest(
     }
   }
 
+  // POST /billing/cancel-subscription — flip caller's active sub to
+  // cancel_at_period_end. Webhook handles tier flip when Stripe ends it.
+  if (req.method === 'POST' && url.pathname === '/billing/cancel-subscription') {
+    try {
+      const stripe = makeStripe(env.STRIPE_SECRET_KEY);
+      const out = await cancelOwnSubscription(stripe, env.CLERK_SECRET_KEY, userId, fetchImpl);
+      return json(out, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return json({ error: msg }, 502);
+    }
+  }
+
   // ---- Admin routes — all gated by Clerk publicMetadata.role === 'admin'. ----
   if (url.pathname.startsWith('/admin/')) {
     try {
@@ -253,9 +266,13 @@ export async function handleRequest(
   }
 
   // POST /billing/portal-session — mint a Customer Portal URL.
+  // Body: { flow?: 'cancel' } — when 'cancel', deep-links to the
+  // subscription-cancel page.
   if (req.method === 'POST' && url.pathname === '/billing/portal-session') {
     const origin = req.headers.get('Origin') ?? '';
     if (!origin) return json({ error: 'Missing Origin header' }, 400);
+    const body = (await readJson(req)) as { flow?: unknown } | null;
+    const flow = body?.flow === 'cancel' ? 'cancel' : undefined;
     try {
       const stripe = makeStripe(env.STRIPE_SECRET_KEY);
       const { url: portalUrl } = await createPortalSession(
@@ -264,6 +281,7 @@ export async function handleRequest(
         userId,
         `${origin}/settings`,
         fetchImpl,
+        flow,
       );
       return json({ url: portalUrl }, 200);
     } catch (err) {

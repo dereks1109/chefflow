@@ -145,6 +145,60 @@ describe('scheduleEventLLM — error surfaces', () => {
   });
 });
 
+describe('scheduleEventLLM — sub-recipe expansion', () => {
+  it('flattens sub-recipes before prompting the LLM so merged step IDs are in the prompt + index', async () => {
+    // A sauce recipe with 2 steps, referenced from the ribeye via an
+    // ingredient with componentRecipeId. After flattening, the ribeye recipe's
+    // steps should be prefixed sauce steps + the original ribeye steps.
+    const sauceRecipe = {
+      id: 'r_sauce',
+      title: 'Pepper Sauce',
+      originalYield: 4,
+      ingredients: [],
+      steps: [
+        { id: 'sc1', text: 'Sweat shallot', kind: 'active' as const, thermalClass: 'normal' as const, allergenClass: 'allergen-free' as const, dependsOn: [], phase: 'prep' as const, durationSec: 120 },
+        { id: 'sc2', text: 'Reduce cream', kind: 'passive' as const, thermalClass: 'normal' as const, allergenClass: 'allergen-free' as const, dependsOn: ['sc1'], phase: 'cook' as const, durationSec: 300 },
+      ],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const ribeyeWithSauce = {
+      ...RIBEYE_RECIPE,
+      ingredients: [
+        ...RIBEYE_RECIPE.ingredients,
+        { id: 'ing_sauce', raw: '{80|ml|Sauce}', amount: 80, unit: 'ml', name: 'Sauce', isLocked: false, componentRecipeId: 'r_sauce' },
+      ],
+    };
+    const recipes = new Map([
+      [ribeyeWithSauce.id, ribeyeWithSauce],
+      [SALAD_RECIPE.id, SALAD_RECIPE],
+      ['r_sauce', sauceRecipe],
+    ]);
+
+    let capturedBody: string | null = null;
+    const fetchImpl: typeof fetch = vi.fn(async (_url, init) => {
+      capturedBody = typeof init?.body === 'string' ? init.body : null;
+      return new Response(
+        JSON.stringify(llmReplyWith(VALID_DEMO_REPLY)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    await scheduleEventLLM({
+      event: DEMO_EVENT,
+      recipes,
+      apiKey: 'gsk_test',
+      model: 'llama-3.3-70b-versatile',
+      fetchImpl,
+    });
+
+    // The prompt body sent to Groq should contain the namespaced sub-recipe
+    // step IDs — proof that the LLM sees the merged steps.
+    expect(capturedBody).toContain('r_sauce::sc1');
+    expect(capturedBody).toContain('r_sauce::sc2');
+  });
+});
+
 describe('scheduleEventLLM — prepared dishes', () => {
   it('does not require coverage for prepared dishes (LLM still emits a placeholder)', async () => {
     const eventWithPrepared = {

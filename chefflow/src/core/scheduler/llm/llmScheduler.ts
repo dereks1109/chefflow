@@ -3,6 +3,8 @@ import { buildSystemPrompt, buildUserPrompt } from './prompt';
 import { complete } from '../../llm/llmClient';
 import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import { GroqClientError } from './groqClient';
+import { flattenSubRecipes } from '../../recipes/flattenSubRecipes';
+import { scaleStepDurations } from '../scaleStepDurations';
 import {
   parseLlmResponse,
   assertCoversEvent,
@@ -40,10 +42,27 @@ export interface LlmScheduleResult {
 export { GroqClientError, LlmValidationError };
 
 export async function scheduleEventLLM(input: LlmScheduleInput): Promise<LlmScheduleResult> {
-  const { event, recipes, apiKey, model, baseUrl, fetchImpl, signal } = input;
+  const { event, recipes: rawRecipes, apiKey, model, baseUrl, fetchImpl, signal } = input;
+
+  // Expand sub-recipe references (Ingredient.componentRecipeId) into each
+  // dish recipe's step list BEFORE prompting the LLM, so merged sauce steps
+  // (etc.) appear in both the prompt and the step-index used to map the
+  // response back. Namespaced step IDs survive the round-trip — see
+  // flattenSubRecipes for the prefix scheme.
+  const flattened = flattenAllRecipes(rawRecipes);
+
+  // Apply per-dish portion scaling so the LLM sees step durations stretched
+  // for larger dishes (e.g. Ribeye for 20 portions takes ~10× the active
+  // step time of the same recipe authored for 2 portions). See
+  // scaleEventForPortions below for the dish→recipe key remapping.
+  const { event: scaledEvent, recipes } = scaleEventForPortions(event, flattened);
 
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt(event, recipes);
+  const userPrompt = buildUserPrompt(scaledEvent, recipes);
+
+  // From here on, use scaledEvent (dish.recipeId rewritten to dish.id) so
+  // the response-mapping index lines up with what the LLM saw.
+  const eventForResponse = scaledEvent;
 
   const rawJson = await complete({
     endpoint: 'workflow',
@@ -73,24 +92,68 @@ export async function scheduleEventLLM(input: LlmScheduleInput): Promise<LlmSche
   // Only require coverage for dishes that have a recipe and aren't pre-prepared.
   // Pre-prepared dishes get a single placeholder; missing-recipe dishes too.
   const dishIdsRequiringCoverage = new Set(
-    event.dishes
+    eventForResponse.dishes
       .filter((d) => !d.isPrepared && d.recipeId && recipes.has(d.recipeId))
       .map((d) => d.id),
   );
   assertCoversEvent({
     steps: response.steps,
     dishIdsRequiringCoverage,
-    serveAt: event.serveAt ?? '',
+    serveAt: eventForResponse.serveAt ?? '',
   });
 
   // Index recipe steps so we can pull non-LLM fields from the source of truth.
-  const recipeStepIndex = buildRecipeStepIndex(event, recipes);
+  const recipeStepIndex = buildRecipeStepIndex(eventForResponse, recipes);
 
   const scheduled: ScheduledStep[] = response.steps.map((llmStep) =>
-    toScheduledStep(llmStep, event, recipeStepIndex),
+    toScheduledStep(llmStep, eventForResponse, recipeStepIndex),
   );
 
   return { steps: scheduled, modelUsed: model };
+}
+
+/**
+ * Flatten every recipe in the input map. The result map keys are unchanged
+ * (each recipe id maps to its flattened version, which contains merged
+ * sub-recipe steps prepended to its own steps).
+ */
+function flattenAllRecipes(rawRecipes: Map<string, Recipe>): Map<string, Recipe> {
+  const flat = new Map<string, Recipe>();
+  for (const [id, r] of rawRecipes) {
+    flat.set(id, flattenSubRecipes(r, rawRecipes));
+  }
+  return flat;
+}
+
+/**
+ * For each dish that links to a recipe, build a per-dish clone of that
+ * recipe with step durations stretched to match the dish's portion count.
+ * The returned event has each dish's `recipeId` rewritten to point at
+ * `dish.id` (the new map key), so the same source recipe can be referenced
+ * by two dishes at different portion counts without colliding.
+ *
+ * Dishes without a recipe link (prepared / missing) are returned unchanged
+ * — their dish.recipeId stays as-is and they aren't added to the map.
+ */
+function scaleEventForPortions(
+  event: KitchenEvent,
+  flatRecipes: Map<string, Recipe>,
+): { event: KitchenEvent; recipes: Map<string, Recipe> } {
+  const dishScopedRecipes = new Map<string, Recipe>();
+  const scaledDishes = event.dishes.map((dish) => {
+    if (!dish.recipeId) return dish;
+    const original = flatRecipes.get(dish.recipeId);
+    if (!original) return dish;
+    const denominator = original.originalYield > 0 ? original.originalYield : 1;
+    const ratio = dish.portions / denominator;
+    const scaledSteps = scaleStepDurations(original.steps, ratio);
+    // Preserve the recipe's own id (so ScheduledStep.recipeId stays
+    // referentially correct) but key the map by dish.id so two dishes that
+    // share a recipe get independent scaled copies.
+    dishScopedRecipes.set(dish.id, { ...original, steps: scaledSteps });
+    return { ...dish, recipeId: dish.id };
+  });
+  return { event: { ...event, dishes: scaledDishes }, recipes: dishScopedRecipes };
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +200,17 @@ function toScheduledStep(
   const ref = recipeStepIndex.get(synthesizedId);
 
   if (ref) {
+    // Breadcrumb label for sub-recipe steps so the UI tag shows
+    // "Ribeye > Black Pepper Sauce" instead of just the parent dish name.
+    const dishLabel = ref.step.sourceRecipeTitle
+      ? `${ref.dishLabel} > ${ref.step.sourceRecipeTitle}`
+      : ref.dishLabel;
     return {
       id: synthesizedId,
       dishId: ref.dishId,
       recipeId: ref.recipeId,
       recipeStepId: ref.step.id,
-      dishLabel: ref.dishLabel,
+      dishLabel,
       text: llmStep.text,
       startAt: llmStep.startAt,
       endAt: llmStep.endAt,

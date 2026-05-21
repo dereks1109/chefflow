@@ -6,13 +6,11 @@ import {
   Calendar,
   ChefHat,
   Check,
-  Clock,
   Compass,
   Key,
   RefreshCw,
   Sparkles,
   StickyNote,
-  Users,
 } from 'lucide-react';
 import NestedDragDropBuilder, {
   type DndMilestone,
@@ -335,7 +333,6 @@ export default function Workflow() {
     await runLlm(cleared, recipes);
   }
 
-  const filteredChef = chefFilter ? chefGroups.find((g) => g.color === chefFilter) : null;
   const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
 
   return (
@@ -520,17 +517,21 @@ export default function Workflow() {
 
         {/* ----- Workflow body ----- */}
         {showWorkflowBody && (
-          chefFilter && filteredChef ? (
-            <PerChefReadOnlyList steps={visibleSteps} chefGroup={filteredChef} />
+          milestones.length === 0 && chefFilter ? (
+            <p className="text-sm text-slate-500 italic">
+              No steps for this chef. (No dishes match this color, or no recipes are linked.)
+            </p>
           ) : (
             <NestedDragDropBuilder
-              key={`${event.id}-${generation}`}
+              key={`${event.id}-${generation}-${chefFilter ?? 'all'}`}
               initialMilestones={milestones}
               onChange={handleBuilderChange}
               allowAddMilestone={false}
               allowAddStep={false}
               allowColorPicker={false}
               allowStepDrag={false}
+              allowMilestoneDrag={false}
+              allowStepEdit={false}
             />
           )
         )}
@@ -550,60 +551,6 @@ export default function Workflow() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// PerChefReadOnlyList — same as before, untouched.
-// ---------------------------------------------------------------------------
-function PerChefReadOnlyList({
-  steps,
-  chefGroup,
-}: {
-  steps: ScheduledStep[];
-  chefGroup: ChefGroup;
-}) {
-  if (steps.length === 0) {
-    return (
-      <p className="text-sm text-slate-500 italic">
-        No steps for this chef. (No dishes match this color, or no recipes are linked.)
-      </p>
-    );
-  }
-  const sorted = steps
-    .slice()
-    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
-  return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink overflow-hidden">
-      <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
-        <span className={`h-4 w-4 rounded-full ${swatchClassFor(chefGroup.color)}`} />
-        <h3 className="font-semibold">{capitalize(chefGroup.color)} tasks</h3>
-        <span className="ml-auto text-xs text-slate-500">
-          {sorted.length} step{sorted.length === 1 ? '' : 's'}
-        </span>
-      </header>
-      <ol className="divide-y divide-slate-100 dark:divide-slate-800">
-        {sorted.map((s) => (
-          <li key={s.id} className="flex gap-3 px-4 py-3">
-            <span className="w-12 shrink-0 text-xs font-mono text-slate-500 pt-0.5">
-              {formatClockTime(s.startAt)}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">{s.text}</p>
-              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1">
-                  <Users className="h-3 w-3" aria-hidden="true" />
-                  {s.dishLabel}
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3 w-3" aria-hidden="true" />
-                  {Math.round(s.durationSec / 60)} min
-                </span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // friendlyError — turn an error from the LLM scheduler into a user-facing

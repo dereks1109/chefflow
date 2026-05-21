@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createCheckoutSession, createPortalSession, type StripeLike } from './billing';
+import { cancelOwnSubscription, createCheckoutSession, createPortalSession, type StripeLike } from './billing';
 import type { FetchLike } from './tier';
 
 function makeStripeMock(overrides: Partial<StripeLike> = {}): StripeLike {
@@ -14,6 +14,10 @@ function makeStripeMock(overrides: Partial<StripeLike> = {}): StripeLike {
       search: vi.fn(async () => ({ data: [], has_more: false })),
       create: vi.fn(async () => ({ id: 'cus_new' })),
       retrieve: vi.fn(),
+    },
+    subscriptions: {
+      list: vi.fn(async () => ({ data: [], has_more: false })),
+      update: vi.fn(),
     },
     webhooks: {
       constructEventAsync: vi.fn(),
@@ -122,5 +126,93 @@ describe('createPortalSession', () => {
     await expect(
       createPortalSession(stripe, 'sk_clerk', 'user_abc', 'https://app/settings', fetchImpl),
     ).rejects.toThrow(/No Stripe customer/);
+  });
+
+  it("flow='cancel' deep-links the portal to the cancel page for the active subscription", async () => {
+    const fetchImpl: FetchLike = vi.fn(async () =>
+      new Response(JSON.stringify({ public_metadata: { stripeCustomerId: 'cus_x' } }), { status: 200 }),
+    );
+    const portalCreate = vi.fn(async () => ({ url: 'https://billing.stripe.com/p/cancel' }));
+    const subList = vi.fn(async () => ({ data: [{ id: 'sub_1' }], has_more: false }));
+    const stripe = makeStripeMock({
+      billingPortal: { sessions: { create: portalCreate } } as unknown as StripeLike['billingPortal'],
+      subscriptions: { list: subList } as unknown as StripeLike['subscriptions'],
+    });
+
+    const { url } = await createPortalSession(
+      stripe, 'sk_clerk', 'user_a', 'https://app/settings', fetchImpl, 'cancel',
+    );
+
+    expect(subList).toHaveBeenCalledWith({ customer: 'cus_x', status: 'active', limit: 1 });
+    expect(portalCreate).toHaveBeenCalledWith({
+      customer: 'cus_x',
+      return_url: 'https://app/settings',
+      flow_data: { type: 'subscription_cancel', subscription_cancel: { subscription: 'sub_1' } },
+    });
+    expect(url).toBe('https://billing.stripe.com/p/cancel');
+  });
+
+  it("flow='cancel' throws when the user has no active subscription", async () => {
+    const fetchImpl: FetchLike = vi.fn(async () =>
+      new Response(JSON.stringify({ public_metadata: { stripeCustomerId: 'cus_x' } }), { status: 200 }),
+    );
+    const stripe = makeStripeMock({
+      subscriptions: { list: vi.fn(async () => ({ data: [], has_more: false })), update: vi.fn() } as unknown as StripeLike['subscriptions'],
+    });
+    await expect(
+      createPortalSession(stripe, 'sk_clerk', 'user_a', 'https://app/settings', fetchImpl, 'cancel'),
+    ).rejects.toThrow(/No active subscription/);
+  });
+});
+
+describe('cancelOwnSubscription', () => {
+  it('marks the active subscription cancel_at_period_end=true and returns period-end timestamp', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () =>
+      new Response(JSON.stringify({ public_metadata: { stripeCustomerId: 'cus_x' } }), { status: 200 }),
+    );
+    const list = vi.fn(async () => ({
+      data: [{ id: 'sub_1', status: 'active' }],
+      has_more: false,
+    }));
+    const update = vi.fn(async () => ({
+      id: 'sub_1',
+      cancel_at_period_end: true,
+      items: { data: [{ current_period_end: 1735689600 }] },
+    }));
+    const stripe = makeStripeMock({
+      subscriptions: { list, update } as unknown as StripeLike['subscriptions'],
+    });
+
+    const out = await cancelOwnSubscription(stripe, 'sk_clerk', 'user_a', fetchImpl);
+
+    expect(list).toHaveBeenCalledWith({ customer: 'cus_x', status: 'active', limit: 1 });
+    expect(update).toHaveBeenCalledWith('sub_1', { cancel_at_period_end: true });
+    expect(out).toEqual({
+      subscriptionId: 'sub_1',
+      periodEndUnix: 1735689600,
+      cancelAtPeriodEnd: true,
+    });
+  });
+
+  it('throws when the user has no Stripe customer on file', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () =>
+      new Response(JSON.stringify({ public_metadata: {} }), { status: 200 }),
+    );
+    const stripe = makeStripeMock();
+    await expect(
+      cancelOwnSubscription(stripe, 'sk_clerk', 'user_a', fetchImpl),
+    ).rejects.toThrow(/No Stripe customer/);
+  });
+
+  it('throws when the user has no active subscription', async () => {
+    const fetchImpl: FetchLike = vi.fn(async () =>
+      new Response(JSON.stringify({ public_metadata: { stripeCustomerId: 'cus_x' } }), { status: 200 }),
+    );
+    const stripe = makeStripeMock({
+      subscriptions: { list: vi.fn(async () => ({ data: [], has_more: false })), update: vi.fn() } as unknown as StripeLike['subscriptions'],
+    });
+    await expect(
+      cancelOwnSubscription(stripe, 'sk_clerk', 'user_a', fetchImpl),
+    ).rejects.toThrow(/No active subscription/);
   });
 });

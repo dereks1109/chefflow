@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, Sparkles, UserRound } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, Sparkles, UserRound, XCircle } from 'lucide-react';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { useProfileStore } from '../../state/useProfileStore';
 import {
+  cancelOwnSubscription,
   createPortalUrl,
   getQuotaSnapshot,
+  type CancelSubscriptionResponse,
   type QuotaSnapshotResponse,
 } from '../../core/tier/quotaClient';
 import { downscaleToDataUrl } from '../../core/util/image';
@@ -19,8 +21,10 @@ export default function SettingsPage() {
   const tier = useTierStore((s) => s.tier);
   const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
   const [searchParams, setSearchParams] = useSearchParams();
-  const [portalRedirecting, setPortalRedirecting] = useState(false);
+  const [portalRedirecting, setPortalRedirecting] = useState<'manage' | null>(null);
   const [portalError, setPortalError] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelled, setCancelled] = useState<CancelSubscriptionResponse | null>(null);
   const [snapshot, setSnapshot] = useState<QuotaSnapshotResponse | null>(null);
 
   const displayName = useProfileStore((s) => s.displayName);
@@ -77,13 +81,13 @@ export default function SettingsPage() {
   }, [tier, e2eMode]);
 
   async function openPortal() {
-    setPortalRedirecting(true);
+    setPortalRedirecting('manage');
     setPortalError(null);
     try {
       const url = await createPortalUrl();
       window.location.assign(url);
     } catch (err) {
-      setPortalRedirecting(false);
+      setPortalRedirecting(null);
       setPortalError(err instanceof Error ? err.message : 'Could not open billing portal');
     }
   }
@@ -228,19 +232,55 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={() => void openPortal()}
-              disabled={portalRedirecting}
+              disabled={portalRedirecting !== null}
               data-testid="settings-portal-cta"
               className="btn-primary inline-flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-wait"
             >
               <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-              {portalRedirecting ? 'Opening Stripe…' : 'Manage billing'}
+              {portalRedirecting === 'manage' ? 'Opening Stripe…' : 'Manage billing'}
             </button>
           )}
         </div>
+
+        {(tier === 'pro' || tier === 'business') && !cancelled && (
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setCancelOpen(true)}
+              disabled={portalRedirecting !== null}
+              data-testid="settings-cancel-cta"
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 disabled:opacity-60"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              Cancel subscription
+            </button>
+          </div>
+        )}
+
+        {cancelled && (
+          <p
+            role="status"
+            data-testid="settings-cancel-confirmed"
+            className="mt-2 text-xs text-emerald-700 dark:text-emerald-300"
+          >
+            Subscription will end on {formatPeriodEnd(cancelled.periodEndUnix)}. You'll keep Pro until then.
+          </p>
+        )}
+
         {portalError && (
           <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">{portalError}</p>
         )}
       </section>
+
+      {cancelOpen && (
+        <CancelConfirmDialog
+          onClose={() => setCancelOpen(false)}
+          onConfirmed={(res) => {
+            setCancelled(res);
+            setCancelOpen(false);
+          }}
+        />
+      )}
 
       <section
         aria-labelledby="settings-theme-heading"
@@ -293,4 +333,89 @@ function UsageRow({ label, count, limit, unlimited }: { label: string; count: nu
       </dd>
     </div>
   );
+}
+
+interface CancelConfirmDialogProps {
+  onClose: () => void;
+  onConfirmed: (res: CancelSubscriptionResponse) => void;
+}
+
+function CancelConfirmDialog({ onClose, onConfirmed }: CancelConfirmDialogProps) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function confirmCancel() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await cancelOwnSubscription();
+      onConfirmed(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not cancel subscription');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cancel-dialog-title"
+      className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="px-5 py-4 border-b border-slate-100 dark:border-slate-800">
+          <h2 id="cancel-dialog-title" className="font-semibold inline-flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-red-500" aria-hidden="true" />
+            Cancel ChefFlow Pro?
+          </h2>
+        </header>
+        <section className="px-5 py-4 space-y-3 text-sm">
+          <p className="text-slate-700 dark:text-slate-200">
+            Your subscription will be set to end at the close of your current billing period.
+            You'll keep Pro features until then.
+          </p>
+          <p className="text-xs text-slate-500">
+            You can resubscribe any time. No refunds for the current period.
+          </p>
+          {error && <p role="alert" className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+          <div className="flex flex-wrap gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={busy}
+              className="btn-secondary flex-1 disabled:opacity-60"
+              data-testid="cancel-dialog-keep"
+            >
+              Keep subscription
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmCancel()}
+              disabled={busy}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait"
+              data-testid="cancel-dialog-confirm"
+            >
+              {busy ? 'Cancelling…' : 'Confirm cancel'}
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function formatPeriodEnd(unix: number): string {
+  if (!unix) return 'your next billing date';
+  return new Date(unix * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }

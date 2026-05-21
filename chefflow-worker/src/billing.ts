@@ -14,7 +14,9 @@ export interface BillingEnv {
 
 export type Interval = 'month' | 'year';
 
-export type StripeLike = Pick<Stripe, 'checkout' | 'billingPortal' | 'customers' | 'webhooks'>;
+export type StripeLike = Pick<Stripe, 'checkout' | 'billingPortal' | 'customers' | 'webhooks' | 'subscriptions'>;
+
+export type PortalFlow = 'cancel';
 
 export function makeStripe(secretKey: string): Stripe {
   return new Stripe(secretKey, {
@@ -59,6 +61,12 @@ export async function createCheckoutSession(
  * Mint a Stripe Customer Portal session for an existing customer. Reads
  * the Stripe customer id from Clerk publicMetadata.stripeCustomerId
  * (written by the webhook on first checkout.session.completed).
+ *
+ * When `flow === 'cancel'`, deep-links the portal straight to the
+ * subscription-cancel page for the customer's active subscription.
+ * Stripe handles the "are you sure" UX, retention offers, and the actual
+ * cancellation; our `customer.subscription.updated/deleted` webhook then
+ * flips Clerk tier back to 'free'.
  */
 export async function createPortalSession(
   stripe: StripeLike,
@@ -66,14 +74,58 @@ export async function createPortalSession(
   userId: string,
   returnUrl: string,
   fetchImpl: FetchLike = fetch,
+  flow?: PortalFlow,
 ): Promise<{ url: string }> {
   const customerId = await readClerkStripeCustomerId(userId, clerkSecret, fetchImpl);
   if (!customerId) throw new Error('No Stripe customer on file for this user');
-  const session = await stripe.billingPortal.sessions.create({
+
+  const params: Stripe.BillingPortal.SessionCreateParams = {
     customer: customerId,
     return_url: returnUrl,
-  });
+  };
+
+  if (flow === 'cancel') {
+    const subs = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1 });
+    const sub = subs.data[0];
+    if (!sub) throw new Error('No active subscription to cancel');
+    params.flow_data = {
+      type: 'subscription_cancel',
+      subscription_cancel: { subscription: sub.id },
+    };
+  }
+
+  const session = await stripe.billingPortal.sessions.create(params);
   return { url: session.url };
+}
+
+/**
+ * Mark the caller's active Stripe subscription to cancel at the end of the
+ * current billing period. The user keeps Pro until the period ends; Stripe
+ * fires `customer.subscription.updated` (and eventually `.deleted`) which
+ * our webhook flips into Clerk tier=free. Returns the period-end timestamp
+ * so the SPA can show "You'll keep Pro until <date>".
+ */
+export async function cancelOwnSubscription(
+  stripe: StripeLike,
+  clerkSecret: string,
+  userId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ subscriptionId: string; periodEndUnix: number; cancelAtPeriodEnd: boolean }> {
+  const customerId = await readClerkStripeCustomerId(userId, clerkSecret, fetchImpl);
+  if (!customerId) throw new Error('No Stripe customer on file for this user');
+  const subs = await stripe.subscriptions.list({ customer: customerId, status: 'active', limit: 1 });
+  const sub = subs.data[0];
+  if (!sub) throw new Error('No active subscription to cancel');
+  const updated = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });
+  // Stripe API 2026-04-22.dahlia moved current_period_end off the top-level
+  // Subscription and onto each SubscriptionItem. We read the first item; for
+  // a single-price subscription that's the whole truth.
+  const periodEndUnix = updated.items?.data?.[0]?.current_period_end ?? 0;
+  return {
+    subscriptionId: updated.id,
+    periodEndUnix,
+    cancelAtPeriodEnd: updated.cancel_at_period_end,
+  };
 }
 
 async function getOrCreateCustomer(

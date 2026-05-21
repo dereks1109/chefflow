@@ -170,7 +170,7 @@ describe('grantPro / revokePro', () => {
     const env = makeEnv();
     await env.RATE_LIMIT.put('tier:user_a', 'free');
     let patchedBody: unknown = null;
-    const fetchImpl: FetchLike = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl: FetchLike = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === 'PATCH') {
         patchedBody = init.body;
         return new Response('{}', { status: 200 });
@@ -189,7 +189,7 @@ describe('grantPro / revokePro', () => {
   });
 
   it('revokePro flips tier=free', async () => {
-    const fetchImpl: FetchLike = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl: FetchLike = vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === 'PATCH') return new Response('{}', { status: 200 });
       return new Response(JSON.stringify({ public_metadata: { tier: 'pro' } }), { status: 200 });
     });

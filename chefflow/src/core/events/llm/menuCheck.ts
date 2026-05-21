@@ -11,6 +11,8 @@ import type {
   MenuAnalysis,
   MenuIssue,
   MenuIssueSeverity,
+  MenuSuggestion,
+  MenuSuggestionCategory,
   Recipe,
 } from '../../types';
 import { complete } from '../../llm/llmClient';
@@ -113,7 +115,7 @@ export function parseMenuAnalysis(raw: string): MenuAnalysis {
   return {
     verdict: parseVerdict(o.verdict),
     issues: parseIssues(o.issues),
-    suggestions: parseStringArray(o.suggestions).slice(0, 5),
+    suggestions: parseSuggestions(o.suggestions),
     analyzedAt: Date.now(),
   };
 }
@@ -139,9 +141,46 @@ function parseIssues(v: unknown): MenuIssue[] {
   return out;
 }
 
-function parseStringArray(v: unknown): string[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
-    .map((x) => x.trim());
+const REQUIRED_SUGGESTIONS = 5;
+
+/**
+ * Parse the LLM's `suggestions` array into MenuSuggestion[]. Tolerates:
+ *  - new shape: [{ category, text }]
+ *  - legacy shape: ["string"] — coerced to category 'other'
+ *  - empty / invalid — discards malformed entries
+ * Always returns exactly REQUIRED_SUGGESTIONS entries: slices if more,
+ * pads with neutral 'other' placeholders if fewer.
+ */
+function parseSuggestions(v: unknown): MenuSuggestion[] {
+  const collected: MenuSuggestion[] = [];
+  if (Array.isArray(v)) {
+    for (const item of v) {
+      if (typeof item === 'string') {
+        const text = item.trim();
+        if (text) collected.push({ category: 'other', text });
+        continue;
+      }
+      if (typeof item !== 'object' || item === null) continue;
+      const o = item as Record<string, unknown>;
+      const text = typeof o.text === 'string' ? o.text.trim() : '';
+      if (!text) continue;
+      collected.push({ category: parseSuggestionCategory(o.category), text });
+    }
+  }
+  if (collected.length >= REQUIRED_SUGGESTIONS) {
+    return collected.slice(0, REQUIRED_SUGGESTIONS);
+  }
+  // Pad with neutral entries so the UI always renders exactly 5 slots.
+  while (collected.length < REQUIRED_SUGGESTIONS) {
+    collected.push({
+      category: 'other',
+      text: 'No further suggestion — the LLM returned fewer than 5 ideas.',
+    });
+  }
+  return collected;
+}
+
+function parseSuggestionCategory(v: unknown): MenuSuggestionCategory {
+  if (v === 'allergy' || v === 'budget' || v === 'other') return v;
+  return 'other';
 }

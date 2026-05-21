@@ -1,13 +1,18 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, ChevronDown, ChevronRight, Link as LinkIcon, X } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
-import type { AllergenTag, Ingredient } from '../../core/types';
+import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
+import RecipeAutocomplete from './RecipeAutocomplete';
+import SubRecipeInline from './SubRecipeInline';
 
 interface Props {
   index: number;
   value: Ingredient;
   onChange: (next: Ingredient) => void;
   onRemove: () => void;
+  /** Current recipe id (excluded from RecipeAutocomplete to prevent self-reference). */
+  currentRecipeId?: string;
   /** Effective allergens carried by this ingredient (user override OR auto-detection). */
   allergenMatches?: AllergenTag[];
 }
@@ -15,11 +20,46 @@ interface Props {
 const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb'];
 const VOLUME_UNITS = ['ml', 'L', 'tsp', 'tbsp', 'cup', 'fl oz', 'pt', 'qt', 'gal'];
 
-export default function IngredientRow({ index, value, onChange, onRemove, allergenMatches }: Props) {
+export default function IngredientRow({ index, value, onChange, onRemove, currentRecipeId, allergenMatches }: Props) {
+  const [expanded, setExpanded] = useState(false);
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+
+  // The autocomplete is open whenever the name starts with `#` AND the user
+  // hasn't already picked a recipe (componentRecipeId set). After pick, the
+  // user can re-trigger it by clearing the name back to a `#`-prefixed string.
+  const hasHashtagPrefix = value.name.startsWith('#');
+  const hasPickedRecipe = Boolean(value.componentRecipeId);
+  const showAutocomplete = autocompleteOpen && hasHashtagPrefix && !hasPickedRecipe;
+  const autocompleteQuery = hasHashtagPrefix ? value.name.slice(1) : '';
+
   function update<K extends keyof Ingredient>(key: K, v: Ingredient[K]) {
     const next = { ...value, [key]: v };
     next.raw = `{${next.amount}|${next.unit}|${next.name}}`;
     onChange(next);
+  }
+
+  function onNameChange(nextName: string) {
+    const startsWithHash = nextName.startsWith('#');
+    // If user clears the leading `#`, also drop the componentRecipeId link.
+    const next: Ingredient = startsWithHash
+      ? { ...value, name: nextName }
+      : { ...value, name: nextName, componentRecipeId: undefined };
+    next.raw = `{${next.amount}|${next.unit}|${next.name}}`;
+    onChange(next);
+    if (startsWithHash && !value.componentRecipeId) setAutocompleteOpen(true);
+  }
+
+  function selectComponentRecipe(recipe: Recipe) {
+    const nextName = `#${recipe.title}`;
+    const next: Ingredient = {
+      ...value,
+      name: nextName,
+      componentRecipeId: recipe.id,
+      raw: `{${value.amount}|${value.unit}|${nextName}}`,
+    };
+    onChange(next);
+    setAutocompleteOpen(false);
+    setExpanded(true);
   }
 
   const flags = allergenMatches ?? [];
@@ -60,14 +100,44 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
       <div className="flex items-start gap-2">
         <span className="text-sm font-semibold w-6 pt-2">{index + 1}.</span>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
-          <input
-            type="text"
-            value={value.name}
-            onChange={(e) => update('name', e.target.value)}
-            className="input"
-            aria-label="Ingredient name"
-            placeholder="Ingredient"
-          />
+          <div className="relative">
+            <div className="flex items-center gap-1">
+              {hasPickedRecipe && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded((e) => !e)}
+                  aria-label={expanded ? 'Collapse sub-recipe' : 'Expand sub-recipe'}
+                  className="touch-target px-1 rounded-md text-accent hover:bg-accent/10 shrink-0"
+                  data-testid={`ingredient-${value.id}-expand`}
+                >
+                  {expanded ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
+                </button>
+              )}
+              {hasPickedRecipe && (
+                <LinkIcon className="h-3.5 w-3.5 text-accent shrink-0" aria-hidden="true" />
+              )}
+              <input
+                type="text"
+                value={value.name}
+                onChange={(e) => onNameChange(e.target.value)}
+                onFocus={() => { if (hasHashtagPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
+                className="input flex-1 min-w-0"
+                aria-label="Ingredient name"
+                placeholder="Ingredient  (type # to link another recipe)"
+              />
+            </div>
+            {showAutocomplete && (
+              <RecipeAutocomplete
+                query={autocompleteQuery}
+                excludeRecipeId={currentRecipeId}
+                onSelect={selectComponentRecipe}
+                onClose={() => setAutocompleteOpen(false)}
+              />
+            )}
+          </div>
+          {hasPickedRecipe && expanded && value.componentRecipeId && (
+            <SubRecipeInline recipeId={value.componentRecipeId} />
+          )}
           <div className="flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
             {flags.map((tag) => (
               <span

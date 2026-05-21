@@ -146,17 +146,66 @@ export async function createCheckoutUrl(
   return body.url;
 }
 
-/** Same shape for the Customer Portal. */
-export async function createPortalUrl(opts: BillingOptions = {}): Promise<string> {
+export type PortalFlow = 'cancel';
+
+export interface CancelSubscriptionResponse {
+  subscriptionId: string;
+  /** Unix seconds — when Pro access actually ends. */
+  periodEndUnix: number;
+  cancelAtPeriodEnd: boolean;
+}
+
+/**
+ * Cancel the caller's active subscription at period end. The webhook
+ * flips Clerk tier=free when Stripe actually ends the sub on that date.
+ */
+export async function cancelOwnSubscription(
+  opts: BillingOptions = {},
+): Promise<CancelSubscriptionResponse> {
+  const token = await getClerkToken();
+  if (!token) throw new QuotaClientError('Not signed in', 401);
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
+  const res = await fetchImpl(`${origin}/billing/cancel-subscription`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    let msg = `Billing worker ${res.status}`;
+    try {
+      const errBody = (await res.json()) as { error?: string };
+      if (errBody.error) msg = errBody.error;
+    } catch { /* ignore */ }
+    throw new QuotaClientError(msg, res.status);
+  }
+  return (await res.json()) as CancelSubscriptionResponse;
+}
+
+/**
+ * Mint a Customer Portal URL. When `flow === 'cancel'`, Stripe opens
+ * directly on the subscription-cancel page.
+ */
+export async function createPortalUrl(
+  flow?: PortalFlow,
+  opts: BillingOptions = {},
+): Promise<string> {
   const token = await getClerkToken();
   if (!token) throw new QuotaClientError('Not signed in', 401);
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const res = await fetchImpl(`${origin}/billing/portal-session`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(flow ? { flow } : {}),
   });
-  if (!res.ok) throw new QuotaClientError(`Billing worker ${res.status}`, res.status);
+  if (!res.ok) {
+    let msg = `Billing worker ${res.status}`;
+    try {
+      const errBody = (await res.json()) as { error?: string };
+      if (errBody.error) msg = errBody.error;
+    } catch { /* ignore */ }
+    throw new QuotaClientError(msg, res.status);
+  }
   const body = (await res.json()) as { url?: string };
   if (!body.url) throw new QuotaClientError('Billing response missing url', 502);
   return body.url;

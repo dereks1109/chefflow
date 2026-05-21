@@ -250,6 +250,9 @@ export default function RecipeEditor() {
         <div className="grid gap-4 md:grid-cols-2 items-start">
           <fieldset>
             <legend className="text-sm font-medium">Ingredients</legend>
+            <p className="text-xs text-slate-500 mt-1 mb-2">
+              Tip: type <code className="px-1 rounded bg-slate-100 dark:bg-surface-2">#</code> in an ingredient name to link another recipe (e.g. a sauce). The linked recipe expands inline and its steps merge into the kitchen timeline.
+            </p>
             <ul>
               {r.ingredients.map((ing, i) => {
                 // User override wins; otherwise fall back to regex auto-detect
@@ -261,6 +264,7 @@ export default function RecipeEditor() {
                     key={ing.id}
                     index={i}
                     value={ing}
+                    currentRecipeId={r.id}
                     onChange={(next) => updateIngredient(i, next)}
                     onRemove={() => removeIngredient(i)}
                     allergenMatches={effective}

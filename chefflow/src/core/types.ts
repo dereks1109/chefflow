@@ -18,6 +18,13 @@ export interface Ingredient {
   // []        → user explicitly cleared the highlight
   // [tag...]  → user explicitly flagged these allergens
   allergenFlags?: AllergenTag[];
+  // Set when this ingredient line references another recipe (entered as `#` in
+  // the editor and picked from the autocomplete). `name` holds the display
+  // label (e.g. "(Demo) Black Pepper Sauce"); amount + unit work normally.
+  // The scaler does NOT multiply this ingredient's amount when the parent
+  // scales — the literal quantity is honored. The scheduler expands the
+  // referenced recipe's steps into the parent's timeline.
+  componentRecipeId?: string;
 }
 
 export interface WorkflowStep {
@@ -32,6 +39,13 @@ export interface WorkflowStep {
   batchKey?: string;
   panCapacityPortions?: number;
   phase: StepPhase;
+  // Set by flattenSubRecipes() when a step came from a referenced
+  // (component) recipe. UI uses this to render a "from #<sub-recipe>"
+  // badge on merged steps. Original (parent-recipe) steps leave it unset.
+  sourceRecipeId?: string;
+  /** Display title of the source recipe (so the UI can show a breadcrumb
+   *  like "Ribeye > Black Pepper Sauce" without a separate id→title lookup). */
+  sourceRecipeTitle?: string;
 }
 
 // Closed taxonomy: the 14 allergens UK food law requires businesses to declare.
@@ -159,12 +173,26 @@ export interface Menu {
   updatedAt: number;
 }
 
+export type MenuSuggestionCategory = 'allergy' | 'budget' | 'other';
+
+export interface MenuSuggestion {
+  category: MenuSuggestionCategory;
+  text: string;
+}
+
 export interface MenuAnalysis {
   // 'ok' — no issues. 'warnings' — soft conflicts (e.g. limited vegan options).
   // 'blocked' — at least one guest can't eat anything safely.
   verdict: 'ok' | 'warnings' | 'blocked';
   issues: MenuIssue[];
-  suggestions: string[];
+  /**
+   * Exactly 5 actionable suggestions, each tagged by category so the UI
+   * can render a badge. The LLM is instructed to cover allergies, budget,
+   * and general improvements. Order is preserved as returned. Parser pads
+   * with neutral 'other' entries if the LLM returns fewer than 5; slices
+   * if it returns more.
+   */
+  suggestions: MenuSuggestion[];
   analyzedAt: number;
 }
 

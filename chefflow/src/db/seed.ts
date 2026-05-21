@@ -8,12 +8,16 @@ import saladPhoto from '../assets/demo/salad.jpeg?inline';
 import soupPhoto from '../assets/demo/tomatosoup.jpeg?inline';
 
 // Bump when demo recipe content changes — existing IndexedDB copies are
-// overwritten on next load so chefs see the new fields. v4 adds coverPhoto
-// to the three demo recipes.
-const SEED_FLAG = 'chefflow:seeded-demo-v4';
-// v5 adds numberOfGuests on the demo event (now a structured field instead
-// of being buried in the freeform notes).
-const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v5';
+// overwritten on next load so chefs see the new fields. v5 adds
+// (Demo) Black Pepper Sauce and links it from the Ribeye recipe via
+// componentRecipeId so the "type # to reference a recipe" feature has a
+// working out-of-the-box example.
+const SEED_FLAG = 'chefflow:seeded-demo-v5';
+// v6 scales the demo event 10× (8 → 80 covers) — actually we keep
+// numberOfGuests=8 and scale per-dish portions 10×. Also adds realistic
+// notes covering allergies + budget so the menu-suitability analysis has
+// something to chew on.
+const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v6';
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -23,6 +27,20 @@ function ing(amount: number, unit: string, name: string, locked = false): Ingred
     unit,
     name,
     isLocked: locked,
+  };
+}
+
+/** Build an ingredient line that references another recipe (sub-recipe). */
+function ingComponent(amount: number, unit: string, recipeId: string, displayTitle: string): Ingredient {
+  const name = `#${displayTitle}`;
+  return {
+    id: randomId(),
+    raw: `{${amount}|${unit}|${name}}`,
+    amount,
+    unit,
+    name,
+    isLocked: false,
+    componentRecipeId: recipeId,
   };
 }
 
@@ -86,6 +104,7 @@ function demoRecipes(): Recipe[] {
         ing(30, 'g', 'Butter'),
         ing(15, 'g', 'Garlic clove'),
         ing(2, 'g', 'Fresh thyme'),
+        ingComponent(80, 'ml', 'r_demo_pepper_sauce', '(Demo) Black Pepper Sauce'),
       ],
       [
         step('Pat steaks dry and season generously with salt and pepper.', 'prep'),
@@ -166,6 +185,39 @@ function demoRecipes(): Recipe[] {
       },
       soupPhoto,
     ),
+    makeRecipe(
+      'r_demo_pepper_sauce',
+      '(Demo) Black Pepper Sauce',
+      4,
+      '5m',
+      '15m',
+      [
+        ing(1, 'tbsp', 'Butter'),
+        ing(30, 'g', 'Shallot'),
+        ing(15, 'g', 'Cracked black peppercorns'),
+        ing(15, 'ml', 'Brandy'),
+        ing(200, 'ml', 'Beef stock'),
+        ing(200, 'ml', 'Double cream'),
+        ing(1, 'g', 'Sea salt', true),
+      ],
+      [
+        step('Finely dice the shallot. Crack the peppercorns coarsely with a pestle and mortar.', 'prep'),
+        step('Melt butter in a small saucepan; sweat shallot 2–3 minutes until soft, not browned.'),
+        step('Add the cracked peppercorns; toast briefly to release their oils, ~30 seconds.'),
+        step('Pour in brandy and let it bubble off, then add beef stock; reduce by half.'),
+        step('Stir in the double cream; simmer until the sauce coats the back of a spoon. Season with salt.', 'serve'),
+      ],
+      2,
+      {
+        caloriesPerPortion: 220,
+        caloriesTotal: 880,
+        keyIngredientTags: ['black pepper', 'cream', 'shallot'],
+        allergens: ['milk'],
+      },
+      // No dedicated cover photo for the sauce — leaves the placeholder in
+      // the recipe card. Add a real photo later if desired.
+      '',
+    ),
   ];
 }
 
@@ -199,8 +251,10 @@ function demoEvents(): KitchenEvent[] {
   const saladStart = new Date(2026, 4, 14, 17, 45, 0);
   const now = Date.now();
   // Pinned dish ids so the section buckets below can reference them by id.
-  const ribeye = demoDish('d_demo_ribeye', '(Demo) Ribeye', 'r_demo_ribeye', 2, ribeyeStart);
-  const salad = demoDish('d_demo_salad', '(Demo) Garden Salad', 'r_demo_salad', 4, saladStart);
+  // Portions are 10× the recipe's originalYield to demo a larger event
+  // (Ribeye recipe yields 2 → 20 portions; Garden Salad yields 4 → 40).
+  const ribeye = demoDish('d_demo_ribeye', '(Demo) Ribeye', 'r_demo_ribeye', 20, ribeyeStart);
+  const salad = demoDish('d_demo_salad', '(Demo) Garden Salad', 'r_demo_salad', 40, saladStart);
   return [
     {
       id: 'e_demo_main',
@@ -208,11 +262,21 @@ function demoEvents(): KitchenEvent[] {
       serveAt: serve.toISOString(),
       location: 'Home kitchen',
       budget: 50,
-      numberOfGuests: 6,
+      numberOfGuests: 8,
       contactName: 'Alex Johnson',
       contactEmail: 'alex@example.com',
       contactPhone: '+44 7700 900123',
-      notes: 'Nothing',
+      // Realistic notes so the menu-suitability analysis has signal to
+      // reason about: dietary requirements + budget context. Adjust freely
+      // in the editor on chefflow.uk to test other scenarios.
+      notes: [
+        '8 guests for a birthday dinner.',
+        'Anna and Ben are vegetarian (no meat or fish).',
+        'Carla has a confirmed peanut allergy — strict.',
+        'Dave (birthday) loves a classic steak with peppercorn sauce.',
+        'Budget is tight — try to come in around £50 total food cost.',
+        'Casual ambience, no formal courses needed.',
+      ].join('\n'),
       dishes: [ribeye, salad],
       sections: [
         { id: 's_demo_starters', name: 'Starters', dishIds: [salad.id] },
