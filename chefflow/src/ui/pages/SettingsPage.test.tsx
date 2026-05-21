@@ -99,7 +99,31 @@ describe('SettingsPage', () => {
     }
   });
 
-  it('retries Clerk user.reload() at ~2.5s if tier is still free (covers webhook latency)', async () => {
+  it('retries Clerk user.reload() on an exponential schedule covering ~p99 webhook latency', async () => {
+    // Schedule: t=0, t=1500ms, t=3500ms, t=7500ms. Each retry no-ops if
+    // tier has already flipped — here tier stays free so all 4 fire.
+    vi.useFakeTimers();
+    const reload = vi.fn(() => Promise.resolve());
+    (window as unknown as { Clerk: { user: { reload: () => Promise<void> } } }).Clerk = {
+      user: { reload },
+    };
+    useTierStore.setState({ tier: 'free' });
+    try {
+      renderPage(['/settings?upgraded=1']);
+      expect(reload).toHaveBeenCalledTimes(1);             // initial
+      await vi.advanceTimersByTimeAsync(1600);
+      expect(reload).toHaveBeenCalledTimes(2);             // +1500ms
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(reload).toHaveBeenCalledTimes(3);             // +3500ms cumulative
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(reload).toHaveBeenCalledTimes(4);             // +7500ms cumulative
+    } finally {
+      vi.useRealTimers();
+      delete (window as unknown as { Clerk?: unknown }).Clerk;
+    }
+  });
+
+  it('skips remaining retries once the tier flips to pro mid-schedule', async () => {
     vi.useFakeTimers();
     const reload = vi.fn(() => Promise.resolve());
     (window as unknown as { Clerk: { user: { reload: () => Promise<void> } } }).Clerk = {
@@ -109,12 +133,29 @@ describe('SettingsPage', () => {
     try {
       renderPage(['/settings?upgraded=1']);
       expect(reload).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(2600);
+      await vi.advanceTimersByTimeAsync(1600);
+      expect(reload).toHaveBeenCalledTimes(2);
+      // Simulate webhook arriving — tier flips to pro.
+      useTierStore.setState({ tier: 'pro' });
+      await vi.advanceTimersByTimeAsync(6000);
+      // No more reloads — the remaining timers check tier and short-circuit.
       expect(reload).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
       delete (window as unknown as { Clerk?: unknown }).Clerk;
     }
+  });
+
+  it('shows a "Still on Free? Refresh status" button when tier hasn\'t flipped', () => {
+    useTierStore.setState({ tier: 'free' });
+    renderPage(['/settings?upgraded=1']);
+    expect(screen.getByTestId('settings-manual-refresh')).toBeInTheDocument();
+  });
+
+  it('hides the manual refresh button once tier is pro', () => {
+    useTierStore.setState({ tier: 'pro' });
+    renderPage(['/settings?upgraded=1']);
+    expect(screen.queryByTestId('settings-manual-refresh')).toBeNull();
   });
 
   it('renders the Profile section with a name input', () => {

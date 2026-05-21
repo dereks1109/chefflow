@@ -25,6 +25,25 @@ export interface StrategyInput {
 
 export type StrategySource = 'llm' | 'local';
 
+/**
+ * Discriminated warning codes — structured rather than a string so the UI
+ * can render context-aware affordances (retry on 429, prompt for key on
+ * 401, "report bad LLM output" on validation, etc.). `cause` preserves the
+ * original Error for telemetry.
+ */
+export type StrategyWarningCode =
+  | 'llm-auth'        // 401 — bad / missing API key
+  | 'llm-rate-limit'  // 429 — too many requests
+  | 'llm-transport'   // network / 5xx / unknown HTTP error from Groq
+  | 'llm-validation'  // model returned malformed JSON or coverage failed
+  | 'llm-unknown';    // any other thrown error from the LLM path
+
+export interface StrategyWarning {
+  code: StrategyWarningCode;
+  message: string;
+  cause?: unknown;
+}
+
 export interface StrategyResult {
   steps: ScheduledStep[];
   /** Which scheduler produced the timeline. UI uses this to render the
@@ -32,7 +51,7 @@ export interface StrategyResult {
   source: StrategySource;
   /** Non-fatal warnings — populated when the LLM path failed and we fell
    *  through to local. Empty when the LLM path succeeded. */
-  warnings: string[];
+  warnings: StrategyWarning[];
   /** Echoed back for telemetry parity with scheduleEventLLM. */
   modelUsed?: string;
 }
@@ -87,16 +106,16 @@ export async function scheduleWithFallback(input: StrategyInput): Promise<Strate
   } catch (err) {
     if (input.signal?.aborted) throw err;
     llmError = err;
-    // Fall through to local. Build a single warning string so the caller
-    // can render it inline next to the fallback timeline.
-    const warning = formatLlmWarning(err);
+    // Fall through to local. Build a structured warning so the UI can
+    // render code-specific affordances next to the fallback timeline.
+    const warning = classifyLlmError(err);
     return runLocal(input, [warning], llmError);
   }
 }
 
 function runLocal(
   input: StrategyInput,
-  warnings: string[],
+  warnings: StrategyWarning[],
   llmError?: unknown,
 ): StrategyResult {
   try {
@@ -116,15 +135,17 @@ function runLocal(
   }
 }
 
-function formatLlmWarning(err: unknown): string {
+function classifyLlmError(err: unknown): StrategyWarning {
   if (err instanceof GroqClientError) {
-    if (err.status === 401) return 'LLM auth failed — using local fallback.';
-    if (err.status === 429) return 'LLM rate-limited — using local fallback.';
-    return `LLM transport error — using local fallback.`;
+    if (err.status === 401) return { code: 'llm-auth', message: 'LLM auth failed — using local fallback.', cause: err };
+    if (err.status === 429) return { code: 'llm-rate-limit', message: 'LLM rate-limited — using local fallback.', cause: err };
+    return { code: 'llm-transport', message: 'LLM transport error — using local fallback.', cause: err };
   }
   if (err instanceof LlmValidationError) {
-    return 'LLM returned an invalid workflow — using local fallback.';
+    return { code: 'llm-validation', message: 'LLM returned an invalid workflow — using local fallback.', cause: err };
   }
-  if (err instanceof Error) return `LLM failed (${err.message}) — using local fallback.`;
-  return 'LLM failed — using local fallback.';
+  if (err instanceof Error) {
+    return { code: 'llm-unknown', message: `LLM failed (${err.message}) — using local fallback.`, cause: err };
+  }
+  return { code: 'llm-unknown', message: 'LLM failed — using local fallback.' };
 }

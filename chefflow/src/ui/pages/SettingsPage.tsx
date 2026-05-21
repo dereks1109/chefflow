@@ -56,32 +56,48 @@ export default function SettingsPage() {
   const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
 
   // After a successful Checkout, the success_url drops us here with
-  // ?upgraded=1. There's a small race: the user can land here before the
-  // Stripe webhook has finished writing tier=pro to Clerk publicMetadata.
-  // So we reload Clerk twice — once immediately, once at 2.5s — to cover
-  // the typical webhook latency window. If the tier is still 'free' after
-  // both, the user can reload manually; we don't want to spin forever.
+  // ?upgraded=1. The Stripe webhook usually beats the user back to this
+  // page, but the long tail goes >5s. We retry Clerk.user.reload() on an
+  // exponential schedule covering ~p99 webhook latency. Each retry is
+  // skipped if the tier has already flipped to pro.
   useEffect(() => {
     if (!justUpgraded || e2eMode) return;
     const clerk = (window as unknown as {
       Clerk?: { user?: { reload(): Promise<unknown> } };
     }).Clerk;
-    void clerk?.user?.reload?.().catch(() => { /* surface in UI via TierSync's next read */ });
-    const retryTimer = setTimeout(() => {
-      if (tier === 'free') void clerk?.user?.reload?.().catch(() => {});
-    }, 2500);
+    const reload = () => clerk?.user?.reload?.().catch(() => { /* swallow */ });
+
+    void reload();
+    // Schedule cumulative-time retries: 1.5s, 3.5s, 7.5s. Each one no-ops
+    // if useTierStore already reports pro (set by TierSync on prior reload).
+    const RETRY_DELAYS_MS = [1500, 3500, 7500] as const;
+    const timers = RETRY_DELAYS_MS.map((delay) =>
+      setTimeout(() => {
+        if (useTierStore.getState().tier === 'free') void reload();
+      }, delay),
+    );
+    // After 10s, strip the query param so a reload doesn't keep firing
+    // this effect. The manual "Refresh status" button below picks up where
+    // we leave off.
     const stripTimer = setTimeout(() => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.delete('upgraded');
         return next;
       }, { replace: true });
-    }, 8000);
+    }, 10000);
     return () => {
-      clearTimeout(retryTimer);
+      timers.forEach(clearTimeout);
       clearTimeout(stripTimer);
     };
-  }, [justUpgraded, setSearchParams, e2eMode, tier]);
+  }, [justUpgraded, setSearchParams, e2eMode]);
+
+  async function manualRefreshTier() {
+    const clerk = (window as unknown as {
+      Clerk?: { user?: { reload(): Promise<unknown> } };
+    }).Clerk;
+    await clerk?.user?.reload?.().catch(() => undefined);
+  }
 
   // Load today's usage snapshot.
   useEffect(() => {
@@ -114,9 +130,23 @@ export default function SettingsPage() {
           className="flex items-start gap-2 rounded-lg border border-emerald-300 bg-emerald-50 dark:border-emerald-700/40 dark:bg-emerald-900/20 px-4 py-3 text-sm text-emerald-800 dark:text-emerald-200"
         >
           <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
-          <div>
+          <div className="flex-1">
             <p className="font-semibold">Welcome to Pro.</p>
-            <p className="text-xs mt-0.5">Refreshing your account — daily limits should lift in a few seconds.</p>
+            {tier === 'pro' || tier === 'business' ? (
+              <p className="text-xs mt-0.5">Your plan is active. Daily limits have lifted.</p>
+            ) : (
+              <>
+                <p className="text-xs mt-0.5">Refreshing your account — daily limits should lift in a few seconds.</p>
+                <button
+                  type="button"
+                  onClick={() => void manualRefreshTier()}
+                  data-testid="settings-manual-refresh"
+                  className="mt-2 text-xs inline-flex items-center gap-1 px-2 py-1 rounded-md border border-emerald-400 dark:border-emerald-700 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30"
+                >
+                  Still on Free? Refresh status
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
