@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, ChevronDown, ChevronUp, Clock, Edit3, Hand, Trash2, Users, Wallet } from 'lucide-react';
-import type { ColorTag, Dish } from '../../core/types';
+import type { ColorTag, Dish, Recipe } from '../../core/types';
 import { formatTime, toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
 import ColorPicker from './ColorPicker';
@@ -63,6 +63,21 @@ interface Props {
    * using that recipe. Omit when the dish has no linked recipe to edit.
    */
   onPricePerPortionChange?: (next: number | undefined) => void;
+  /**
+   * Library of recipes available for the inline name autocomplete.
+   * When provided alongside `onLinkRecipe`, the name editor surfaces a
+   * dropdown of matching recipes (substring match on title, max 6).
+   * Picking a match calls `onLinkRecipe` instead of `onNameChange`.
+   * Omit to disable autocomplete — the input behaves as a plain text
+   * field that commits via `onNameChange`.
+   */
+  recipes?: readonly Recipe[];
+  /**
+   * Called when the user picks a recipe from the name-edit dropdown.
+   * The caller should set BOTH `dish.recipeId` and `dish.name` (the
+   * recipe's title) so the row reflects the link immediately.
+   */
+  onLinkRecipe?: (recipe: Recipe) => void;
 }
 
 export default function DishRow({
@@ -82,6 +97,8 @@ export default function DishRow({
   onNotesChange,
   pricePerPortion,
   onPricePerPortionChange,
+  recipes,
+  onLinkRecipe,
 }: Props) {
   // Each inline-edit mode is independent so opening one doesn't disrupt the
   // others. They share the same stop-propagation guards to keep @hello-pangea/dnd
@@ -91,6 +108,29 @@ export default function DishRow({
   const [editingPortions, setEditingPortions] = useState(false);
   const [editingNotes, setEditingNotes] = useState(false);
   const [editingPrice, setEditingPrice] = useState(false);
+
+  // Controlled input value used while the name editor is open. Lets us
+  // filter the recipe-autocomplete dropdown live as the user types and
+  // keep the displayed value in sync with what they've typed.
+  const [nameQuery, setNameQuery] = useState(value.name);
+  // Reset the query each time the editor opens — keeps it pinned to the
+  // current dish name if the user re-opens after a previous commit.
+  useEffect(() => {
+    if (editingName) setNameQuery(value.name);
+  }, [editingName, value.name]);
+
+  const recipeMatches = useMemo(() => {
+    if (!recipes || !editingName) return [];
+    const q = nameQuery.trim().toLowerCase();
+    if (q.length === 0) return [];
+    return recipes.filter((r) => r.title.toLowerCase().includes(q)).slice(0, 6);
+  }, [recipes, editingName, nameQuery]);
+
+  function pickRecipe(r: Recipe) {
+    if (!onLinkRecipe) return;
+    onLinkRecipe(r);
+    setEditingName(false);
+  }
 
   const timeInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -256,13 +296,16 @@ export default function DishRow({
             </div>
 
             {/* Name — promoted in size; recipe link + ready badge stay
-                attached so they read as a single unit. */}
-            <div className="inline-flex items-center gap-2 min-w-0">
+                attached so they read as a single unit. When editing, the
+                input is controlled so the recipe-search dropdown can
+                filter live as the chef types. */}
+            <div className="inline-flex items-center gap-2 min-w-0 relative">
               {editingName && onNameChange ? (
                 <input
                   ref={nameInputRef}
                   type="text"
-                  defaultValue={value.name}
+                  value={nameQuery}
+                  onChange={(e) => setNameQuery(e.target.value)}
                   onBlur={(e) => commitName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -280,6 +323,7 @@ export default function DishRow({
                   className="text-sm font-semibold text-slate-900 dark:text-slate-100 bg-transparent border-b border-slate-300 dark:border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5 min-w-0"
                   aria-label={`Dish ${index + 1} name`}
                   placeholder="Dish name"
+                  autoComplete="off"
                 />
               ) : onNameChange ? (
                 <button
@@ -310,6 +354,34 @@ export default function DishRow({
                   <Hand className="h-3 w-3" aria-hidden="true" />
                   ready
                 </span>
+              )}
+              {/* Recipe-name autocomplete — mirrors DishForm's behaviour
+                  so the inline editor matches the modal. Uses
+                  onMouseDown.preventDefault on each row so the input's
+                  blur doesn't fire before the click handler. */}
+              {editingName && onLinkRecipe && recipeMatches.length > 0 && (
+                <ul
+                  className="absolute top-full left-0 z-20 mt-1 w-72 max-w-[18rem] max-h-48 overflow-auto rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink shadow-lg"
+                  role="listbox"
+                  aria-label={`Recipe suggestions for dish ${index + 1}`}
+                >
+                  {recipeMatches.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => pickRecipe(r)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                      >
+                        <BookOpen className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+                        <span className="flex-1 truncate">{r.title}</span>
+                        <span className="text-xs text-slate-500 shrink-0">
+                          {r.originalYield} portion{r.originalYield === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
 

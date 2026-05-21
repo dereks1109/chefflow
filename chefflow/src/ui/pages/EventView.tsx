@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   DragDropContext,
@@ -11,7 +11,7 @@ import {
 import { randomId } from '../../core/util/id';
 import { ArrowLeft, Calendar, Edit3, ExternalLink, GripVertical, Layers, Mail, MapPin, Phone, Plus, Sparkles, StickyNote, Trash2, User, Users, Wallet } from 'lucide-react';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
-import { getRecipe, saveRecipe } from '../../db/recipesRepo';
+import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import EventDetailsSheet from '../components/EventDetailsSheet';
@@ -37,10 +37,17 @@ export default function EventView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
-  // Recipe lookup keyed by recipeId. Populated after the event loads so dishes
-  // can be priced (recipe.pricePerPortion × dish.portions) for the per-dish
-  // line + event-total summary.
-  const [recipesById, setRecipesById] = useState<Map<string, Recipe>>(new Map());
+  // Full recipe library — loaded once per mount. Used three ways:
+  //   1) `recipesById` (derived Map) prices dishes for the per-dish line +
+  //      event-total summary.
+  //   2) `recipeMatches` autocomplete in DishRow's inline name editor.
+  //   3) Local writes via `setRecipePricePerPortion` patch the same array
+  //      in place so the affected row re-renders without a refetch.
+  const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
+  const recipesById = useMemo(
+    () => new Map(allRecipes.map((r) => [r.id, r])),
+    [allRecipes],
+  );
   const [addDishUi, setAddDishUi] = useState<AddDishUi>({ open: false });
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
 
@@ -54,30 +61,19 @@ export default function EventView() {
     return () => { cancelled = true; };
   }, [id]);
 
+  // Load the full recipe library once on mount so the autocomplete dropdown
+  // can search across all titles, not just those already linked to a dish.
+  // Per-dish lookups go through the derived `recipesById` Map (above).
   useEffect(() => {
-    if (state.kind !== 'ready') return;
-    const ids = Array.from(
-      new Set(
-        state.event.dishes
-          .map((d) => d.recipeId)
-          .filter((rid): rid is string => Boolean(rid)),
-      ),
-    );
-    if (ids.length === 0) {
-      setRecipesById(new Map());
-      return;
-    }
     let cancelled = false;
-    void Promise.all(ids.map((rid) => getRecipe(rid))).then((loaded) => {
+    void listRecipes().then((all) => {
       if (cancelled) return;
-      const next = new Map<string, Recipe>();
-      for (const r of loaded) if (r) next.set(r.id, r);
-      setRecipesById(next);
+      setAllRecipes(all);
     });
     return () => {
       cancelled = true;
     };
-  }, [state]);
+  }, []);
 
   if (state.kind === 'loading') return <div className="p-6 text-slate-500">Loading…</div>;
   if (state.kind === 'not-found') {
@@ -222,18 +218,31 @@ export default function EventView() {
   }
 
   // Writes back to the LINKED RECIPE, not the dish — there's no dish-level
-  // price field. Refreshes recipesById in place so the affected timeline row
-  // re-renders without a round-trip through the recipe-loading useEffect.
+  // price field. Patches the local allRecipes array in place so the derived
+  // recipesById Map updates and the affected timeline row re-renders without
+  // a round-trip through the recipe-loading useEffect.
   async function setRecipePricePerPortion(recipeId: string, next: number | undefined) {
     const existing = recipesById.get(recipeId);
     if (!existing) return;
     const updated: Recipe = { ...existing, pricePerPortion: next, updatedAt: Date.now() };
     await saveRecipe(updated);
-    setRecipesById((prev) => {
-      const copy = new Map(prev);
-      copy.set(recipeId, updated);
-      return copy;
-    });
+    setAllRecipes((prev) => prev.map((r) => (r.id === recipeId ? updated : r)));
+  }
+
+  // Picked from the name-edit autocomplete dropdown. Sets BOTH dish.recipeId
+  // and dish.name (= recipe.title) so the row reflects the link immediately.
+  async function linkRecipeToDish(dishId: string, recipe: Recipe) {
+    const next: KitchenEvent = {
+      ...e,
+      dishes: e.dishes.map((d) =>
+        d.id === dishId
+          ? { ...d, recipeId: recipe.id, name: recipe.title, isPrepared: false }
+          : d,
+      ),
+      updatedAt: Date.now(),
+    };
+    await saveEvent(next);
+    setState({ kind: 'ready', event: next });
   }
 
   async function confirmAddDish(newDish: Dish) {
@@ -443,6 +452,10 @@ export default function EventView() {
                                         d.recipeId
                                           ? (next) => void setRecipePricePerPortion(d.recipeId!, next)
                                           : undefined
+                                      }
+                                      recipes={allRecipes}
+                                      onLinkRecipe={(recipe) =>
+                                        void linkRecipeToDish(d.id, recipe)
                                       }
                                       onMoveUp={() => undefined}
                                       onMoveDown={() => undefined}

@@ -135,6 +135,52 @@ describe('DishRow — click-to-edit notes', () => {
   });
 });
 
+describe('DishRow — recipe autocomplete on name editor', () => {
+  const recipes = [
+    {
+      id: 'r_beef',
+      title: 'Beef bourguignon',
+      originalYield: 4,
+      ingredients: [],
+      steps: [],
+      createdAt: 1,
+      updatedAt: 1,
+    },
+    {
+      id: 'r_lamb',
+      title: 'Lamb tagine',
+      originalYield: 4,
+      ingredients: [],
+      steps: [],
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  ];
+
+  it('shows matching recipes as the chef types in the name editor', async () => {
+    renderRow({ onNameChange: () => undefined, recipes, onLinkRecipe: () => undefined });
+    await userEvent.click(screen.getByRole('button', { name: /edit name for dish/i }));
+    const input = screen.getByLabelText(/dish .* name/i) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, 'beef');
+    expect(screen.getByRole('listbox', { name: /recipe suggestions/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Beef bourguignon/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Lamb tagine/ })).toBeNull();
+  });
+
+  it('calls onLinkRecipe when a suggestion is clicked', async () => {
+    const onLinkRecipe = vi.fn();
+    renderRow({ onNameChange: () => undefined, recipes, onLinkRecipe });
+    await userEvent.click(screen.getByRole('button', { name: /edit name for dish/i }));
+    const input = screen.getByLabelText(/dish .* name/i) as HTMLInputElement;
+    await userEvent.clear(input);
+    await userEvent.type(input, 'lamb');
+    await userEvent.click(screen.getByRole('button', { name: /Lamb tagine/ }));
+    expect(onLinkRecipe).toHaveBeenCalledTimes(1);
+    expect(onLinkRecipe.mock.calls[0][0].id).toBe('r_lamb');
+  });
+});
+
 describe('DishRow — click-to-edit price per portion', () => {
   it('shows "+ Add price" when the recipe has no price and an edit handler is provided', () => {
     const onPricePerPortionChange = vi.fn();
