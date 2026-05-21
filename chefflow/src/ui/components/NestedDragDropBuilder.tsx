@@ -29,6 +29,10 @@ export interface DndStepMeta {
   rules?: number[];
   /** Color tag (sourced from the step's dish on the workflow page). */
   colorTag?: ColorTag;
+  /** Multiple dish tags — used by the Order-list milestone where one
+   *  ingredient row aggregates across several dishes. Each entry renders
+   *  as a small slate chip. Mutually exclusive in practice with `dish`. */
+  dishTags?: string[];
 }
 
 export interface DndStep {
@@ -589,7 +593,8 @@ function MilestoneHeader({
 // generic recipe builder leaves it off).
 // ---------------------------------------------------------------------------
 function StepMetaLine({ meta }: { meta: DndStepMeta }) {
-  if (!meta.time && !meta.dish) return null;
+  const hasTags = Array.isArray(meta.dishTags) && meta.dishTags.length > 0;
+  if (!meta.time && !meta.dish && !hasTags) return null;
   return (
     <div className="mt-1 pl-9 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
       {meta.time && (
@@ -600,6 +605,14 @@ function StepMetaLine({ meta }: { meta: DndStepMeta }) {
           {meta.dish}
         </span>
       )}
+      {hasTags && meta.dishTags!.map((tag, i) => (
+        <span
+          key={`${tag}-${i}`}
+          className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+        >
+          {tag}
+        </span>
+      ))}
     </div>
   );
 }

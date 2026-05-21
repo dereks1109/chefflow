@@ -27,6 +27,7 @@ import {
   StrategyError,
   hashDishes,
 } from '../../core/scheduler';
+import { aggregateIngredients } from '../../core/recipes/aggregateIngredients';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
   ColorTag,
@@ -69,9 +70,17 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Format a numeric amount with its unit, trimming trailing zeros for
+ *  display (3.00 → 3, 1.5 → 1.5). Used by the Order list milestone. */
+function formatLineAmount(amount: number, unit: string): string {
+  const trimmed = Number.isInteger(amount) ? String(amount) : String(amount).replace(/\.?0+$/, '');
+  return `${trimmed} ${unit}`.trim();
+}
+
 export function scheduledStepsToMilestones(
   steps: ScheduledStep[],
   dishes: readonly Dish[] = [],
+  orderList?: { lines: { amount: number; unit: string; name: string; dishNames: string[] }[]; warnings: { message: string }[] },
 ): DndMilestone[] {
   const dishById = new Map(dishes.map((d) => [d.id, d]));
   const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
@@ -81,6 +90,35 @@ export function scheduledStepsToMilestones(
     byPhase.get(step.phase)!.push(step);
   }
   const milestones: DndMilestone[] = [];
+
+  // Prepend a synthetic "Order list" milestone aggregating ingredients
+  // across every dish in the event. Steps inside don't carry timing /
+  // dependencies — they're a read-only shopping list. Each step's
+  // meta.dishTags lists the dishes the ingredient is used in.
+  if (orderList && (orderList.lines.length > 0 || orderList.warnings.length > 0)) {
+    const itemCount = orderList.lines.length;
+    const orderSteps = orderList.lines.map((line, idx) => ({
+      id: `order-${idx}`,
+      content: `${formatLineAmount(line.amount, line.unit)} ${line.name}`,
+      meta: {
+        dishTags: line.dishNames,
+      },
+    }));
+    // Surface aggregation warnings as muted entries at the end of the list.
+    for (const w of orderList.warnings) {
+      orderSteps.push({
+        id: `order-warn-${orderSteps.length}`,
+        content: `⚠ ${w.message}`,
+        meta: { dishTags: [] },
+      });
+    }
+    milestones.push({
+      id: 'phase-order-list',
+      title: `Order list — ${itemCount} item${itemCount === 1 ? '' : 's'}`,
+      steps: orderSteps,
+    });
+  }
+
   for (const phase of PHASE_ORDER) {
     const stepsForPhase = byPhase.get(phase) ?? [];
     if (stepsForPhase.length === 0) continue;
@@ -115,6 +153,10 @@ export function milestonesToScheduledSteps(
 ): ScheduledStep[] {
   const ordered: ScheduledStep[] = [];
   for (const milestone of milestones) {
+    // The synthetic order-list milestone is UI-only; its "steps" are
+    // aggregated ingredients, not ScheduledSteps. Skip cleanly so the
+    // saved workflow snapshot stays a pure ScheduledStep[].
+    if (milestone.id === 'phase-order-list') continue;
     const inferredPhase = MILESTONE_ID_TO_PHASE[milestone.id];
     for (const dndStep of milestone.steps) {
       const original = byOriginalId.get(dndStep.id);
@@ -315,7 +357,10 @@ export default function Workflow() {
   const visibleSteps = chefFilter
     ? scheduled.filter((s) => dishById.get(s.dishId)?.colorTag === chefFilter)
     : scheduled;
-  const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes);
+  // Order list is event-wide (every chef shops the same list) — only show
+  // in the All view; suppress when filtering by chef to avoid confusion.
+  const orderList = chefFilter ? undefined : aggregateIngredients({ event, recipes: recipesMap });
+  const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes, orderList);
 
   function handleBuilderChange(nextMilestones: DndMilestone[]) {
     const next = milestonesToScheduledSteps(nextMilestones, scheduledById, serveAt);
