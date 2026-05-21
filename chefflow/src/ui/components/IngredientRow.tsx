@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, Link as LinkIcon, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
 import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
@@ -113,9 +113,6 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                   {expanded ? <ChevronDown className="h-4 w-4" aria-hidden="true" /> : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
                 </button>
               )}
-              {hasPickedRecipe && (
-                <LinkIcon className="h-3.5 w-3.5 text-accent shrink-0" aria-hidden="true" />
-              )}
               <input
                 type="text"
                 value={value.name}
@@ -166,7 +163,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                   if (v) addFlag(v);
                 }}
                 className="text-xs rounded border border-slate-300 dark:border-slate-700
-                           bg-transparent text-slate-600 dark:text-slate-400 px-1 py-0.5"
+                           bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
                 aria-label="Flag an allergen on this ingredient"
               >
                 <option value="">{hasAllergens ? '+ add allergen' : '+ flag allergen'}</option>

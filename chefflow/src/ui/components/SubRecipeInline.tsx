@@ -47,7 +47,7 @@ export default function SubRecipeInline({ recipeId }: Props) {
   return (
     <article
       data-testid={`sub-recipe-inline-${recipe.id}`}
-      className="mt-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-surface-2 p-3 text-sm"
+      className="mt-2 ml-8 rounded-md border border-slate-200 dark:border-slate-700 border-l-2 border-l-accent/40 dark:border-l-accent/60 bg-slate-50 dark:bg-surface-2 p-3 text-sm"
     >
       <header className="flex items-baseline justify-between gap-2 mb-2">
         <div className="min-w-0">
