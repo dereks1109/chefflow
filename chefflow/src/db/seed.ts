@@ -1,11 +1,16 @@
 import { db } from './dexie';
 import { randomId } from '../core/util/id';
 import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, RecipeAnalysis } from '../core/types';
+// Vite's ?inline bakes these JPEGs into the bundle as base64 data URLs so the
+// demo recipes seed with cover photos without standing up object storage.
+import ribeyePhoto from '../assets/demo/ribeye.jpeg?inline';
+import saladPhoto from '../assets/demo/salad.jpeg?inline';
+import soupPhoto from '../assets/demo/tomatosoup.jpeg?inline';
 
 // Bump when demo recipe content changes — existing IndexedDB copies are
-// overwritten on next load so chefs see the new fields. v3 adds analysis +
-// pricePerPortion to the three demo recipes.
-const SEED_FLAG = 'chefflow:seeded-demo-v3';
+// overwritten on next load so chefs see the new fields. v4 adds coverPhoto
+// to the three demo recipes.
+const SEED_FLAG = 'chefflow:seeded-demo-v4';
 // v5 adds numberOfGuests on the demo event (now a structured field instead
 // of being buried in the freeform notes).
 const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v5';
@@ -43,6 +48,7 @@ function makeRecipe(
   steps: WorkflowStep[],
   pricePerPortion: number,
   analysis: Omit<RecipeAnalysis, 'analyzedAt' | 'source'>,
+  coverPhoto: string,
 ): Recipe {
   const now = Date.now();
   return {
@@ -56,6 +62,7 @@ function makeRecipe(
     createdAt: now,
     updatedAt: now,
     pricePerPortion,
+    coverPhoto,
     analysis: {
       ...analysis,
       analyzedAt: now,
@@ -94,6 +101,7 @@ function demoRecipes(): Recipe[] {
         keyIngredientTags: ['beef', 'butter', 'garlic'],
         allergens: ['milk'],
       },
+      ribeyePhoto,
     ),
     makeRecipe(
       'r_demo_salad',
@@ -123,6 +131,7 @@ function demoRecipes(): Recipe[] {
         keyIngredientTags: ['lettuce', 'tomato', 'cucumber'],
         allergens: [],
       },
+      saladPhoto,
     ),
     makeRecipe(
       'r_demo_soup',
@@ -155,6 +164,7 @@ function demoRecipes(): Recipe[] {
         keyIngredientTags: ['tomato', 'basil', 'cream'],
         allergens: ['milk'],
       },
+      soupPhoto,
     ),
   ];
 }
