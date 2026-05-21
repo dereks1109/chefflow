@@ -38,8 +38,8 @@ type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => 
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Stripe-Signature',
 } as const;
 
 function json(body: unknown, status: number, extra: Record<string, string> = {}): Response {

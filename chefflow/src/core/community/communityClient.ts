@@ -2,6 +2,7 @@
 // of `quotaClient` — same Clerk JWT fetch, same E2E bypass.
 
 import type { Recipe } from '../types';
+import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 
 export interface CommunityRecipe {
   id: string;
@@ -55,7 +56,7 @@ interface Options {
 }
 
 function originOf(opts: Options): string {
-  return (opts.origin ?? '').replace(/\/+$/, '');
+  return (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
 }
 
 /**

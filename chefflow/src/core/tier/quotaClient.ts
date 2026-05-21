@@ -1,3 +1,5 @@
+import { getWorkerBaseUrl } from '../util/workerBaseUrl';
+
 // ---------------------------------------------------------------------------
 // Client for the chefflow-worker /quota endpoints. Modelled on `proxyClient`
 // (Clerk JWT via window.Clerk, same Authorization header, same origin
@@ -74,7 +76,7 @@ export async function consumeDailyQuota(opts: ConsumeOptions): Promise<QuotaSnap
   if (!token) throw new QuotaClientError('Not signed in', 401);
 
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  const origin = (opts.origin ?? '').replace(/\/+$/, '');
+  const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const res = await fetchImpl(`${origin}/quota/consume`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -106,7 +108,7 @@ export async function getQuotaSnapshot(opts: SnapshotOptions = {}): Promise<Quot
   if (!token) throw new QuotaClientError('Not signed in', 401);
 
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  const origin = (opts.origin ?? '').replace(/\/+$/, '');
+  const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const res = await fetchImpl(`${origin}/quota/snapshot`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${token}` },
@@ -132,7 +134,7 @@ export async function createCheckoutUrl(
   const token = await getClerkToken();
   if (!token) throw new QuotaClientError('Not signed in', 401);
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  const origin = (opts.origin ?? '').replace(/\/+$/, '');
+  const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const res = await fetchImpl(`${origin}/billing/checkout-session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -149,7 +151,7 @@ export async function createPortalUrl(opts: BillingOptions = {}): Promise<string
   const token = await getClerkToken();
   if (!token) throw new QuotaClientError('Not signed in', 401);
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
-  const origin = (opts.origin ?? '').replace(/\/+$/, '');
+  const origin = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const res = await fetchImpl(`${origin}/billing/portal-session`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },

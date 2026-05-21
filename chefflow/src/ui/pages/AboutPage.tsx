@@ -102,7 +102,7 @@ export default function AboutPage() {
         >
           Built For
         </h2>
-        <ul className="grid grid-cols-1 lg:grid-cols-3 gap-4 list-none p-0">
+        <ul className="grid grid-cols-1 sm:grid-cols-3 gap-4 list-none p-0">
           {builtFor.map(({ icon: Icon, heading, body }) => (
             <li
               key={heading}
@@ -126,7 +126,7 @@ export default function AboutPage() {
         </h2>
         <ol
           aria-label="ChefFlow three-step workflow"
-          className="flex flex-col sm:flex-row items-center gap-2 list-none p-0"
+          className="flex flex-col sm:flex-row items-center justify-center gap-2 list-none p-0"
         >
           {flowSteps.map((step, i) => (
             <li key={step.label} className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
