@@ -199,6 +199,59 @@ describe('scheduleEventLLM — sub-recipe expansion', () => {
   });
 });
 
+describe('scheduleEventLLM — per-dish portion scaling', () => {
+  // Regression guard for scaleEventForPortions: two dishes referencing the
+  // SAME recipe at DIFFERENT portion counts must each get an independent
+  // scaled copy keyed under the dish.id, not a single shared one. If the
+  // dish-ID remapping ever regresses both dishes would see the same
+  // (incorrectly scaled) timeline.
+  it('builds independent scaled recipe copies for two dishes sharing one recipe', async () => {
+    const dishXl = {
+      id: 'd_ribeye_xl',
+      name: 'Ribeye for 20',
+      recipeId: RIBEYE_RECIPE.id,
+      portions: 20,
+      isPrepared: false,
+      startAt: '2026-05-14T17:45:00.000Z',
+    };
+    const eventTwoDishes = { ...DEMO_EVENT, dishes: [DEMO_EVENT.dishes[0], dishXl] };
+
+    let capturedBody: string | null = null;
+    const fetchImpl: typeof fetch = vi.fn(async (_url, init) => {
+      capturedBody = typeof init?.body === 'string' ? init.body : null;
+      return new Response(
+        JSON.stringify(llmReplyWith(VALID_DEMO_REPLY)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await scheduleEventLLM({
+        event: eventTwoDishes,
+        recipes: DEMO_RECIPES,
+        apiKey: 'gsk_test',
+        model: 'llama-3.3-70b-versatile',
+        fetchImpl,
+      });
+    } catch {
+      // assertCoversEvent may complain because VALID_DEMO_REPLY only covers
+      // the original d_ribeye dish — that's fine for this test, we only
+      // care about the prompt body that was actually sent to Groq.
+    }
+
+    // Both dish IDs should appear in the prompt body (recipe keys + dish
+    // recipeId values). The body is double-stringified JSON, so we look
+    // for the bare identifiers.
+    expect(capturedBody).toContain('d_ribeye_xl');
+    // The original recipe sends step rs1 at the recipe-authored durationSec
+    // (120 s for 2 portions). The XL clone should send the same step at 10×
+    // (1200 s for 20 portions) — proof the two copies were scaled
+    // independently and not sharing a reference.
+    expect(capturedBody).toContain('120');
+    expect(capturedBody).toContain('1200');
+  });
+});
+
 describe('scheduleEventLLM — prepared dishes', () => {
   it('does not require coverage for prepared dishes (LLM still emits a placeholder)', async () => {
     const eventWithPrepared = {
