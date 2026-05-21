@@ -20,8 +20,8 @@ import LlmSettingsSheet from '../components/LlmSettingsSheet';
 import { saveEvent } from '../../db/eventsRepo';
 import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import { formatDateTime } from '../../core/util/datetime';
-import { scheduleEventLLM, GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
-import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
+import { GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
+import { scheduleWithFallback, StrategyError } from '../../core/scheduler/strategy';
 import { hashDishes } from '../../core/scheduler/hash';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
@@ -213,14 +213,14 @@ export default function Workflow() {
   // Defined before the sync-effect that calls it, but doesn't need to be a
   // hook itself — it reads `apiKey` / `model` via closure each call.
   // -------------------------------------------------------------------------
-  async function runLlm(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
+  async function runSchedule(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
     inflight.current?.abort();
     const controller = new AbortController();
     inflight.current = controller;
 
     setWorkflowStatus({ kind: 'generating' });
     try {
-      const { steps } = await scheduleEventLLM({
+      const result = await scheduleWithFallback({
         event: eventToSchedule,
         recipes,
         apiKey,
@@ -228,34 +228,18 @@ export default function Workflow() {
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      setScheduled(steps);
-      setIsFallback(false);
+      setScheduled(result.steps);
+      setIsFallback(result.source === 'local');
       setDirty(false);
       setWorkflowStatus({ kind: 'ready' });
     } catch (err) {
       if (controller.signal.aborted) return;
-      // LLM failed — fall back to the local deterministic scheduler so the
-      // chef still gets a usable timeline. If the fallback also throws,
-      // surface the original LLM error.
-      const fallbackSteps = tryLocalSchedule(eventToSchedule, recipes);
-      if (fallbackSteps) {
-        setScheduled(fallbackSteps);
-        setIsFallback(true);
-        setDirty(false);
-        setWorkflowStatus({ kind: 'ready' });
-        return;
-      }
-      setWorkflowStatus({ kind: 'error', message: friendlyError(err) });
+      // Both LLM and local scheduler failed — strategy raised StrategyError.
+      // Show the LLM error (more user-actionable) when present; otherwise
+      // the local one.
+      const stratErr = err instanceof StrategyError ? (err.llmError ?? err.localError) : err;
+      setWorkflowStatus({ kind: 'error', message: friendlyError(stratErr) });
     }
-  }
-
-  function runLocalFallback(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
-    const steps = tryLocalSchedule(eventToSchedule, recipes);
-    if (!steps) return;
-    setScheduled(steps);
-    setIsFallback(true);
-    setDirty(false);
-    setWorkflowStatus({ kind: 'ready' });
   }
 
   // -------------------------------------------------------------------------
@@ -284,13 +268,9 @@ export default function Workflow() {
     }
 
     setLoadedFromSnapshot(false);
-    if (!isReady) {
-      // No Groq key — still render a usable timeline via the local
-      // deterministic scheduler instead of a dead "Connect Groq" screen.
-      runLocalFallback(live, recipesMap);
-      return;
-    }
-    void runLlm(live, recipesMap);
+    // Single seam — strategy decides LLM vs local. Empty apiKey falls
+    // through to local automatically (no special-casing here).
+    void runSchedule(live, recipesMap);
   // runLlm/recipesMap/isReady are intentionally not in deps — we only react
   // to event-version changes. Capturing them would cause re-runs on
   // unrelated re-renders (e.g. setSettingsOpen).
@@ -382,7 +362,7 @@ export default function Workflow() {
     // Pre-mark so the sync-effect's next pass (triggered by the live-query
     // refresh) skips its branch — we run the LLM here directly.
     syncedVersionRef.current = `${cleared.id}::no-snapshot`;
-    await runLlm(cleared, recipesMap);
+    await runSchedule(cleared, recipesMap);
   }
 
   const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
@@ -622,7 +602,7 @@ export default function Workflow() {
           setSettingsOpen(false);
           // If user just provided a key while we were stuck on needs-key, kick off the LLM.
           if (workflowStatus.kind === 'needs-key' && useLlmSettingsStore.getState().isReady()) {
-            void runLlm(event, recipesMap);
+            void runSchedule(event, recipesMap);
           }
         }}
       />
@@ -636,23 +616,6 @@ export default function Workflow() {
 // one-liner. Keeps the original message for context but strips stack frames
 // and adds a hint when the cause is well-known.
 // ---------------------------------------------------------------------------
-// Defensive wrapper around the local deterministic scheduler. Returns
-// null on any failure (caller falls back to its existing error path) —
-// the scheduler is pure but can throw on degenerate inputs and we'd rather
-// degrade gracefully than crash the page.
-function tryLocalSchedule(
-  event: KitchenEvent,
-  recipes: Map<string, Recipe>,
-): ScheduledStep[] | null {
-  try {
-    const steps = scheduleEvent({ event, recipes });
-    if (steps.length === 0) return null;
-    return steps;
-  } catch {
-    return null;
-  }
-}
-
 function friendlyError(err: unknown): string {
   if (err instanceof GroqClientError) {
     if (err.status === 401) return 'Invalid API key. Check your Groq key in settings.';
