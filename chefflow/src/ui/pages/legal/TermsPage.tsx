@@ -12,7 +12,7 @@ export default function TermsPage() {
         you do not agree, do not use the service.
       </p>
 
-      <h2 id="acceptance">1. Acceptance</h2>
+      <h2 id="acceptance" className="text-xl md:text-2xl font-semibold">1. Acceptance</h2>
       <p>
         By creating an account or accessing ChefFlow, you confirm that you have read, understood,
         and accepted these Terms. If you are using ChefFlow on behalf of a food business or other
@@ -25,7 +25,7 @@ export default function TermsPage() {
         effective date of any change constitutes acceptance of the updated Terms.
       </p>
 
-      <h2 id="service-description">2. What ChefFlow is</h2>
+      <h2 id="service-description" className="text-xl md:text-2xl font-semibold">2. What ChefFlow is</h2>
       <p>
         ChefFlow is a kitchen-planning tool for professional chefs, including private chefs, supper
         clubs, and small catering businesses. The core features are:
@@ -43,7 +43,7 @@ export default function TermsPage() {
         <a href="/disclaimer">Disclaimer</a>.
       </p>
 
-      <h2 id="eligibility">3. Eligibility</h2>
+      <h2 id="eligibility" className="text-xl md:text-2xl font-semibold">3. Eligibility</h2>
       <p>
         You must be at least 18 years old to use ChefFlow. By accepting these Terms you confirm that
         you are 18 or older. [REVIEW: if ChefFlow is ever made available to educational or training
@@ -55,7 +55,7 @@ export default function TermsPage() {
         eligibility clause accordingly.]
       </p>
 
-      <h2 id="account">4. Your account and responsibilities</h2>
+      <h2 id="account" className="text-xl md:text-2xl font-semibold">4. Your account and responsibilities</h2>
       <p>
         You are responsible for keeping your account credentials secure. Do not share your login with
         anyone else. If you believe your account has been compromised, contact us immediately.
@@ -86,7 +86,7 @@ export default function TermsPage() {
         </li>
       </ul>
 
-      <h2 id="acceptable-use">5. Acceptable use</h2>
+      <h2 id="acceptable-use" className="text-xl md:text-2xl font-semibold">5. Acceptable use</h2>
       <p>You must not use ChefFlow to:</p>
       <ul>
         <li>Send spam, unsolicited messages, or promotional content to other users.</li>
@@ -107,7 +107,7 @@ export default function TermsPage() {
         </li>
       </ul>
 
-      <h2 id="community">6. Community recipe library</h2>
+      <h2 id="community" className="text-xl md:text-2xl font-semibold">6. Community recipe library</h2>
       <p>
         ChefFlow includes an optional community library where chefs can publish recipes for other
         users to view and copy. The following terms apply when you publish a recipe:
@@ -143,7 +143,7 @@ export default function TermsPage() {
         granted to other users is clearly bounded.]
       </p>
 
-      <h2 id="ip">7. Intellectual property</h2>
+      <h2 id="ip" className="text-xl md:text-2xl font-semibold">7. Intellectual property</h2>
       <p>
         You retain ownership of all recipes, events, notes, and other original content you create in
         ChefFlow. You grant ChefFlow the limited, transient licence necessary to deliver the service
@@ -163,7 +163,7 @@ export default function TermsPage() {
         any emerging post-Thaler caselaw.]
       </p>
 
-      <h2 id="ai-disclaimer">8. AI-generated content and allergen liability</h2>
+      <h2 id="ai-disclaimer" className="text-xl md:text-2xl font-semibold">8. AI-generated content and allergen liability</h2>
       <p>
         AI-generated recipes, workflows, and allergen tags are produced by a large-language model.
         They may contain errors. You must verify all AI-generated content before using it in a
@@ -177,7 +177,7 @@ export default function TermsPage() {
         allergen information.
       </p>
 
-      <h2 id="subscription">9. Pro subscription</h2>
+      <h2 id="subscription" className="text-xl md:text-2xl font-semibold">9. Pro subscription</h2>
       <p>
         ChefFlow Pro is available at the following prices (inclusive of VAT where applicable):
         [REVIEW: confirm VAT treatment with an accountant.]
@@ -207,7 +207,7 @@ export default function TermsPage() {
         period are non-refundable unless required by law.
       </p>
 
-      <h2 id="free-tier">10. Free tier</h2>
+      <h2 id="free-tier" className="text-xl md:text-2xl font-semibold">10. Free tier</h2>
       <p>
         ChefFlow offers a free tier with daily caps on recipe creation, event creation, and AI
         Co-Chef calls. Current limits are displayed in the app. We may change free-tier limits at
@@ -216,7 +216,7 @@ export default function TermsPage() {
         intend to use in practice.]
       </p>
 
-      <h2 id="third-parties">11. Third-party services</h2>
+      <h2 id="third-parties" className="text-xl md:text-2xl font-semibold">11. Third-party services</h2>
       <p>
         ChefFlow depends on the following third-party services. Their terms and privacy policies
         govern their own processing of your data:
@@ -229,7 +229,7 @@ export default function TermsPage() {
         <li><strong>Google</strong> — Maps Places API (<a href="https://policies.google.com/terms" target="_blank" rel="noreferrer">Terms</a>)</li>
       </ul>
 
-      <h2 id="termination">12. Termination</h2>
+      <h2 id="termination" className="text-xl md:text-2xl font-semibold">12. Termination</h2>
       <p>
         <strong>By you:</strong> you may delete your account at any time from the Settings page.
         Deletion removes your Clerk authentication credentials. Your on-device recipe and event data
@@ -249,7 +249,7 @@ export default function TermsPage() {
         be recalled remotely).
       </p>
 
-      <h2 id="liability">13. Limitation of liability</h2>
+      <h2 id="liability" className="text-xl md:text-2xl font-semibold">13. Limitation of liability</h2>
       <p>
         Nothing in these Terms limits or excludes ChefFlow's liability for: death or personal injury
         caused by our negligence; fraud or fraudulent misrepresentation; or any other liability that
@@ -279,7 +279,7 @@ export default function TermsPage() {
         particularly given the food-safety context.]
       </p>
 
-      <h2 id="governing-law">14. Governing law and disputes</h2>
+      <h2 id="governing-law" className="text-xl md:text-2xl font-semibold">14. Governing law and disputes</h2>
       <p>
         These Terms are governed by the law of England and Wales. [REVIEW: confirm jurisdiction
         clause — you may wish to offer alternative dispute resolution (ADR) as required under the
@@ -293,7 +293,7 @@ export default function TermsPage() {
         so we can try to resolve it informally.
       </p>
 
-      <h2 id="general">15. General</h2>
+      <h2 id="general" className="text-xl md:text-2xl font-semibold">15. General</h2>
       <ul>
         <li>
           <strong>Severability:</strong> if any provision of these Terms is found to be

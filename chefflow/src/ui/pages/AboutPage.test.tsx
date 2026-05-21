@@ -106,14 +106,4 @@ describe('AboutPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders Legal section with all three links pointing to correct routes', () => {
-    renderPage();
-    expect(screen.getByRole('heading', { level: 2, name: /legal/i })).toBeInTheDocument();
-    const disclaimer = screen.getByRole('link', { name: /disclaimer/i });
-    const privacy = screen.getByRole('link', { name: /privacy policy/i });
-    const terms = screen.getByRole('link', { name: /terms & conditions/i });
-    expect(disclaimer).toHaveAttribute('href', '/disclaimer');
-    expect(privacy).toHaveAttribute('href', '/privacy');
-    expect(terms).toHaveAttribute('href', '/terms');
-  });
 });

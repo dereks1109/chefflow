@@ -329,35 +329,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Legal */}
-      <section aria-labelledby="legal-heading">
-        <h2
-          id="legal-heading"
-          className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-6"
-        >
-          Legal
-        </h2>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link
-            to="/disclaimer"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 px-5 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:border-accent hover:text-accent transition-colors min-h-[48px]"
-          >
-            Disclaimer
-          </Link>
-          <Link
-            to="/privacy"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 px-5 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:border-accent hover:text-accent transition-colors min-h-[48px]"
-          >
-            Privacy Policy
-          </Link>
-          <Link
-            to="/terms"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-300 dark:border-slate-600 px-5 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 hover:border-accent hover:text-accent transition-colors min-h-[48px]"
-          >
-            Terms &amp; Conditions
-          </Link>
-        </div>
-      </section>
 
     </section>
   );

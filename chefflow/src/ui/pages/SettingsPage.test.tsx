@@ -100,9 +100,10 @@ describe('SettingsPage', () => {
     expect(useProfileStore.getState().displayName).toBe('Derek');
   });
 
-  it('renders the Preferences section with a ThemeToggle', () => {
+  it('renders the Theme section with a ThemeToggle and current mode label', () => {
     renderPage();
-    expect(screen.getByRole('heading', { name: /preferences/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^theme$/i })).toBeInTheDocument();
+    expect(screen.getByText(/^(light|dark)$/i)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /switch to (light|dark) mode/i }),
     ).toBeInTheDocument();

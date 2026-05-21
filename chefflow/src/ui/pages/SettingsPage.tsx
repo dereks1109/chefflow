@@ -12,8 +12,10 @@ import {
 } from '../../core/tier/quotaClient';
 import { downscaleToDataUrl } from '../../core/util/image';
 import ThemeToggle from '../components/ThemeToggle';
+import { useTheme } from '../theme/useTheme';
 
 export default function SettingsPage() {
+  const { theme } = useTheme();
   const tier = useTierStore((s) => s.tier);
   const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -241,12 +243,14 @@ export default function SettingsPage() {
       </section>
 
       <section
-        aria-labelledby="settings-preferences-heading"
+        aria-labelledby="settings-theme-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
       >
-        <h2 id="settings-preferences-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Preferences</h2>
+        <h2 id="settings-theme-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Theme</h2>
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-slate-700 dark:text-slate-200">Theme</span>
+          <span className="text-sm text-slate-700 dark:text-slate-200">
+            {theme === 'dark' ? 'Dark' : 'Light'}
+          </span>
           <ThemeToggle />
         </div>
       </section>

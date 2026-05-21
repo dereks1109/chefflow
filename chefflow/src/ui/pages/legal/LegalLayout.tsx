@@ -35,7 +35,7 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
 
       <main className="flex-1">
         <section className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
-          <h1 className="text-3xl font-bold mb-2">{title}</h1>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">{title}</h1>
           {lastUpdated && (
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">Last updated: {lastUpdated}</p>
           )}

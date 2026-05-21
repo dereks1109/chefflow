@@ -38,17 +38,10 @@ describe('MobileTopBar', () => {
     expect(screen.getByRole('link', { name: /^about$/i })).toHaveAttribute('href', '/about');
   });
 
-  it('renders the Plans CTA pointing to /about#pricing', () => {
+  it('does not render a Plans CTA', () => {
     renderBar();
-    const link = screen.getByRole('link', { name: /^plans$/i });
-    expect(link).toHaveAttribute('href', '/about#pricing');
-    expect(link).toHaveAttribute('data-testid', 'nav-plans-cta');
-    expect(link.className).toContain('btn-primary');
-  });
-
-  it('renders exactly one Plans link', () => {
-    renderBar();
-    expect(screen.getAllByRole('link', { name: /^plans$/i })).toHaveLength(1);
+    expect(screen.queryByTestId('nav-plans-cta')).toBeNull();
+    expect(screen.queryByRole('link', { name: /^plans$/i })).toBeNull();
   });
 
   it('does not render a Community link', () => {

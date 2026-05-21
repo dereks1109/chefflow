@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { Settings, Tag } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import Logo from '../components/Logo';
 import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
@@ -26,15 +26,6 @@ export default function MobileTopBar() {
       </NavLink>
 
       <div className="ml-auto flex items-center gap-1">
-        <NavLink
-          to="/about#pricing"
-          data-testid="nav-plans-cta"
-          className="btn-primary inline-flex items-center gap-1 px-2.5 h-8 rounded-md text-xs font-semibold"
-        >
-          <Tag size={12} aria-hidden="true" />
-          Plans
-        </NavLink>
-
         <UpgradeButton />
 
         <NavLink

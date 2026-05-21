@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, ListChecks, Info, Settings, Tag } from 'lucide-react';
+import { BookOpen, CalendarDays, ListChecks, Info, Settings } from 'lucide-react';
 import Logo from '../components/Logo';
 import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
@@ -56,15 +56,6 @@ export default function TopNav() {
       </nav>
 
       <div className="ml-auto flex items-center gap-2">
-        <NavLink
-          to="/about#pricing"
-          data-testid="nav-plans-cta"
-          className="btn-primary inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-semibold"
-        >
-          <Tag size={14} aria-hidden="true" />
-          Plans
-        </NavLink>
-
         <UpgradeButton />
 
         <NavLink

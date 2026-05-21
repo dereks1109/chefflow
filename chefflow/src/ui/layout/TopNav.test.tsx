@@ -52,18 +52,10 @@ describe('TopNav', () => {
     expect(screen.getByRole('link', { name: /workflows/i })).toHaveAttribute('href', '/workflows');
   });
 
-  it('renders the Plans CTA pointing to /about#pricing', () => {
+  it('does not render a Plans CTA', () => {
     renderNav();
-    const link = screen.getByRole('link', { name: /plans/i });
-    expect(link).toHaveAttribute('href', '/about#pricing');
-    expect(link).toHaveAttribute('data-testid', 'nav-plans-cta');
-    expect(link.className).toContain('btn-primary');
-  });
-
-  it('Plans CTA is not inside the primary nav element', () => {
-    renderNav();
-    const nav = screen.getByRole('navigation', { name: /primary/i });
-    expect(nav.querySelector('[data-testid="nav-plans-cta"]')).toBeNull();
+    expect(screen.queryByTestId('nav-plans-cta')).toBeNull();
+    expect(screen.queryByRole('link', { name: /^plans$/i })).toBeNull();
   });
 
   it('does not render a Community nav link', () => {

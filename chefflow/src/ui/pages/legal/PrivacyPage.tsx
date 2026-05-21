@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         should be able to understand what you agreed to.
       </p>
 
-      <h2 id="controller">Data controller</h2>
+      <h2 id="controller" className="text-xl md:text-2xl font-semibold">Data controller</h2>
       <p>
         The data controller for personal data processed by ChefFlow is ChefFlow Ltd,{' '}
         [REVIEW registered address]. ICO registration number: [REVIEW ICO registration number].
@@ -19,9 +19,9 @@ export default function PrivacyPage() {
         accordingly.]
       </p>
 
-      <h2 id="what-we-collect">What we collect and why</h2>
+      <h2 id="what-we-collect" className="text-xl md:text-2xl font-semibold">What we collect and why</h2>
 
-      <h3 id="account-data">Account data — Clerk</h3>
+      <h3 id="account-data" className="text-lg md:text-xl font-semibold">Account data — Clerk</h3>
       <p>
         When you sign in, Clerk (Clerk, Inc., a US company) collects your email address and creates
         a user identifier on our behalf. We receive only that user ID and email address via Clerk's
@@ -37,7 +37,7 @@ export default function PrivacyPage() {
         <a href="https://clerk.com/legal/dpa" target="_blank" rel="noreferrer">clerk.com/legal/dpa</a>.
       </p>
 
-      <h3 id="payment-data">Subscription and payment data — Stripe</h3>
+      <h3 id="payment-data" className="text-lg md:text-xl font-semibold">Subscription and payment data — Stripe</h3>
       <p>
         If you subscribe to ChefFlow Pro, billing is handled by Stripe. ChefFlow receives
         subscription status (active, cancelled, trial) and the date your subscription renews. We do
@@ -52,7 +52,7 @@ export default function PrivacyPage() {
         See <a href="https://stripe.com/gb/privacy" target="_blank" rel="noreferrer">Stripe's Privacy Policy</a>.
       </p>
 
-      <h3 id="local-data">Recipes, events, and workflows — on your device only</h3>
+      <h3 id="local-data" className="text-lg md:text-xl font-semibold">Recipes, events, and workflows — on your device only</h3>
       <p>
         All recipes, events, notes, and workflows you create in ChefFlow are stored exclusively in
         your browser's IndexedDB (via Dexie). This data does not leave your device and is not
@@ -65,7 +65,7 @@ export default function PrivacyPage() {
         it remains on your device under your own control.
       </p>
 
-      <h3 id="community-recipes">Community-published recipes</h3>
+      <h3 id="community-recipes" className="text-lg md:text-xl font-semibold">Community-published recipes</h3>
       <p>
         If you choose to publish a recipe to the ChefFlow community library, that recipe (including
         its title, ingredients, method, and any metadata you include) is stored on Cloudflare KV and
@@ -79,7 +79,7 @@ export default function PrivacyPage() {
         or default-on.]
       </p>
 
-      <h3 id="ai-data">AI feature content — Groq via Cloudflare Workers</h3>
+      <h3 id="ai-data" className="text-lg md:text-xl font-semibold">AI feature content — Groq via Cloudflare Workers</h3>
       <p>
         When you use AI features (recipe generation, event extraction, menu checks, workflow
         planning), the text you have typed — such as a recipe description or event brief — is
@@ -105,7 +105,7 @@ export default function PrivacyPage() {
         adequate transfer mechanism and should be reviewed by a solicitor.].
       </p>
 
-      <h3 id="infrastructure">Infrastructure logs — Cloudflare</h3>
+      <h3 id="infrastructure" className="text-lg md:text-xl font-semibold">Infrastructure logs — Cloudflare</h3>
       <p>
         Cloudflare records IP addresses, request paths, and response times as part of normal hosting
         and DDoS protection. Cloudflare retains these logs for approximately 30 days. ChefFlow does
@@ -120,7 +120,7 @@ export default function PrivacyPage() {
         See <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noreferrer">Cloudflare's Privacy Policy</a>.
       </p>
 
-      <h3 id="location">Location search strings — Google Maps</h3>
+      <h3 id="location" className="text-lg md:text-xl font-semibold">Location search strings — Google Maps</h3>
       <p>
         When you type a location in an event field, the search string is sent to the Google Maps
         Places API to return address suggestions. Google processes this as described in its own
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
         See <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google's Privacy Policy</a>.
       </p>
 
-      <h2 id="sub-processors">Sub-processors</h2>
+      <h2 id="sub-processors" className="text-xl md:text-2xl font-semibold">Sub-processors</h2>
       <p>The following companies process personal data on our behalf:</p>
       <ul>
         <li>
@@ -157,7 +157,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="retention">Data retention</h2>
+      <h2 id="retention" className="text-xl md:text-2xl font-semibold">Data retention</h2>
       <ul>
         <li>
           <strong>Account data (Clerk):</strong> retained for the life of your account and deleted
@@ -185,7 +185,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="your-rights">Your rights under UK GDPR</h2>
+      <h2 id="your-rights" className="text-xl md:text-2xl font-semibold">Your rights under UK GDPR</h2>
       <p>
         You have the following rights in relation to personal data ChefFlow controls. To exercise
         any right, email <a href="mailto:[REVIEW DPO email]">[REVIEW DPO email]</a>. We will respond
@@ -225,14 +225,14 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="cookies">Cookies and local storage</h2>
+      <h2 id="cookies" className="text-xl md:text-2xl font-semibold">Cookies and local storage</h2>
       <p>
         ChefFlow uses cookies for authentication (set by Clerk) and local-storage keys for UI
         preferences such as your unit system and theme. For a full list, see our{' '}
         <Link to="/cookies">Cookie Policy</Link>.
       </p>
 
-      <h2 id="complaints">Complaints</h2>
+      <h2 id="complaints" className="text-xl md:text-2xl font-semibold">Complaints</h2>
       <p>
         If you are unhappy with how we have handled your personal data, you have the right to lodge
         a complaint with the UK Information Commissioner's Office (ICO) at{' '}
@@ -242,7 +242,7 @@ export default function PrivacyPage() {
         ICO.
       </p>
 
-      <h2 id="changes">Changes to this policy</h2>
+      <h2 id="changes" className="text-xl md:text-2xl font-semibold">Changes to this policy</h2>
       <p>
         If we make material changes to this policy, we will notify you by email at least 30 days
         before the changes take effect and update the "last updated" date at the top of this page.
