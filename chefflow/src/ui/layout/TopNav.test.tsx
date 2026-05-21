@@ -45,11 +45,12 @@ describe('TopNav', () => {
     expect(links[0]).toHaveAttribute('href', '/about');
   });
 
-  it('renders Recipes, Events, and Workflows nav links', () => {
+  it('renders Recipes, Events, Workflows, and Community nav links', () => {
     renderNav();
     expect(screen.getByRole('link', { name: /recipes/i })).toHaveAttribute('href', '/recipes');
     expect(screen.getByRole('link', { name: /events/i })).toHaveAttribute('href', '/events');
     expect(screen.getByRole('link', { name: /workflows/i })).toHaveAttribute('href', '/workflows');
+    expect(screen.getByRole('link', { name: /community/i })).toHaveAttribute('href', '/community');
   });
 
   it('does not render a Plans CTA', () => {
@@ -58,9 +59,9 @@ describe('TopNav', () => {
     expect(screen.queryByRole('link', { name: /^plans$/i })).toBeNull();
   });
 
-  it('does not render a Community nav link', () => {
+  it('renders a Community nav link pointing to /community', () => {
     renderNav();
-    expect(screen.queryByRole('link', { name: /community/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /community/i })).toHaveAttribute('href', '/community');
   });
 
   it('renders the Settings gear link with aria-label', () => {

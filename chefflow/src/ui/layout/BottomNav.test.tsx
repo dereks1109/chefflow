@@ -29,10 +29,10 @@ describe('BottomNav', () => {
     expect(screen.getByRole('link', { name: /community/i })).toHaveAttribute('href', '/community');
   });
 
-  it('is visible at all breakpoints (no lg:hidden)', () => {
+  it('is hidden at lg and up (mobile-only)', () => {
     renderNav();
     const nav = screen.getByRole('navigation', { name: /primary/i });
-    expect(nav.className).not.toContain('lg:hidden');
+    expect(nav.className).toContain('lg:hidden');
   });
 
   it('marks the active route with aria-current=page', () => {

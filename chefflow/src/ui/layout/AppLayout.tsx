@@ -14,7 +14,7 @@ export default function AppLayout() {
       <main
         className={[
           'flex-1',
-          'pb-24',
+          'pb-20 lg:pb-0',
           'w-full',
         ].join(' ')}
       >
@@ -24,7 +24,7 @@ export default function AppLayout() {
       </main>
 
       <footer
-        className="mb-14 md:mb-0 border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
+        className="mb-14 lg:mb-0 border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
         aria-label="Legal"
       >
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-slate-400">

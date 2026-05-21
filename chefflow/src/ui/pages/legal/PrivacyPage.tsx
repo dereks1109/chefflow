@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         should be able to understand what you agreed to.
       </p>
 
-      <h2 id="controller" className="text-xl md:text-2xl font-semibold">Data controller</h2>
+      <h2 id="controller" className="text-xl md:text-2xl font-semibold">1. Data controller</h2>
       <p>
         The data controller for personal data processed by ChefFlow is ChefFlow Ltd,{' '}
         [REVIEW registered address]. ICO registration number: [REVIEW ICO registration number].
@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         accordingly.]
       </p>
 
-      <h2 id="what-we-collect" className="text-xl md:text-2xl font-semibold">What we collect and why</h2>
+      <h2 id="what-we-collect" className="text-xl md:text-2xl font-semibold">2. What we collect and why</h2>
 
       <h3 id="account-data" className="text-lg md:text-xl font-semibold">Account data — Clerk</h3>
       <p>
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
         See <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google's Privacy Policy</a>.
       </p>
 
-      <h2 id="sub-processors" className="text-xl md:text-2xl font-semibold">Sub-processors</h2>
+      <h2 id="sub-processors" className="text-xl md:text-2xl font-semibold">3. Sub-processors</h2>
       <p>The following companies process personal data on our behalf:</p>
       <ul>
         <li>
@@ -157,7 +157,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="retention" className="text-xl md:text-2xl font-semibold">Data retention</h2>
+      <h2 id="retention" className="text-xl md:text-2xl font-semibold">4. Data retention</h2>
       <ul>
         <li>
           <strong>Account data (Clerk):</strong> retained for the life of your account and deleted
@@ -185,7 +185,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="your-rights" className="text-xl md:text-2xl font-semibold">Your rights under UK GDPR</h2>
+      <h2 id="your-rights" className="text-xl md:text-2xl font-semibold">5. Your rights under UK GDPR</h2>
       <p>
         You have the following rights in relation to personal data ChefFlow controls. To exercise
         any right, email <a href="mailto:[REVIEW DPO email]">[REVIEW DPO email]</a>. We will respond
@@ -225,14 +225,14 @@ export default function PrivacyPage() {
         </li>
       </ul>
 
-      <h2 id="cookies" className="text-xl md:text-2xl font-semibold">Cookies and local storage</h2>
+      <h2 id="cookies" className="text-xl md:text-2xl font-semibold">6. Cookies and local storage</h2>
       <p>
         ChefFlow uses cookies for authentication (set by Clerk) and local-storage keys for UI
         preferences such as your unit system and theme. For a full list, see our{' '}
         <Link to="/cookies">Cookie Policy</Link>.
       </p>
 
-      <h2 id="complaints" className="text-xl md:text-2xl font-semibold">Complaints</h2>
+      <h2 id="complaints" className="text-xl md:text-2xl font-semibold">7. Complaints</h2>
       <p>
         If you are unhappy with how we have handled your personal data, you have the right to lodge
         a complaint with the UK Information Commissioner's Office (ICO) at{' '}
@@ -242,7 +242,7 @@ export default function PrivacyPage() {
         ICO.
       </p>
 
-      <h2 id="changes" className="text-xl md:text-2xl font-semibold">Changes to this policy</h2>
+      <h2 id="changes" className="text-xl md:text-2xl font-semibold">8. Changes to this policy</h2>
       <p>
         If we make material changes to this policy, we will notify you by email at least 30 days
         before the changes take effect and update the "last updated" date at the top of this page.

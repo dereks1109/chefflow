@@ -14,7 +14,7 @@ interface LegalLayoutProps {
 export default function LegalLayout({ title, lastUpdated, children }: LegalLayoutProps) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-surface-0 text-slate-900 dark:text-slate-100">
-      <header className="border-b border-slate-200 dark:border-[rgba(255,255,255,0.06)]">
+      <header className="fixed top-0 left-0 right-0 z-30 border-b border-slate-200 dark:border-[rgba(255,255,255,0.06)] bg-white/90 dark:bg-surface-0/90 backdrop-blur-md">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link
             to="/"
@@ -33,7 +33,7 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 pt-16">
         <section className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">{title}</h1>
           {lastUpdated && (

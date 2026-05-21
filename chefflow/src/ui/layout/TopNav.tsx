@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, ListChecks, Info, Settings } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Settings } from 'lucide-react';
 import Logo from '../components/Logo';
 import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
+  { to: '/community', label: 'Community', icon: Globe2 },
 ];
 
 export default function TopNav() {

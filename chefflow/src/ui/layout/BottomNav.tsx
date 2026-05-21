@@ -15,6 +15,7 @@ export default function BottomNav() {
     <nav
       aria-label="Primary"
       className={[
+        'lg:hidden',
         'fixed bottom-0 inset-x-0 z-30',
         'border-t border-[rgba(255,255,255,0.06)]',
         'bg-surface-0/90 backdrop-blur-md',
