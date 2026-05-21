@@ -60,10 +60,12 @@ describe('scheduleWithFallback', () => {
       });
       expect(out.source).toBe('local');
       expect(out.warnings).toHaveLength(1);
-      // Any LLM-class warning that names the fallback is acceptable —
-      // the exact text varies with the underlying error type.
-      expect(out.warnings[0].toLowerCase()).toContain('llm');
-      expect(out.warnings[0].toLowerCase()).toContain('local fallback');
+      // The warning is structured — code drives UI affordance, message is
+      // the human-readable line, cause preserves the original Error.
+      const w = out.warnings[0];
+      expect(w.code).toMatch(/^llm-(auth|rate-limit|transport|validation|unknown)$/);
+      expect(w.message.toLowerCase()).toContain('local fallback');
+      expect(w.cause).toBeDefined();
       // Local scheduler produces real ribeye step text verbatim.
       expect(out.steps.some((s) => /Rest steaks/.test(s.text))).toBe(true);
     } finally {
@@ -84,6 +86,38 @@ describe('scheduleWithFallback', () => {
       expect(out.source).toBe('local');
       expect(out.warnings).toEqual([]);
       expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('re-throws cleanly when the LLM call is aborted (no fallback fires)', async () => {
+    // When the caller aborts via AbortSignal, scheduleEventLLM throws
+    // (signal propagates into fetch). scheduleWithFallback MUST re-throw
+    // instead of running the local scheduler — the abort is intentional.
+    const controller = new AbortController();
+    const fetchAborted: typeof fetch = vi.fn((_url, init) => {
+      // The Workflow page wires controller.signal into init.signal. Simulate
+      // the fetch picking up the aborted signal and rejecting accordingly.
+      const signal = (init as RequestInit | undefined)?.signal;
+      if (signal?.aborted) {
+        const err = new DOMException('aborted', 'AbortError');
+        return Promise.reject(err);
+      }
+      // Abort just before we'd have returned a successful response.
+      controller.abort();
+      const err = new DOMException('aborted', 'AbortError');
+      return Promise.reject(err);
+    }) as unknown as typeof fetch;
+    vi.stubGlobal('fetch', fetchAborted);
+    try {
+      await expect(scheduleWithFallback({
+        event: DEMO_EVENT,
+        recipes: DEMO_RECIPES,
+        apiKey: 'gsk_test',
+        model: 'llama-3.3-70b-versatile',
+        signal: controller.signal,
+      })).rejects.toThrow();
     } finally {
       vi.unstubAllGlobals();
     }

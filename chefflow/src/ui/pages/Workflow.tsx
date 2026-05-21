@@ -20,9 +20,13 @@ import LlmSettingsSheet from '../components/LlmSettingsSheet';
 import { saveEvent } from '../../db/eventsRepo';
 import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import { formatDateTime } from '../../core/util/datetime';
-import { GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
-import { scheduleWithFallback, StrategyError } from '../../core/scheduler/strategy';
-import { hashDishes } from '../../core/scheduler/hash';
+import {
+  GroqClientError,
+  LlmValidationError,
+  scheduleWithFallback,
+  StrategyError,
+  hashDishes,
+} from '../../core/scheduler';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
   ColorTag,
