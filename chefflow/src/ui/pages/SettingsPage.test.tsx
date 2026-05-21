@@ -85,6 +85,38 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('status')).toHaveTextContent(/welcome to pro/i);
   });
 
+  it('calls Clerk user.reload() on mount when ?upgraded=1 — primes the tier refresh', () => {
+    const reload = vi.fn(() => Promise.resolve());
+    (window as unknown as { Clerk: { user: { reload: () => Promise<void> } } }).Clerk = {
+      user: { reload },
+    };
+    useTierStore.setState({ tier: 'free' }); // race: webhook hasn't fired yet
+    try {
+      renderPage(['/settings?upgraded=1']);
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (window as unknown as { Clerk?: unknown }).Clerk;
+    }
+  });
+
+  it('retries Clerk user.reload() at ~2.5s if tier is still free (covers webhook latency)', async () => {
+    vi.useFakeTimers();
+    const reload = vi.fn(() => Promise.resolve());
+    (window as unknown as { Clerk: { user: { reload: () => Promise<void> } } }).Clerk = {
+      user: { reload },
+    };
+    useTierStore.setState({ tier: 'free' });
+    try {
+      renderPage(['/settings?upgraded=1']);
+      expect(reload).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2600);
+      expect(reload).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+      delete (window as unknown as { Clerk?: unknown }).Clerk;
+    }
+  });
+
   it('renders the Profile section with a name input', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: /profile/i })).toBeInTheDocument();

@@ -56,23 +56,32 @@ export default function SettingsPage() {
   const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
 
   // After a successful Checkout, the success_url drops us here with
-  // ?upgraded=1. Force Clerk to refetch publicMetadata so the tier flips
-  // without a full page reload, then strip the query param.
+  // ?upgraded=1. There's a small race: the user can land here before the
+  // Stripe webhook has finished writing tier=pro to Clerk publicMetadata.
+  // So we reload Clerk twice — once immediately, once at 2.5s — to cover
+  // the typical webhook latency window. If the tier is still 'free' after
+  // both, the user can reload manually; we don't want to spin forever.
   useEffect(() => {
     if (!justUpgraded || e2eMode) return;
     const clerk = (window as unknown as {
       Clerk?: { user?: { reload(): Promise<unknown> } };
     }).Clerk;
-    void clerk?.user?.reload?.();
-    const timer = setTimeout(() => {
+    void clerk?.user?.reload?.().catch(() => { /* surface in UI via TierSync's next read */ });
+    const retryTimer = setTimeout(() => {
+      if (tier === 'free') void clerk?.user?.reload?.().catch(() => {});
+    }, 2500);
+    const stripTimer = setTimeout(() => {
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
         next.delete('upgraded');
         return next;
       }, { replace: true });
     }, 8000);
-    return () => clearTimeout(timer);
-  }, [justUpgraded, setSearchParams, e2eMode]);
+    return () => {
+      clearTimeout(retryTimer);
+      clearTimeout(stripTimer);
+    };
+  }, [justUpgraded, setSearchParams, e2eMode, tier]);
 
   // Load today's usage snapshot.
   useEffect(() => {
