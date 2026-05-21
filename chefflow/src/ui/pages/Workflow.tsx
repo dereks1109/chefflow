@@ -17,8 +17,8 @@ import NestedDragDropBuilder, {
 } from '../components/NestedDragDropBuilder';
 import { swatchClassFor } from '../components/ColorPicker';
 import LlmSettingsSheet from '../components/LlmSettingsSheet';
-import { getEvent, saveEvent } from '../../db/eventsRepo';
-import { listRecipes } from '../../db/recipesRepo';
+import { saveEvent } from '../../db/eventsRepo';
+import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import { formatDateTime } from '../../core/util/datetime';
 import { scheduleEventLLM, GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
 import { hashDishes } from '../../core/scheduler/hash';
@@ -31,16 +31,6 @@ import type {
   ScheduledStep,
   SchedulePhase,
 } from '../../core/types';
-
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'not-found' }
-  | {
-      kind: 'ready';
-      event: KitchenEvent;
-      recipes: Map<string, Recipe>;
-      loadedFromSnapshot: boolean;
-    };
 
 type WorkflowStatus =
   | { kind: 'idle' }            // initial — before we know what to do
@@ -169,7 +159,12 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+
+  // Live subscriptions — re-render automatically when Dexie writes anywhere
+  // touch the watched rows. See src/db/hooks/useEvent.ts.
+  const eventQuery = useEvent(eventId);
+  const recipesQuery = useRecipes();
+
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>({ kind: 'idle' });
   const [scheduled, setScheduled] = useState<ScheduledStep[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -177,8 +172,16 @@ export default function Workflow() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Forces the DnD builder to remount on Regenerate.
   const [generation, setGeneration] = useState(0);
+  // True once the page has consumed the saved snapshot for the current event.
+  // Reset by Regenerate (which clears event.workflow in Dexie). Drives the
+  // "stale snapshot" banner and the Save button's enabled state.
+  const [loadedFromSnapshot, setLoadedFromSnapshot] = useState(false);
   // AbortController for in-flight LLM calls (so Regenerate can cancel).
   const inflight = useRef<AbortController | null>(null);
+  // Tracks the event-version we last synced our local UI state to. The
+  // initial-load effect only acts when this changes — so live-query updates
+  // we triggered ourselves (Save / Regenerate) don't cause a re-init loop.
+  const syncedVersionRef = useRef<string | null>(null);
 
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
@@ -192,46 +195,20 @@ export default function Workflow() {
   const apiKey = isProxyMode ? 'proxy' : (storedApiKey || envApiKey).trim();
   const isReady = isProxyMode || apiKey.length > 0;
 
-  // -------------------------------------------------------------------------
-  // Initial load: pull event + recipes, decide whether to use the saved
-  // snapshot or call the LLM.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getEvent(eventId), listRecipes()]).then(([event, recipes]) => {
-      if (cancelled) return;
-      if (!event) {
-        setState({ kind: 'not-found' });
-        return;
-      }
-      const recipesMap = new Map(recipes.map((r) => [r.id, r]));
-      setChefFilter(null);
-
-      if (event.workflow && event.workflow.length > 0) {
-        // Saved snapshot — skip the LLM entirely.
-        setScheduled(event.workflow);
-        setDirty(false);
-        setWorkflowStatus({ kind: 'ready' });
-        setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: true });
-        return;
-      }
-
-      // No snapshot — need to generate. Gate on API key.
-      setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: false });
-      if (!isReady) {
-        setWorkflowStatus({ kind: 'needs-key' });
-        return;
-      }
-      void runLlm(event, recipesMap);
-    });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
+  // Derive a stable recipes-by-id map from the live query result. Memoized
+  // on the array reference so the LLM caller sees the same Map identity for
+  // unchanged recipe state.
+  const recipesMap = useMemo(
+    () => new Map(recipesQuery.recipes.map((r) => [r.id, r])),
+    [recipesQuery.recipes],
+  );
 
   // -------------------------------------------------------------------------
   // runLlm — call the LLM, set scheduled state, surface errors.
+  // Defined before the sync-effect that calls it, but doesn't need to be a
+  // hook itself — it reads `apiKey` / `model` via closure each call.
   // -------------------------------------------------------------------------
-  async function runLlm(event: KitchenEvent, recipes: Map<string, Recipe>) {
+  async function runLlm(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
     inflight.current?.abort();
     const controller = new AbortController();
     inflight.current = controller;
@@ -239,7 +216,7 @@ export default function Workflow() {
     setWorkflowStatus({ kind: 'generating' });
     try {
       const { steps } = await scheduleEventLLM({
-        event,
+        event: eventToSchedule,
         recipes,
         apiKey,
         model,
@@ -255,13 +232,52 @@ export default function Workflow() {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Sync effect — when the underlying event becomes ready (or its
+  // snapshot-presence flips), reconcile local UI state. The version key
+  // includes workflow presence + id so reruns of the LLM after a Regenerate
+  // are detected, but routine cosmetic writes (e.g. updatedAt-only) that
+  // don't change workflow presence don't cause a re-init.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (eventQuery.status !== 'ready' || recipesQuery.status !== 'ready') return;
+    const live = eventQuery.event;
+    const hasSnapshot = !!live.workflow && live.workflow.length > 0;
+    const version = `${live.id}::${hasSnapshot ? 'snapshot' : 'no-snapshot'}`;
+    if (syncedVersionRef.current === version) return;
+    syncedVersionRef.current = version;
+
+    setChefFilter(null);
+
+    if (hasSnapshot) {
+      setScheduled(live.workflow!);
+      setDirty(false);
+      setLoadedFromSnapshot(true);
+      setWorkflowStatus({ kind: 'ready' });
+      return;
+    }
+
+    setLoadedFromSnapshot(false);
+    if (!isReady) {
+      setWorkflowStatus({ kind: 'needs-key' });
+      return;
+    }
+    void runLlm(live, recipesMap);
+  // runLlm/recipesMap/isReady are intentionally not in deps — we only react
+  // to event-version changes. Capturing them would cause re-runs on
+  // unrelated re-renders (e.g. setSettingsOpen).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventQuery, recipesQuery.status]);
+
   const scheduledById = useMemo(
     () => new Map(scheduled.map((s) => [s.id, s])),
     [scheduled],
   );
 
-  if (state.kind === 'loading') return <div className="p-6 text-slate-500">Loading…</div>;
-  if (state.kind === 'not-found') {
+  if (eventQuery.status === 'loading' || recipesQuery.status === 'loading') {
+    return <div className="p-6 text-slate-500">Loading…</div>;
+  }
+  if (eventQuery.status === 'not-found' || eventQuery.status === 'error') {
     return (
       <div className="p-6">
         <h1 className="text-xl font-bold">Event not found.</h1>
@@ -272,7 +288,8 @@ export default function Workflow() {
     );
   }
 
-  const { event, recipes, loadedFromSnapshot } = state;
+  // From here on `event` is non-null (narrowed by the status check above).
+  const event: KitchenEvent = eventQuery.event;
   const hasDishes = event.dishes.length > 0;
   const serveAt = event.serveAt ? new Date(event.serveAt) : new Date();
   const currentDishesHash = hashDishes(event.dishes);
@@ -304,7 +321,11 @@ export default function Workflow() {
     };
     await saveEvent(updated);
     setDirty(false);
-    setState({ kind: 'ready', event: updated, recipes, loadedFromSnapshot: true });
+    // The next live-query tick will flip hasSnapshot true; pre-set the
+    // synced version so we don't re-adopt the snapshot we just wrote
+    // (which would no-op anyway, but also avoid a transient flicker).
+    syncedVersionRef.current = `${updated.id}::snapshot`;
+    setLoadedFromSnapshot(true);
     // Return to the event page — its new "View workflow" CTA now reflects
     // this saved snapshot so the chef can re-enter at will.
     navigate(`/events/${updated.id}`);
@@ -328,9 +349,12 @@ export default function Workflow() {
     await saveEvent(cleared);
     setDirty(false);
     setChefFilter(null);
-    setState({ kind: 'ready', event: cleared, recipes, loadedFromSnapshot: false });
+    setLoadedFromSnapshot(false);
     setGeneration((g) => g + 1);
-    await runLlm(cleared, recipes);
+    // Pre-mark so the sync-effect's next pass (triggered by the live-query
+    // refresh) skips its branch — we run the LLM here directly.
+    syncedVersionRef.current = `${cleared.id}::no-snapshot`;
+    await runLlm(cleared, recipesMap);
   }
 
   const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
@@ -543,7 +567,7 @@ export default function Workflow() {
           setSettingsOpen(false);
           // If user just provided a key while we were stuck on needs-key, kick off the LLM.
           if (workflowStatus.kind === 'needs-key' && useLlmSettingsStore.getState().isReady()) {
-            void runLlm(event, recipes);
+            void runLlm(event, recipesMap);
           }
         }}
       />
