@@ -1,8 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { UserButton, useClerk, useUser } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Info, LogIn, Settings, Shield } from 'lucide-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Info, LogIn, LogOut, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
-import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
 import { useAdminStore } from '../../state/useAdminStore';
 
@@ -106,12 +105,17 @@ export default function TopNav() {
           <Settings size={20} aria-hidden="true" />
         </NavLink>
 
-        <UsageMeter />
-
         {!isE2E && showSignedInChrome && (
-          <div className="flex items-center justify-center min-h-touch min-w-touch">
-            <UserButton afterSignOutUrl="/" />
-          </div>
+          <button
+            type="button"
+            onClick={() => void clerk.signOut?.({ redirectUrl: '/' })}
+            data-testid="topnav-sign-out"
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-lg text-slate-400 hover:text-slate-100 hover:bg-surface-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <LogOut size={20} aria-hidden="true" />
+          </button>
         )}
         {!isE2E && !showSignedInChrome && (
           <button

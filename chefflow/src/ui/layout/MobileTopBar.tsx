@@ -1,8 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { UserButton, useClerk, useUser } from '@clerk/clerk-react';
-import { LogIn, Settings, Shield } from 'lucide-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
+import { LogIn, LogOut, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
-import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
 import { useAdminStore } from '../../state/useAdminStore';
 
@@ -88,12 +87,17 @@ export default function MobileTopBar() {
           <Settings size={20} aria-hidden="true" />
         </NavLink>
 
-        <UsageMeter />
-
         {!isE2E && showSignedInChrome && (
-          <div className="flex items-center justify-center min-h-touch min-w-touch">
-            <UserButton afterSignOutUrl="/" />
-          </div>
+          <button
+            type="button"
+            onClick={() => void clerk.signOut?.({ redirectUrl: '/' })}
+            data-testid="mobile-sign-out"
+            aria-label="Sign out"
+            title="Sign out"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-surface-3"
+          >
+            <LogOut size={20} aria-hidden="true" />
+          </button>
         )}
         {!isE2E && !showSignedInChrome && (
           <button
