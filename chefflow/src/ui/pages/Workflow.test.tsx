@@ -211,7 +211,9 @@ describe('Workflow page — chef filter', () => {
 
     // Filtered view renders Ribeye step text (Green) and hides Salad text (Blue).
     await waitFor(() => {
-      expect(screen.getByText(/Pat steaks dry/)).toBeInTheDocument();
+      // The interactive list AND the hidden print-checklist both contain
+      // this text — `getAllByText` accepts both; presence is what matters.
+      expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
     });
     expect(screen.queryByText(/Wash salad leaves/)).toBeNull();
   });
@@ -352,7 +354,9 @@ describe('Workflow page — persistence', () => {
     // After regeneration, the algorithm output should mount (real recipe text).
     await waitFor(
       () => {
-        expect(screen.getByText(/Pat steaks dry/)).toBeInTheDocument();
+        // The interactive list AND the hidden print-checklist both contain
+      // this text — `getAllByText` accepts both; presence is what matters.
+      expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
       },
       { timeout: 3000 },
     );

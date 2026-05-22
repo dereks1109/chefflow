@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Key,
   MapPin,
+  Printer,
   RefreshCw,
   Sparkles,
   StickyNote,
@@ -431,7 +432,7 @@ export default function Workflow() {
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 flex-wrap print:hidden">
         <div className="flex items-center gap-2 flex-wrap">
           <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -622,9 +623,25 @@ export default function Workflow() {
           </p>
         )}
 
+        {/* ----- Print button — visible whenever the workflow is ready, prints
+              the current chef-filter view (All or a single colour). ----- */}
+        {showWorkflowBody && (
+          <div className="mb-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              data-testid="workflow-print-button"
+              className="btn-secondary text-sm inline-flex items-center gap-1.5"
+            >
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              Print checklist
+            </button>
+          </div>
+        )}
+
         {/* ----- Chef filter bar ----- */}
         {showWorkflowBody && hasDishes && chefGroups.length > 0 && (
-          <div className="mb-3">
+          <div className="mb-3 print:hidden">
             <p className="text-xs font-medium text-slate-500 mb-2 inline-flex items-center gap-1">
               <ChefHat className="h-3 w-3" aria-hidden="true" />
               Filter by chef
@@ -664,25 +681,39 @@ export default function Workflow() {
           </div>
         )}
 
-        {/* ----- Workflow body ----- */}
-        {showWorkflowBody && (
-          milestones.length === 0 && chefFilter ? (
-            <p className="text-sm text-slate-500 italic">
-              No steps for this chef. (No dishes match this color, or no recipes are linked.)
-            </p>
-          ) : (
-            <NestedDragDropBuilder
-              key={`${event.id}-${generation}-${chefFilter ?? 'all'}`}
-              initialMilestones={milestones}
-              onChange={handleBuilderChange}
-              allowAddMilestone={false}
-              allowAddStep={false}
-              allowColorPicker={false}
-              allowStepDrag={false}
-              allowMilestoneDrag={false}
-              allowStepEdit={false}
-            />
-          )
+        {/* ----- Workflow body — interactive (screen-only) ----- */}
+        <div className="print:hidden">
+          {showWorkflowBody && (
+            milestones.length === 0 && chefFilter ? (
+              <p className="text-sm text-slate-500 italic">
+                No steps for this chef. (No dishes match this color, or no recipes are linked.)
+              </p>
+            ) : (
+              <NestedDragDropBuilder
+                key={`${event.id}-${generation}-${chefFilter ?? 'all'}`}
+                initialMilestones={milestones}
+                onChange={handleBuilderChange}
+                allowAddMilestone={false}
+                allowAddStep={false}
+                allowColorPicker={false}
+                allowStepDrag={false}
+                allowMilestoneDrag={false}
+                allowStepEdit={false}
+              />
+            )
+          )}
+        </div>
+
+        {/* ----- Print-only checklist — flat list with ☐ checkboxes per step.
+              Hidden on screen via `hidden`; revealed in print via Tailwind's
+              `print:block`. Shows whatever the current chef filter selected
+              (All view = everyone; per-chef = just that colour). ----- */}
+        {showWorkflowBody && milestones.length > 0 && (
+          <PrintChecklist
+            milestones={milestones}
+            chefLabel={chefFilter ? capitalize(chefFilter) : null}
+            eventTitle={event.title || 'Untitled event'}
+          />
         )}
       </div>
 
@@ -700,6 +731,63 @@ export default function Workflow() {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// PrintChecklist — hidden on screen (`hidden`), revealed only when the
+// page is printed (`print:block`). Renders the same milestones the
+// NestedDragDropBuilder shows on screen, but as a flat checklist with
+// ☐ squares for tick-off. Respects the current chef-filter (the
+// `milestones` array is already filtered by the caller).
+// ---------------------------------------------------------------------------
+function PrintChecklist({
+  milestones,
+  chefLabel,
+  eventTitle,
+}: {
+  milestones: DndMilestone[];
+  chefLabel: string | null;
+  eventTitle: string;
+}) {
+  return (
+    <section
+      data-testid="workflow-print-checklist"
+      className="hidden print:block mt-4"
+      aria-hidden="true"
+    >
+      <h2 className="text-lg font-bold border-b border-slate-300 pb-2 mb-4">
+        Workflow checklist — {eventTitle}
+        {chefLabel ? ` (${chefLabel} chef)` : ''}
+      </h2>
+      {milestones.map((m) => (
+        <div key={m.id} className="mb-4 break-inside-avoid">
+          <h3 className="text-sm font-semibold uppercase tracking-wide mb-1">{m.title}</h3>
+          <ul className="text-sm leading-snug">
+            {m.steps.map((s) => (
+              <li key={s.id} className="flex gap-2 py-0.5">
+                <span
+                  className="inline-block h-3.5 w-3.5 border border-slate-700 rounded-sm shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">
+                  {s.meta?.time && <span className="font-mono mr-2">{s.meta.time}</span>}
+                  {s.content}
+                  {s.meta?.dish && (
+                    <span className="ml-2 text-xs text-slate-500">— {s.meta.dish}</span>
+                  )}
+                  {s.meta?.dishTags && s.meta.dishTags.length > 0 && (
+                    <span className="ml-2 text-xs text-slate-500">
+                      — {s.meta.dishTags.join(', ')}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // friendlyError — turn an error from the LLM scheduler into a user-facing

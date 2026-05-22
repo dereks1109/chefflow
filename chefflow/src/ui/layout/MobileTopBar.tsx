@@ -15,6 +15,7 @@ export default function MobileTopBar() {
     <header
       className={[
         'lg:hidden',
+        'print:!hidden',
         'sticky top-0 z-30',
         'h-14 w-full',
         'flex items-center gap-2 px-4',

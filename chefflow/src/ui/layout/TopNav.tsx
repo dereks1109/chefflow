@@ -25,6 +25,7 @@ export default function TopNav() {
     <header
       className={[
         'hidden lg:flex',
+        'print:!hidden',
         'sticky top-0 z-30',
         'h-14 w-full',
         'items-center gap-4 px-6',

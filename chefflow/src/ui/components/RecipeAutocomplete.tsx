@@ -115,7 +115,7 @@ export default function RecipeAutocomplete({ query, excludeRecipeId, onSelect, o
           onClick={() => onSelect(r)}
           data-testid={`recipe-autocomplete-option-${r.id}`}
           className={[
-            'block w-full text-left px-3 py-2 text-xs',
+            'block w-full text-left px-3 py-2 text-sm',
             i === activeIdx
               ? 'bg-accent/10 text-accent'
               : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-surface-3',

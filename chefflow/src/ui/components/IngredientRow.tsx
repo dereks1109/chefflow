@@ -98,7 +98,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
       ].join(' ')}
     >
       <div className="flex items-start gap-2">
-        <span className="text-xs font-semibold w-6 pt-2">{index + 1}.</span>
+        <span className="text-sm font-semibold w-6 pt-1.5">{index + 1}.</span>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="relative">
             <div className="flex items-center gap-1">
@@ -118,7 +118,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                 value={value.name}
                 onChange={(e) => onNameChange(e.target.value)}
                 onFocus={() => { if (hasHashtagPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
-                className="input flex-1 min-w-0 text-xs"
+                className="input flex-1 min-w-0 text-sm py-1"
                 aria-label="Ingredient name"
                 placeholder="Ingredient  (type # to link another recipe)"
               />
@@ -179,13 +179,13 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
               step="any"
               value={value.amount}
               onChange={(e) => update('amount', Number(e.target.value))}
-              className="input flex-1 text-xs"
+              className="input flex-1 text-sm py-1"
               aria-label="Amount"
             />
             <select
               value={value.unit}
               onChange={(e) => update('unit', e.target.value)}
-              className="input flex-1 text-xs"
+              className="input flex-1 text-sm py-1"
               aria-label="Unit"
             >
               <optgroup label="Weight">
