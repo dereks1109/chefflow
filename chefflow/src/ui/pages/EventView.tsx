@@ -323,6 +323,12 @@ export default function EventView() {
             </span>
           </div>
         )}
+        {e.budget !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Wallet className="h-4 w-4" aria-hidden="true" />
+            <span>Budget {formatGBP(e.budget)}</span>
+          </div>
+        )}
         {e.notes && (
           <div className="mt-3 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />

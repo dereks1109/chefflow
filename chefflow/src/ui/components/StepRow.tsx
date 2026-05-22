@@ -12,11 +12,11 @@ export default function StepRow({ index, value, onChange, onRemove }: Props) {
   return (
     <li className="py-2">
       <div className="flex items-start gap-2">
-        <span className="text-sm font-semibold w-6 pt-2">{index + 1}.</span>
+        <span className="text-xs font-semibold w-6 pt-2">{index + 1}.</span>
         <textarea
           value={value.text}
           onChange={(e) => onChange({ ...value, text: e.target.value })}
-          className="input flex-1 min-h-[3rem]"
+          className="input flex-1 min-h-[3rem] text-xs"
           rows={2}
           aria-label={`Step ${index + 1} text`}
           placeholder="Describe this step…"

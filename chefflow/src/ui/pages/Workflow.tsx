@@ -7,15 +7,21 @@ import {
   ChefHat,
   Check,
   Compass,
+  ExternalLink,
   Key,
+  MapPin,
   RefreshCw,
   Sparkles,
   StickyNote,
+  Users,
+  Wallet,
 } from 'lucide-react';
 import NestedDragDropBuilder, {
   type DndMilestone,
 } from '../components/NestedDragDropBuilder';
+import EventContactRow from '../components/EventContactRow';
 import { swatchClassFor } from '../components/ColorPicker';
+import { formatGBP } from '../../core/util/money';
 import LlmSettingsSheet from '../components/LlmSettingsSheet';
 import { saveEvent } from '../../db/eventsRepo';
 import { useEvent, useRecipes } from '../../db/hooks/useEvent';
@@ -448,6 +454,34 @@ export default function Workflow() {
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(event.serveAt)}</span>
         </div>
+        {event.location && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <MapPin className="h-4 w-4" aria-hidden="true" />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-accent hover:underline"
+              title="Open in Google Maps"
+            >
+              {event.location}
+              <ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" />
+            </a>
+          </div>
+        )}
+        <EventContactRow name={event.contactName} email={event.contactEmail} phone={event.contactPhone} />
+        {event.numberOfGuests !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            <span>{event.numberOfGuests} guest{event.numberOfGuests === 1 ? '' : 's'}</span>
+          </div>
+        )}
+        {event.budget !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Wallet className="h-4 w-4" aria-hidden="true" />
+            <span>Budget {formatGBP(event.budget)}</span>
+          </div>
+        )}
         {event.notes && (
           <div className="mt-4 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />

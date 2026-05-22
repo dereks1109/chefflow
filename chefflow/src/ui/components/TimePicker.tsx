@@ -1,4 +1,4 @@
-import { HOUR_OPTIONS, MINUTE_OPTIONS, parseTime, formatTime } from '../../core/util/time';
+import { parseTime, formatTime } from '../../core/util/time';
 
 interface Props {
   label: string;
@@ -6,41 +6,56 @@ interface Props {
   onChange: (next: string | undefined) => void;
 }
 
-function withCurrent(options: number[], current: number): number[] {
-  if (options.includes(current)) return options;
-  return [...options, current].sort((a, b) => a - b);
-}
-
+// Two free-typed number inputs labelled Hours + Minutes. Replaced the
+// prior pair of dropdowns so chefs can type "37 minutes" without scrolling
+// a 12-option menu. Same prop contract as before — emits the on-disk
+// "1h 30m" string via formatTime() so existing recipes round-trip cleanly.
 export default function TimePicker({ label, value, onChange }: Props) {
   const { hours, minutes } = parseTime(value);
-  const hourOpts = withCurrent(HOUR_OPTIONS, hours);
-  const minuteOpts = withCurrent(MINUTE_OPTIONS, minutes);
+
+  function setHours(next: number) {
+    const h = clamp(next, 0, 24);
+    onChange(formatTime(h, minutes));
+  }
+  function setMinutes(next: number) {
+    const m = clamp(next, 0, 59);
+    onChange(formatTime(hours, m));
+  }
 
   return (
     <div>
       <div className="text-sm font-medium">{label}</div>
-      <div className="mt-1 flex gap-2">
-        <select
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={24}
+          step={1}
           aria-label={`${label} hours`}
           value={hours}
-          onChange={(e) => onChange(formatTime(Number(e.target.value), minutes))}
-          className="input"
-        >
-          {hourOpts.map((h) => (
-            <option key={h} value={h}>{h}h</option>
-          ))}
-        </select>
-        <select
+          onChange={(e) => setHours(Number(e.target.value))}
+          className="input w-20"
+        />
+        <span className="text-sm text-slate-500 dark:text-slate-400">Hours</span>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={59}
+          step={1}
           aria-label={`${label} minutes`}
           value={minutes}
-          onChange={(e) => onChange(formatTime(hours, Number(e.target.value)))}
-          className="input"
-        >
-          {minuteOpts.map((m) => (
-            <option key={m} value={m}>{m}m</option>
-          ))}
-        </select>
+          onChange={(e) => setMinutes(Number(e.target.value))}
+          className="input w-20"
+        />
+        <span className="text-sm text-slate-500 dark:text-slate-400">Minutes</span>
       </div>
     </div>
   );
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(lo, Math.min(hi, Math.floor(n)));
 }

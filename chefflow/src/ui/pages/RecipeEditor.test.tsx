@@ -46,9 +46,10 @@ describe('RecipeEditor — header + ingredients', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('Seed Recipe')).toBeInTheDocument();
     });
-    // seed.prepTime = '20m' → 0h, 20m
-    expect(screen.getByLabelText('Prep time hours')).toHaveValue('0');
-    expect(screen.getByLabelText('Prep time minutes')).toHaveValue('20');
+    // seed.prepTime = '20m' → 0h, 20m. The TimePicker now uses
+    // <input type="number"> so toHaveValue returns a number, not a string.
+    expect(screen.getByLabelText('Prep time hours')).toHaveValue(0);
+    expect(screen.getByLabelText('Prep time minutes')).toHaveValue(20);
   });
 
   it('edits the title and saves', async () => {
