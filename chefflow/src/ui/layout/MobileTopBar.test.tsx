@@ -7,6 +7,8 @@ import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 
 vi.mock('@clerk/clerk-react', () => ({
   UserButton: () => <button data-testid="clerk-user-button">Account</button>,
+  useUser: () => ({ isSignedIn: true }),
+  useClerk: () => ({ openSignIn: () => {} }),
 }));
 
 vi.mock('../components/UsageMeter', () => ({

@@ -9,6 +9,10 @@ import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 // UserButton is a Clerk component — stub it out.
 vi.mock('@clerk/clerk-react', () => ({
   UserButton: () => <button data-testid="clerk-user-button">Account</button>,
+  // useUser/useClerk added in the public-by-default refactor; default to
+  // signed-in so existing nav tests still see the avatar slot.
+  useUser: () => ({ isSignedIn: true }),
+  useClerk: () => ({ openSignIn: () => {} }),
 }));
 
 // UsageMeter hits the worker — stub it.

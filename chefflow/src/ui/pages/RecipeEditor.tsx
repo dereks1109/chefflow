@@ -10,6 +10,7 @@ import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
+import { useAuthGate } from '../../state/useAuthGate';
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
@@ -20,6 +21,7 @@ type LoadState =
 export default function RecipeEditor() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const requireAuth = useAuthGate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [dirty, setDirty] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
@@ -159,7 +161,7 @@ export default function RecipeEditor() {
               </span>
               <button
                 type="button"
-                onClick={() => void handleUnpublish()}
+                onClick={() => requireAuth(() => void handleUnpublish())}
                 disabled={shareBusy}
                 className="btn-secondary disabled:opacity-60"
                 data-testid="recipe-editor-unpublish-btn"
@@ -170,7 +172,7 @@ export default function RecipeEditor() {
           ) : (
             <button
               type="button"
-              onClick={() => void handlePublish()}
+              onClick={() => requireAuth(() => void handlePublish())}
               disabled={shareBusy}
               className="btn-secondary disabled:opacity-60"
               data-testid="recipe-editor-publish-btn"

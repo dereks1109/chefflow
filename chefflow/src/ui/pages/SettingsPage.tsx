@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, Sparkles, UserRound, XCircle } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, LogIn, Lock, Sparkles, UserRound, XCircle } from 'lucide-react';
+import { useClerk, useUser } from '@clerk/clerk-react';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -19,6 +20,33 @@ import { useTheme } from '../theme/useTheme';
 export default function SettingsPage() {
   const { theme } = useTheme();
   const tier = useTierStore((s) => s.tier);
+  const { isSignedIn } = useUser();
+  const clerk = useClerk();
+  const isE2E = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
+  // Anonymous users see a sign-in prompt instead of the full settings —
+  // every section here (profile, billing, usage) needs a Clerk user.
+  if (!isSignedIn && !isE2E) {
+    return (
+      <section className="max-w-md mx-auto p-4 md:p-6">
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-6 text-center">
+          <Lock className="h-8 w-8 text-slate-400 mx-auto" aria-hidden="true" />
+          <h1 className="mt-3 text-lg font-semibold">Sign in to manage your account</h1>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+            Your profile, daily usage, and billing details live here once you're signed in.
+          </p>
+          <button
+            type="button"
+            onClick={() => clerk.openSignIn?.()}
+            data-testid="settings-sign-in"
+            className="mt-4 btn-primary inline-flex items-center gap-1.5"
+          >
+            <LogIn className="h-4 w-4" aria-hidden="true" />
+            Sign in
+          </button>
+        </div>
+      </section>
+    );
+  }
   const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
   const [searchParams, setSearchParams] = useSearchParams();
   const [portalRedirecting, setPortalRedirecting] = useState<'manage' | null>(null);

@@ -3,6 +3,7 @@ import { Check, Sparkles, X } from 'lucide-react';
 import { useUpgradeSheetStore, type UpgradeReason } from '../../state/useUpgradeSheetStore';
 import { TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { createCheckoutUrl } from '../../core/tier/quotaClient';
+import { useAuthGate } from '../../state/useAuthGate';
 
 const HEADLINE: Record<UpgradeReason, string> = {
   recipe: "You've hit your daily recipe limit",
@@ -22,6 +23,7 @@ export default function UpgradeSheet() {
   const open = useUpgradeSheetStore((s) => s.open);
   const reason = useUpgradeSheetStore((s) => s.reason);
   const close = useUpgradeSheetStore((s) => s.close);
+  const requireAuth = useAuthGate();
   const [redirecting, setRedirecting] = useState<'month' | 'year' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,7 +107,7 @@ export default function UpgradeSheet() {
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => void upgrade('month')}
+              onClick={() => requireAuth(() => void upgrade('month'))}
               disabled={redirecting !== null}
               data-testid="upgrade-sheet-cta-monthly"
               className="btn-primary disabled:opacity-60 disabled:cursor-wait"
@@ -114,7 +116,7 @@ export default function UpgradeSheet() {
             </button>
             <button
               type="button"
-              onClick={() => void upgrade('year')}
+              onClick={() => requireAuth(() => void upgrade('year'))}
               disabled={redirecting !== null}
               data-testid="upgrade-sheet-cta-annual"
               className="btn-secondary disabled:opacity-60 disabled:cursor-wait"

@@ -8,9 +8,11 @@ import { listRecipes } from '../../db/recipesRepo';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
+import { useAuthGate } from '../../state/useAuthGate';
 import type { KitchenEvent } from '../../core/types';
 
 export default function EventsLibrary() {
+  const requireAuth = useAuthGate();
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   // Populated when the chef returns from the recipe editor mid-review.
@@ -79,7 +81,7 @@ export default function EventsLibrary() {
           </p>
           <button
             type="button"
-            onClick={() => setSheetOpen(true)}
+            onClick={() => requireAuth(() => setSheetOpen(true))}
             className="btn-primary mt-6 inline-flex items-center gap-2"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
@@ -102,7 +104,7 @@ export default function EventsLibrary() {
         <h1 className="text-2xl font-bold">Events</h1>
         <button
           type="button"
-          onClick={() => setSheetOpen(true)}
+          onClick={() => requireAuth(() => setSheetOpen(true))}
           className="btn-primary inline-flex items-center gap-2"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />

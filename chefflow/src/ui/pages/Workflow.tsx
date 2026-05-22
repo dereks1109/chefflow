@@ -28,6 +28,7 @@ import {
   hashDishes,
 } from '../../core/scheduler';
 import { aggregateIngredients } from '../../core/recipes/aggregateIngredients';
+import { useAuthGate } from '../../state/useAuthGate';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
   ColorTag,
@@ -206,6 +207,7 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
+  const requireAuth = useAuthGate();
 
   // Live subscriptions — re-render automatically when Dexie writes anywhere
   // touch the watched rows. See src/db/hooks/useEvent.ts.
@@ -463,7 +465,7 @@ export default function Workflow() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => void handleRegenerate()}
+              onClick={() => requireAuth(() => void handleRegenerate())}
               disabled={workflowStatus.kind === 'generating'}
               className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Discard saved snapshot and re-run the LLM"
@@ -524,7 +526,7 @@ export default function Workflow() {
               <p className="mt-1 text-xs whitespace-pre-wrap">{workflowStatus.message}</p>
               <button
                 type="button"
-                onClick={() => void handleRegenerate()}
+                onClick={() => requireAuth(() => void handleRegenerate())}
                 className="btn-secondary text-xs mt-2 inline-flex items-center gap-1"
               >
                 <RefreshCw className="h-3 w-3" aria-hidden="true" />

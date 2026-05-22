@@ -9,10 +9,12 @@ import { deleteMenu, listMenus, saveMenu } from '../../db/menusRepo';
 import { randomId } from '../../core/util/id';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
+import { useAuthGate } from '../../state/useAuthGate';
 import { filterRecipes, filterRecipesByMenu } from '../../core/util/recipeSearch';
 import type { Menu, Recipe } from '../../core/types';
 
 export default function RecipesLibrary() {
+  const requireAuth = useAuthGate();
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [menus, setMenus] = useState<Menu[] | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -184,7 +186,7 @@ export default function RecipesLibrary() {
         <p className="mt-2 text-slate-600 dark:text-slate-400">No recipes yet.</p>
         <button
           type="button"
-          onClick={() => setNewRecipeOpen(true)}
+          onClick={() => requireAuth(() => setNewRecipeOpen(true))}
           className="btn-primary mt-6 inline-flex items-center gap-2"
         >
           <Plus className="h-4 w-4" aria-hidden="true" />
@@ -242,7 +244,7 @@ export default function RecipesLibrary() {
               </button>
               <button
                 type="button"
-                onClick={() => setNewRecipeOpen(true)}
+                onClick={() => requireAuth(() => setNewRecipeOpen(true))}
                 className="btn-primary inline-flex items-center gap-2"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />

@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
-import { UserButton } from '@clerk/clerk-react';
-import { Settings, Shield } from 'lucide-react';
+import { UserButton, useClerk, useUser } from '@clerk/clerk-react';
+import { LogIn, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UsageMeter from '../components/UsageMeter';
 import UpgradeButton from '../components/UpgradeButton';
@@ -8,6 +8,10 @@ import { useAdminStore } from '../../state/useAdminStore';
 
 export default function MobileTopBar() {
   const isAdmin = useAdminStore((s) => s.isAdmin);
+  const { isSignedIn } = useUser();
+  const clerk = useClerk();
+  const isE2E = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
+  const showSignedInChrome = isE2E || isSignedIn;
   return (
     <header
       className={[
@@ -86,10 +90,22 @@ export default function MobileTopBar() {
 
         <UsageMeter />
 
-        {(import.meta.env.VITE_E2E_MODE as string | undefined) !== 'true' && (
+        {!isE2E && showSignedInChrome && (
           <div className="flex items-center justify-center min-h-touch min-w-touch">
             <UserButton afterSignOutUrl="/" />
           </div>
+        )}
+        {!isE2E && !showSignedInChrome && (
+          <button
+            type="button"
+            onClick={() => clerk.openSignIn?.()}
+            data-testid="mobile-sign-in"
+            aria-label="Sign in"
+            className="inline-flex items-center gap-1.5 px-2.5 h-9 rounded-md text-sm font-medium bg-accent text-white hover:bg-accent/90"
+          >
+            <LogIn size={16} aria-hidden="true" />
+            Sign in
+          </button>
         )}
       </div>
     </header>

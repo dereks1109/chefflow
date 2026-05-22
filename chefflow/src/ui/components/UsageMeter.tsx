@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import { useTierStore } from '../../state/useTierStore';
 import {
   getQuotaSnapshot,
@@ -20,24 +21,29 @@ export default function UsageMeter() {
   const tier = useTierStore((s) => s.tier);
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  const { isSignedIn } = useUser();
   const [snapshot, setSnapshot] = useState<QuotaSnapshotResponse | null>(null);
 
   const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
 
   const refresh = useCallback(async () => {
-    if (e2eMode || tier !== 'free') return;
+    // Skip the worker call for signed-out users — it would 401 anyway and
+    // anon users have no quota to show. (Caps are still enforced server-
+    // side for any worker route that's actually reached.)
+    if (e2eMode || tier !== 'free' || !isSignedIn) return;
     try {
       setSnapshot(await getQuotaSnapshot());
     } catch {
       // Silent — the meter is best-effort. Caps are still enforced server-side.
       setSnapshot(null);
     }
-  }, [tier, e2eMode]);
+  }, [tier, e2eMode, isSignedIn]);
 
   // Refetch when the tier changes (e.g. user upgrades mid-session) and on
   // every route change so the meter reflects fresh state after a create.
   useEffect(() => { void refresh(); }, [refresh, pathname]);
 
+  if (!isSignedIn && !e2eMode) return null;
   if (tier !== 'free' || e2eMode || !snapshot) return null;
 
   const kind = activeKind(pathname);

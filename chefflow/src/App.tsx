@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { SignedIn, SignedOut } from '@clerk/clerk-react';
 import AppLayout from './ui/layout/AppLayout';
 import KitchenPlaceholder from './ui/pages/KitchenPlaceholder';
 import RecipesLibrary from './ui/pages/RecipesLibrary';
@@ -16,9 +15,9 @@ import AboutPage from './ui/pages/AboutPage';
 import AdminDashboard from './ui/pages/AdminDashboard';
 import CommunityLibrary from './ui/pages/CommunityLibrary';
 import CommunityRecipeView from './ui/pages/CommunityRecipeView';
-import SignInScreen from './ui/components/SignInScreen';
 import ConsentBanner from './ui/components/ConsentBanner';
 import TierSync from './ui/components/TierSync';
+import AuthGateRunner from './ui/components/AuthGateRunner';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
 import CookiesPage from './ui/pages/legal/CookiesPage';
@@ -27,38 +26,39 @@ import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 // Bootstrap dark mode from localStorage before first render (default: dark)
 import './ui/theme/useTheme';
 
-// Renders inside <Routes>; chooses between SignInScreen (signed-out) and the
-// authenticated app shell. Kept as a separate element so we can sit it
-// alongside the public legal routes in the top-level <Routes>.
-function GatedApp() {
+// Public-by-default app shell. Anonymous users browse all pages (recipes,
+// events, workflows, community, etc.); write actions are gated via the
+// useAuthGate hook (see src/state/useAuthGate.ts) which pops Clerk's
+// sign-in modal and re-fires the queued action once Clerk reports the
+// user is signed in (AuthGateRunner watches).
+//
+// TierSync + AuthGateRunner mount unconditionally — both noop for anon
+// users so they're safe to render at all times.
+function PublicApp() {
   return (
     <>
-      <SignedOut>
-        <SignInScreen />
-      </SignedOut>
-      <SignedIn>
-        <TierSync />
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Navigate to="/recipes" replace />} />
-            <Route path="/recipes" element={<RecipesLibrary />} />
-            <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
-            <Route path="/events" element={<EventsLibrary />} />
-            <Route path="/events/:id" element={<EventView />} />
-            <Route path="/events/:id/edit" element={<EventEditor />} />
-            <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
-            <Route path="/workflows" element={<WorkflowsLibrary />} />
-            <Route path="/workflows/:eventId" element={<Workflow />} />
-            <Route path="/community" element={<CommunityLibrary />} />
-            <Route path="/community/:id" element={<CommunityRecipeView />} />
-            <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/about" element={<AboutPage />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="*" element={<div className="p-6">Not found.</div>} />
-          </Route>
-        </Routes>
-      </SignedIn>
+      <TierSync />
+      <AuthGateRunner />
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Navigate to="/recipes" replace />} />
+          <Route path="/recipes" element={<RecipesLibrary />} />
+          <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
+          <Route path="/events" element={<EventsLibrary />} />
+          <Route path="/events/:id" element={<EventView />} />
+          <Route path="/events/:id/edit" element={<EventEditor />} />
+          <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+          <Route path="/workflows" element={<WorkflowsLibrary />} />
+          <Route path="/workflows/:eventId" element={<Workflow />} />
+          <Route path="/community" element={<CommunityLibrary />} />
+          <Route path="/community/:id" element={<CommunityRecipeView />} />
+          <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="*" element={<div className="p-6">Not found.</div>} />
+        </Route>
+      </Routes>
     </>
   );
 }
@@ -118,8 +118,9 @@ export default function App({ e2eMode = false }: AppProps) {
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/cookies" element={<CookiesPage />} />
         <Route path="/disclaimer" element={<DisclaimerPage />} />
-        {/* Everything else falls through the Clerk auth gate. */}
-        <Route path="*" element={<GatedApp />} />
+        {/* Everything else renders publicly; write actions gate via the
+            useAuthGate hook from inside individual components. */}
+        <Route path="*" element={<PublicApp />} />
       </Routes>
       {/* Mounted outside auth gates so first-time signed-out visitors see it. */}
       <ConsentBanner />

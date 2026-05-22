@@ -10,6 +10,7 @@ import {
 } from '../../core/community/communityClient';
 import { saveRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
+import { useAuthGate } from '../../state/useAuthGate';
 import type { Recipe, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
@@ -21,6 +22,7 @@ type LoadState =
 export default function CommunityRecipeView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const requireAuth = useAuthGate();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function CommunityRecipeView() {
       <div className="flex flex-wrap items-center gap-2 mb-6">
         <button
           type="button"
-          onClick={() => void handleLike()}
+          onClick={() => requireAuth(() => void handleLike())}
           aria-pressed={state.liked}
           className={[
             'inline-flex items-center gap-2 px-3 min-h-touch rounded-md text-sm font-medium border',
@@ -175,7 +177,7 @@ export default function CommunityRecipeView() {
 
         <button
           type="button"
-          onClick={() => void handleCopy()}
+          onClick={() => requireAuth(() => void handleCopy())}
           disabled={state.copying}
           className="btn-primary inline-flex items-center gap-2 disabled:opacity-60"
         >
