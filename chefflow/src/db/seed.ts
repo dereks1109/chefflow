@@ -6,13 +6,13 @@ import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, R
 import ribeyePhoto from '../assets/demo/ribeye.jpeg?inline';
 import saladPhoto from '../assets/demo/salad.jpeg?inline';
 import soupPhoto from '../assets/demo/tomatosoup.jpeg?inline';
+import pepperSaucePhoto from '../assets/demo/pepper-sauce.jpeg?inline';
 
 // Bump when demo recipe content changes — existing IndexedDB copies are
-// overwritten on next load so chefs see the new fields. v5 adds
-// (Demo) Black Pepper Sauce and links it from the Ribeye recipe via
-// componentRecipeId so the "type # to reference a recipe" feature has a
-// working out-of-the-box example.
-const SEED_FLAG = 'chefflow:seeded-demo-v5';
+// overwritten on next load so chefs see the new fields. v6 adds a cover
+// photo to (Demo) Black Pepper Sauce — v5 introduced the recipe but
+// shipped without a photo placeholder.
+const SEED_FLAG = 'chefflow:seeded-demo-v6';
 // v6 scales the demo event 10× (8 → 80 covers) — actually we keep
 // numberOfGuests=8 and scale per-dish portions 10×. Also adds realistic
 // notes covering allergies + budget so the menu-suitability analysis has
@@ -214,9 +214,7 @@ function demoRecipes(): Recipe[] {
         keyIngredientTags: ['black pepper', 'cream', 'shallot'],
         allergens: ['milk'],
       },
-      // No dedicated cover photo for the sauce — leaves the placeholder in
-      // the recipe card. Add a real photo later if desired.
-      '',
+      pepperSaucePhoto,
     ),
   ];
 }
