@@ -8,7 +8,14 @@ import AnalysisSection from '../components/AnalysisSection';
 import AllergenHistorySection from '../components/AllergenHistorySection';
 import SubRecipeStepsPanel from '../components/SubRecipeStepsPanel';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
-import { findAllergensInIngredient } from '../../core/recipes/llm/allergens';
+import {
+  findAllergensInIngredient,
+  isAllergenTag,
+  applyRecipeAllergenAdd,
+  applyRecipeAllergenRemove,
+  applyIngredientAllergenAdd,
+  applyIngredientAllergenRemove,
+} from '../../core/recipes/llm/allergens';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
 import { generateDescription } from '../../core/recipes/llm/descriptionGen';
@@ -16,7 +23,7 @@ import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { useAuthGate } from '../../state/useAuthGate';
-import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
+import type { AllergenTag, Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -84,10 +91,34 @@ export default function RecipeEditor() {
     setDirty(true);
   }
 
+  function commitRecipe(nextRecipe: Recipe) {
+    setState({ kind: 'ready', recipe: nextRecipe });
+    setDirty(true);
+  }
+
   function updateIngredient(idx: number, next: Ingredient) {
+    const prev = r.ingredients[idx];
     const nextList = r.ingredients.slice();
     nextList[idx] = next;
-    update('ingredients', nextList);
+    let working: Recipe = { ...r, ingredients: nextList };
+
+    // Diff the ingredient's allergenFlags and cascade each delta through the
+    // applyIngredient* helpers so analysis.allergens stays in sync. Other
+    // ingredient-field edits (name, amount, unit, etc.) are already in
+    // `working` and survive untouched.
+    const prevFlags = new Set<AllergenTag>(
+      (prev?.allergenFlags ?? []).filter(isAllergenTag),
+    );
+    const nextFlags = new Set<AllergenTag>(
+      (next.allergenFlags ?? []).filter(isAllergenTag),
+    );
+    for (const tag of nextFlags) {
+      if (!prevFlags.has(tag)) working = applyIngredientAllergenAdd(working, next.id, tag);
+    }
+    for (const tag of prevFlags) {
+      if (!nextFlags.has(tag)) working = applyIngredientAllergenRemove(working, next.id, tag);
+    }
+    commitRecipe(working);
   }
 
   function addIngredient() {
@@ -113,7 +144,24 @@ export default function RecipeEditor() {
   }
 
   function updateAnalysis(next: RecipeAnalysis) {
-    update('analysis', next);
+    // Diff the recipe-level allergens. Non-allergen analysis fields (calories,
+    // keyIngredientTags, uncertainIngredients) flow through `working.analysis`
+    // unchanged; only the allergen deltas trigger the cascade helpers, which
+    // also flag/unflag matching ingredient rows.
+    let working: Recipe = { ...r, analysis: next };
+    const prevAllergens = new Set<AllergenTag>(
+      (r.analysis?.allergens ?? []).filter(isAllergenTag),
+    );
+    const nextAllergens = new Set<AllergenTag>(
+      (next.allergens ?? []).filter(isAllergenTag),
+    );
+    for (const tag of nextAllergens) {
+      if (!prevAllergens.has(tag)) working = applyRecipeAllergenAdd(working, tag);
+    }
+    for (const tag of prevAllergens) {
+      if (!nextAllergens.has(tag)) working = applyRecipeAllergenRemove(working, tag);
+    }
+    commitRecipe(working);
   }
 
   // If the chef arrived here from the New-Event review flow ("Create new

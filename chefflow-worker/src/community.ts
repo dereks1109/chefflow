@@ -60,12 +60,16 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe — surfaced on the card so chefs
    *  see "yields 4" at a glance. */
   originalYield: number;
-  /** Tags surfaced on the card: UK-14 allergens + key ingredient tags.
-   *  Trimmed projection of the full RecipeAnalysis to keep the list
-   *  endpoint payload small. */
+  /** Tags surfaced on the card: UK-14 allergens + key ingredient tags +
+   *  the AI-uncertain ingredient list. Trimmed projection of the full
+   *  RecipeAnalysis to keep the list endpoint payload small. */
   tags?: {
     allergens?: string[];
     keyIngredientTags?: string[];
+    /** Ingredient names the original chef's AI flagged as uncertain.
+     *  Surfaced on the community card as an amber "AI to review" pill so
+     *  prospective copiers see the safety caveat before they copy. */
+    uncertainIngredients?: string[];
   };
 }
 
@@ -234,6 +238,7 @@ export async function listRecent(
     const analysis = (r.analysis ?? null) as null | {
       allergens?: unknown;
       keyIngredientTags?: unknown;
+      uncertainIngredients?: unknown;
     };
     const tags = analysis ? {
       allergens: Array.isArray(analysis.allergens)
@@ -241,6 +246,9 @@ export async function listRecent(
         : undefined,
       keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
         ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      uncertainIngredients: Array.isArray(analysis.uncertainIngredients)
+        ? analysis.uncertainIngredients.filter((x): x is string => typeof x === 'string')
         : undefined,
     } : undefined;
     out.push({
@@ -279,6 +287,7 @@ export async function listByAuthor(
     const analysis = (r.analysis ?? null) as null | {
       allergens?: unknown;
       keyIngredientTags?: unknown;
+      uncertainIngredients?: unknown;
     };
     const tags = analysis ? {
       allergens: Array.isArray(analysis.allergens)
@@ -286,6 +295,9 @@ export async function listByAuthor(
         : undefined,
       keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
         ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      uncertainIngredients: Array.isArray(analysis.uncertainIngredients)
+        ? analysis.uncertainIngredients.filter((x): x is string => typeof x === 'string')
         : undefined,
     } : undefined;
     out.push({

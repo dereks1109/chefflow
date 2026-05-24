@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Download, Heart, ImageOff } from 'lucide-react';
-import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { AllergenPill, KeyTagPill, UncertainAllergenPill } from './AllergenBadge';
 import { resolveCoverPhoto } from '../../core/demos/demoPhotoMap';
 import type { CommunityRecipeSummary } from '../../core/community/communityClient';
 
@@ -100,10 +100,14 @@ export default function CommunityRecipeCard({ recipe }: Props) {
 function CommunityCardTags({ tags }: { tags?: CommunityRecipeSummary['tags'] }) {
   const allergens = tags?.allergens ?? [];
   const keyTags = tags?.keyIngredientTags ?? [];
-  if (allergens.length === 0 && keyTags.length === 0) return null;
+  const uncertain = tags?.uncertainIngredients ?? [];
+  if (allergens.length === 0 && keyTags.length === 0 && uncertain.length === 0) return null;
   return (
     <div className="mt-1.5 flex flex-wrap gap-1">
       {allergens.map((a) => <AllergenPill key={`a-${a}`} tag={a} />)}
+      {uncertain.length > 0 && (
+        <UncertainAllergenPill count={uncertain.length} ingredients={uncertain} />
+      )}
       {keyTags.map((t) => <KeyTagPill key={`k-${t}`}>{t}</KeyTagPill>)}
     </div>
   );

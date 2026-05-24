@@ -117,4 +117,32 @@ describe('CommunityLibrary', () => {
       expect(screen.getByText(/Declared at recipe level/i)).toBeInTheDocument();
     });
   });
+
+  it('renders the amber AI-to-review pill when the community summary carries uncertainIngredients', async () => {
+    // The original chef analysed their recipe and the AI flagged
+    // "house chilli paste" as uncertain. That tag rides through to the
+    // community summary so prospective copiers see the caveat before they
+    // copy the recipe.
+    listMock.mockResolvedValue([
+      {
+        id: 'cr_fusion',
+        sourceLocalId: 'r_local_fusion',
+        title: 'Fusion Noodles',
+        authorDisplayName: 'Bob',
+        likes: 0,
+        copies: 0,
+        publishedAt: 0,
+        tags: { uncertainIngredients: ['house chilli paste'] },
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <CommunityLibrary />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-card-uncertain-pill')).toBeInTheDocument();
+      expect(screen.getByText(/AI to review \(1\)/i)).toBeInTheDocument();
+    });
+  });
 });

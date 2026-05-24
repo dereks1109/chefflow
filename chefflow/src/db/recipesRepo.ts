@@ -1,3 +1,4 @@
+import { liveQuery } from 'dexie';
 import { db } from './dexie';
 import { getCurrentUserId } from '../core/auth/getCurrentUserId';
 import { uncopyRecipe } from '../core/community/communityClient';
@@ -11,6 +12,28 @@ import type { Recipe } from '../core/types';
 //   - `deleteRecipe` is now a soft delete (tombstone) — D1 needs to know
 //     about the deletion to propagate it to other devices. The local row
 //     stays so a stale server pull can't resurrect it.
+
+/**
+ * Live subscription — calls `cb` with the current visible recipes immediately,
+ * then again on EVERY Dexie commit (including writes from the D1 sync engine
+ * landing demos / pulled rows). Returns an unsubscribe function.
+ *
+ * Replaces the one-shot `listRecipes().then(setRecipes)` pattern in library
+ * pages so that the post-login moment "demos arrive in Dexie" automatically
+ * re-renders the library — no nav round-trip required.
+ */
+export function subscribeRecipes(cb: (rows: Recipe[]) => void): () => void {
+  const observable = liveQuery(() => listRecipes());
+  const sub = observable.subscribe({
+    next: cb,
+    error: (err) => {
+      // Surface, don't crash — the page can fall back to whatever state it had.
+      // eslint-disable-next-line no-console
+      console.warn('[recipesRepo] subscribeRecipes errored', err);
+    },
+  });
+  return () => sub.unsubscribe();
+}
 
 export async function listRecipes(): Promise<Recipe[]> {
   const userId = getCurrentUserId();

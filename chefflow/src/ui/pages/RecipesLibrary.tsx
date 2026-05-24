@@ -4,8 +4,8 @@ import { BookOpen, Check, Layers, Plus, Search, Square, X } from 'lucide-react';
 import RecipeCard from '../components/RecipeCard';
 import GenerateRecipeSheet from '../components/GenerateRecipeSheet';
 import CreateMenuSheet from '../components/CreateMenuSheet';
-import { listRecipes, saveRecipe, deleteRecipe } from '../../db/recipesRepo';
-import { deleteMenu, listMenus, saveMenu } from '../../db/menusRepo';
+import { listRecipes, saveRecipe, deleteRecipe, subscribeRecipes } from '../../db/recipesRepo';
+import { deleteMenu, listMenus, saveMenu, subscribeMenus } from '../../db/menusRepo';
 import { randomId } from '../../core/util/id';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -72,10 +72,12 @@ export default function RecipesLibrary() {
     setPrefillTitle(undefined);
   }
 
-  useEffect(() => {
-    listRecipes().then(setRecipes);
-    listMenus().then(setMenus);
-  }, []);
+  // Live subscriptions — re-render the library every time Dexie commits
+  // (including when the D1 sync engine pulls demos into Dexie post-login).
+  // Replaces the old one-shot listRecipes() that snapshotted Dexie before
+  // the sync had finished. The unsubscribe runs on unmount.
+  useEffect(() => subscribeRecipes(setRecipes), []);
+  useEffect(() => subscribeMenus(setMenus), []);
 
   async function handleDuplicate(source: Recipe) {
     const copy: Recipe = {

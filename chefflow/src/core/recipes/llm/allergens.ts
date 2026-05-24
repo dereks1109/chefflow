@@ -142,6 +142,127 @@ export function findIngredientsForAllergen(recipe: Recipe, tag: AllergenTag): st
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// Bidirectional sync helpers — keep `recipe.analysis.allergens` and every
+// `ingredient.allergenFlags` mirroring each other so chefs don't see drift
+// between the editor's recipe-level pill row and the per-ingredient chips.
+//
+// All four helpers are PURE — return a new Recipe, never mutate. Callers
+// (RecipeEditor) feed the result into the recipe state. `keyIngredientTags`
+// + every other field flows through untouched.
+// ---------------------------------------------------------------------------
+
+/**
+ * Recipe-level ADD: the chef typed an allergen into AnalysisSection's tag
+ * input. Add it to `analysis.allergens` AND to `allergenFlags` of every
+ * ingredient whose name regex-matches the tag (via findAllergensInIngredient).
+ * Ingredients without a match are left alone — auto-flagging unrelated rows
+ * would surprise the chef.
+ */
+export function applyRecipeAllergenAdd(recipe: Recipe, tag: AllergenTag): Recipe {
+  const declared = new Set<AllergenTag>(recipe.analysis?.allergens ?? []);
+  declared.add(tag);
+  const nextIngredients = recipe.ingredients.map((ing) => {
+    if (!ing.name) return ing;
+    const matches = findAllergensInIngredient(ing.name, [tag]);
+    if (matches.length === 0) return ing;
+    const flags = new Set<AllergenTag>(ing.allergenFlags ?? []);
+    if (flags.has(tag)) return ing;
+    flags.add(tag);
+    return { ...ing, allergenFlags: Array.from(flags) };
+  });
+  return {
+    ...recipe,
+    ingredients: nextIngredients,
+    analysis: { ...(recipe.analysis ?? {}), allergens: Array.from(declared) },
+  };
+}
+
+/**
+ * Recipe-level REMOVE (post audit-modal): the chef removed the allergen at
+ * recipe level. Cascade: remove from `analysis.allergens` AND from every
+ * ingredient's `allergenFlags`. The audit row is recorded BEFORE this is
+ * called (Rule 12 — fail loud).
+ */
+export function applyRecipeAllergenRemove(recipe: Recipe, tag: AllergenTag): Recipe {
+  const declared = (recipe.analysis?.allergens ?? []).filter((a) => a !== tag);
+  const nextIngredients = recipe.ingredients.map((ing) => {
+    const flags = ing.allergenFlags;
+    if (!flags || !flags.includes(tag)) return ing;
+    const stripped = flags.filter((a) => a !== tag);
+    return { ...ing, allergenFlags: stripped.length > 0 ? stripped : undefined };
+  });
+  return {
+    ...recipe,
+    ingredients: nextIngredients,
+    analysis: { ...(recipe.analysis ?? {}), allergens: declared },
+  };
+}
+
+/**
+ * Ingredient-level ADD: the chef flagged an allergen on one ingredient row.
+ * Add it to that ingredient's `allergenFlags` AND promote it to
+ * `analysis.allergens` if not already present — so the recipe-level pill row
+ * + the library card immediately reflect the new safety signal.
+ */
+export function applyIngredientAllergenAdd(
+  recipe: Recipe,
+  ingredientId: string,
+  tag: AllergenTag,
+): Recipe {
+  const nextIngredients = recipe.ingredients.map((ing) => {
+    if (ing.id !== ingredientId) return ing;
+    const flags = new Set<AllergenTag>(ing.allergenFlags ?? []);
+    if (flags.has(tag)) return ing;
+    flags.add(tag);
+    return { ...ing, allergenFlags: Array.from(flags) };
+  });
+  const declared = new Set<AllergenTag>(recipe.analysis?.allergens ?? []);
+  declared.add(tag);
+  return {
+    ...recipe,
+    ingredients: nextIngredients,
+    analysis: { ...(recipe.analysis ?? {}), allergens: Array.from(declared) },
+  };
+}
+
+/**
+ * Ingredient-level REMOVE (post per-ingredient confirm-modal in IngredientRow):
+ * remove from that ingredient's `allergenFlags`. THEN: if no OTHER ingredient
+ * still carries this tag (neither in `allergenFlags` nor via regex auto-match
+ * against the ingredient name), also de-promote from `analysis.allergens` so
+ * the recipe-level pill disappears.
+ */
+export function applyIngredientAllergenRemove(
+  recipe: Recipe,
+  ingredientId: string,
+  tag: AllergenTag,
+): Recipe {
+  const nextIngredients = recipe.ingredients.map((ing) => {
+    if (ing.id !== ingredientId) return ing;
+    const flags = ing.allergenFlags;
+    if (!flags || !flags.includes(tag)) return ing;
+    const stripped = flags.filter((a) => a !== tag);
+    return { ...ing, allergenFlags: stripped.length > 0 ? stripped : undefined };
+  });
+  // After the per-ingredient removal, check if ANY remaining ingredient
+  // still carries this allergen (manual flag OR regex auto-match against
+  // the current declared set MINUS the tag we're considering removing).
+  const anyOtherSource = nextIngredients.some((ing) => {
+    if (ing.allergenFlags?.includes(tag)) return true;
+    if (ing.name && findAllergensInIngredient(ing.name, [tag]).includes(tag)) return true;
+    return false;
+  });
+  const declared = anyOtherSource
+    ? (recipe.analysis?.allergens ?? [])
+    : (recipe.analysis?.allergens ?? []).filter((a) => a !== tag);
+  return {
+    ...recipe,
+    ingredients: nextIngredients,
+    analysis: { ...(recipe.analysis ?? {}), allergens: declared },
+  };
+}
+
 /**
  * Effective allergen list for display purposes: union of the recipe-level
  * `analysis.allergens` (set by AI or the editor's tag input) and every

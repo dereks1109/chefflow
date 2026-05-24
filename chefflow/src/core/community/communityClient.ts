@@ -38,11 +38,16 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe. Optional for backward-compat
    *  with summaries cached before this field was added. */
   originalYield?: number;
-  /** Tags surfaced on the card — allergens (UK-14) + key ingredient tags.
-   *  Optional + tolerant: any missing field renders no chips. */
+  /** Tags surfaced on the card — allergens (UK-14) + key ingredient tags +
+   *  AI-uncertain ingredient names. Optional + tolerant: any missing field
+   *  renders no chips. */
   tags?: {
     allergens?: AllergenTag[];
     keyIngredientTags?: string[];
+    /** Ingredient names the original chef's AI flagged as uncertain.
+     *  Surfaced on the community card as an amber pill so prospective
+     *  copiers see the safety caveat. */
+    uncertainIngredients?: string[];
   };
 }
 

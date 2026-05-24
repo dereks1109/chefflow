@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, Plus, Sparkles } from 'lucide-react';
 import EventCard from '../components/EventCard';
 import GenerateEventSheet, { type ResumeReview } from '../components/GenerateEventSheet';
-import { listEvents, saveEvent, deleteEvent } from '../../db/eventsRepo';
+import { listEvents, saveEvent, deleteEvent, subscribeEvents } from '../../db/eventsRepo';
 import { listRecipes } from '../../db/recipesRepo';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
@@ -21,9 +21,9 @@ export default function EventsLibrary() {
   const [resumeReview, setResumeReview] = useState<ResumeReview | undefined>(undefined);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    listEvents().then(setEvents);
-  }, []);
+  // Live subscription — re-renders the moment the D1 sync engine commits
+  // new rows into Dexie post-login (no nav round-trip needed).
+  useEffect(() => subscribeEvents(setEvents), []);
 
   // Pick up any pending review draft once on mount.
   useEffect(() => {

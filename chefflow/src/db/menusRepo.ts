@@ -1,8 +1,22 @@
+import { liveQuery } from 'dexie';
 import { db } from './dexie';
 import { getCurrentUserId } from '../core/auth/getCurrentUserId';
 import type { Menu } from '../core/types';
 
 // See recipesRepo.ts for the userId-scoping + soft-delete + sync rationale.
+
+/** Live subscription — see subscribeRecipes for rationale. */
+export function subscribeMenus(cb: (rows: Menu[]) => void): () => void {
+  const observable = liveQuery(() => listMenus());
+  const sub = observable.subscribe({
+    next: cb,
+    error: (err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[menusRepo] subscribeMenus errored', err);
+    },
+  });
+  return () => sub.unsubscribe();
+}
 
 export async function listMenus(): Promise<Menu[]> {
   const userId = getCurrentUserId();

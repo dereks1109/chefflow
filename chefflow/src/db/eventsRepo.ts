@@ -1,3 +1,4 @@
+import { liveQuery } from 'dexie';
 import { db } from './dexie';
 import { getCurrentUserId } from '../core/auth/getCurrentUserId';
 import type { KitchenEvent } from '../core/types';
@@ -6,6 +7,19 @@ import type { KitchenEvent } from '../core/types';
 // All four repos follow the same shape so the sync engine can treat them
 // uniformly: stamp `userId`, bump `updatedAt`, flip `synced: false` on
 // every write; filter `userId` and `isDeleted` on every read.
+
+/** Live subscription — see subscribeRecipes for rationale. */
+export function subscribeEvents(cb: (rows: KitchenEvent[]) => void): () => void {
+  const observable = liveQuery(() => listEvents());
+  const sub = observable.subscribe({
+    next: cb,
+    error: (err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[eventsRepo] subscribeEvents errored', err);
+    },
+  });
+  return () => sub.unsubscribe();
+}
 
 export async function listEvents(): Promise<KitchenEvent[]> {
   const userId = getCurrentUserId();
