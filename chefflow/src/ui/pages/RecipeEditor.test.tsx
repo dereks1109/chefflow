@@ -4,10 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import RecipeEditor from './RecipeEditor';
 import { db } from '../../db/dexie';
+import { setCurrentUserId } from '../../state/currentUser';
 import type { Recipe } from '../../core/types';
+
+const TEST_USER = 'user_page_test';
 
 beforeEach(async () => {
   await db.recipes.clear();
+  setCurrentUserId(TEST_USER);
   // Save / remove buttons confirm via window.confirm — auto-accept in tests.
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -26,6 +30,7 @@ const seed: Recipe = {
   steps: [],
   createdAt: 1,
   updatedAt: 1,
+  ownerId: TEST_USER,
 };
 
 function renderEditorAt(id: string) {

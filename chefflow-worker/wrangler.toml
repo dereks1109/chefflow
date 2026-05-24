@@ -9,6 +9,16 @@ binding = "AI"
 binding = "RATE_LIMIT"
 id = "6300f5a914fa4ea885b73ae1860d3a1e"
 
+# Per-user recipes/events sync table. Provision once with:
+#   wrangler d1 create chefflow
+# then paste the database_id here. Apply schema with:
+#   wrangler d1 execute chefflow --file=./migrations/0001_init.sql
+[[d1_databases]]
+binding = "DB"
+database_name = "chefflow"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
 [vars]
 CLERK_ISSUER = "https://engaging-bat-5.clerk.accounts.dev"
 DAILY_LIMIT = "30"

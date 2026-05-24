@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import { BookOpen, CalendarDays, ListChecks, Command } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
+import SyncStatusChip from '../components/SyncStatusChip';
 
 const navItems = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -106,6 +107,8 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
         >
           <Command size={20} aria-hidden="true" />
         </button>
+
+        <SyncStatusChip />
 
         <ThemeToggle />
 

@@ -1,6 +1,11 @@
 import Dexie, { type Table } from 'dexie';
 import type { Recipe, KitchenEvent } from '../core/types';
 
+// Sentinel ownerId assigned to legacy rows during the v4 migration. The
+// first signed-in user post-upgrade claims these via claimLegacyRows() in
+// the bootstrap effect, so chefs who used the app pre-auth don't lose data.
+export const LEGACY_OWNER = '__legacy__';
+
 class ChefFlowDB extends Dexie {
   recipes!: Table<Recipe, string>;
   events!: Table<KitchenEvent, string>;
@@ -36,7 +41,42 @@ class ChefFlowDB extends Dexie {
         delete event.sessions;
       })
     );
+    // v4: add ownerId for per-user isolation + deletedAt/serverVersion/dirty
+    // for cloud sync. Backfill ownerId on existing rows to LEGACY_OWNER so
+    // the first sign-in can claim them. The compound [ownerId+updatedAt]
+    // indexes back listRecipes/listEvents per-user queries efficiently.
+    this.version(4).stores({
+      recipes: 'id, ownerId, updatedAt, title, [ownerId+updatedAt]',
+      events: 'id, ownerId, updatedAt, title, serveAt, [ownerId+updatedAt]',
+    }).upgrade(async (tx) => {
+      await tx.table('recipes').toCollection().modify((row: Record<string, unknown>) => {
+        if (!row.ownerId) row.ownerId = LEGACY_OWNER;
+        if (row.serverVersion === undefined) row.serverVersion = 0;
+        if (row.dirty === undefined) row.dirty = true;
+      });
+      await tx.table('events').toCollection().modify((row: Record<string, unknown>) => {
+        if (!row.ownerId) row.ownerId = LEGACY_OWNER;
+        if (row.serverVersion === undefined) row.serverVersion = 0;
+        if (row.dirty === undefined) row.dirty = true;
+      });
+    });
   }
 }
 
 export const db = new ChefFlowDB();
+
+// One-shot claim: rewrite legacy rows (ownerId='__legacy__') to the given
+// userId so a chef's pre-auth work follows them once they sign in. Gated by
+// a per-user localStorage flag so it only runs once per (browser, user).
+const CLAIM_FLAG_PREFIX = 'chefflow:claimed-legacy:';
+
+export async function claimLegacyRows(userId: string): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const flagKey = `${CLAIM_FLAG_PREFIX}${userId}`;
+  if (window.localStorage.getItem(flagKey) === '1') return;
+  await db.transaction('rw', db.recipes, db.events, async () => {
+    await db.recipes.where('ownerId').equals(LEGACY_OWNER).modify({ ownerId: userId, dirty: true });
+    await db.events.where('ownerId').equals(LEGACY_OWNER).modify({ ownerId: userId, dirty: true });
+  });
+  window.localStorage.setItem(flagKey, '1');
+}

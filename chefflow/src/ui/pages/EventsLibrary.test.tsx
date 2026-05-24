@@ -4,10 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import EventsLibrary from './EventsLibrary';
 import { db } from '../../db/dexie';
+import { setCurrentUserId } from '../../state/currentUser';
 import type { KitchenEvent } from '../../core/types';
+
+const TEST_USER = 'user_page_test';
 
 beforeEach(async () => {
   await db.events.clear();
+  setCurrentUserId(TEST_USER);
 });
 
 function renderPage() {
@@ -26,6 +30,7 @@ const dinner: KitchenEvent = {
   dishes: [],
   createdAt: 1,
   updatedAt: 1,
+  ownerId: TEST_USER,
 };
 
 describe('EventsLibrary', () => {
@@ -53,9 +58,12 @@ describe('EventsLibrary', () => {
       renderPage();
       await waitFor(() => screen.getByText('Sunday Dinner'));
       await userEvent.click(screen.getByRole('button', { name: /delete event sunday dinner/i }));
-      await waitFor(async () => {
-        expect(await db.events.count()).toBe(0);
+      // Soft-delete: tombstone stays in IndexedDB; UI shows empty state.
+      await waitFor(() => {
+        expect(screen.getByText(/no events yet/i)).toBeInTheDocument();
       });
+      const raw = await db.events.get('e_test_001');
+      expect(raw?.deletedAt).toBeGreaterThan(0);
     } finally {
       window.confirm = originalConfirm;
     }

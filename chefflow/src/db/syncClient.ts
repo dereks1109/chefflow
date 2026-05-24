@@ -1,0 +1,240 @@
+import { db } from './dexie';
+import type { Recipe, KitchenEvent } from '../core/types';
+import { getCurrentUserId } from '../state/currentUser';
+import { useSyncStore } from '../state/syncStore';
+
+// Where the worker lives. Default same-origin; tests can override.
+const DEFAULT_ORIGIN = '';
+
+type FetchImpl = typeof fetch;
+type TokenGetter = () => Promise<string | null>;
+
+interface SyncRow {
+  id: string;
+  updatedAt: number;
+  serverVersion: number;
+  deletedAt: number | null;
+  payload: Recipe | KitchenEvent;
+}
+
+interface PullResponse {
+  recipes: SyncRow[];
+  events: SyncRow[];
+  serverNow: number;
+}
+
+interface PushResponse {
+  // Per-id serverVersion the server applied — null means the server kept
+  // its existing row (incoming was older by updatedAt).
+  recipes: Record<string, number | null>;
+  events: Record<string, number | null>;
+  serverNow: number;
+}
+
+// Default token getter — pulls from the Clerk SDK on the window object.
+// Mirrors chefflow/src/core/llm/proxyClient.ts so the SPA never holds a
+// raw API key.
+async function defaultGetToken(): Promise<string | null> {
+  const clerk = (window as unknown as { Clerk?: { session?: { getToken(): Promise<string | null> } } }).Clerk;
+  return clerk?.session ? clerk.session.getToken() : null;
+}
+
+interface SyncOptions {
+  origin?: string;
+  fetchImpl?: FetchImpl;
+  getToken?: TokenGetter;
+}
+
+// Module-level lock: prevents overlapping syncs (the 60s timer + an online
+// event firing at the same time). Subsequent callers wait for the in-flight
+// run and then return.
+let inflight: Promise<void> | null = null;
+
+export async function syncNow(opts: SyncOptions = {}): Promise<void> {
+  if (inflight) {
+    await inflight;
+    return;
+  }
+  inflight = runSync(opts).finally(() => {
+    inflight = null;
+  });
+  await inflight;
+}
+
+async function runSync(opts: SyncOptions): Promise<void> {
+  const userId = getCurrentUserId();
+  if (!userId) return; // signed out — nothing to do
+
+  const store = useSyncStore.getState();
+  store.setStatus('syncing');
+
+  try {
+    await pushDirty(userId, opts);
+    await pullSince(userId, opts);
+    store.setLastSyncedAt(Date.now());
+    store.setStatus('idle');
+    store.setLastError(null);
+    await refreshPendingCount(userId);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isNetworkError(err)) {
+      store.setStatus('offline');
+      store.setLastError(null);
+    } else {
+      store.setStatus('error');
+      store.setLastError(msg);
+    }
+  }
+}
+
+function isNetworkError(err: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  if (err instanceof TypeError) return true; // fetch network failure
+  return false;
+}
+
+export async function refreshPendingCount(userId?: string): Promise<void> {
+  const uid = userId ?? getCurrentUserId();
+  if (!uid) {
+    useSyncStore.getState().setPendingCount(0);
+    return;
+  }
+  const [recipesDirty, eventsDirty] = await Promise.all([
+    db.recipes.where('ownerId').equals(uid).filter((r) => r.dirty === true).count(),
+    db.events.where('ownerId').equals(uid).filter((e) => e.dirty === true).count(),
+  ]);
+  useSyncStore.getState().setPendingCount(recipesDirty + eventsDirty);
+}
+
+async function pushDirty(userId: string, opts: SyncOptions): Promise<void> {
+  const [dirtyRecipes, dirtyEvents] = await Promise.all([
+    db.recipes.where('ownerId').equals(userId).filter((r) => r.dirty === true).toArray(),
+    db.events.where('ownerId').equals(userId).filter((e) => e.dirty === true).toArray(),
+  ]);
+  if (dirtyRecipes.length === 0 && dirtyEvents.length === 0) return;
+
+  const body = {
+    recipes: dirtyRecipes,
+    events: dirtyEvents,
+  };
+  const res = await authedFetch('/api/sync/push', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, opts);
+  if (!res.ok) throw new Error(`push failed: ${res.status}`);
+  const data = (await res.json()) as PushResponse;
+
+  // Clear `dirty` on rows the server accepted. Rows the server rejected
+  // (incoming updatedAt < stored) stay dirty so the next pull updates the
+  // local copy and the row will not re-push (because pull bumps updatedAt).
+  await db.transaction('rw', db.recipes, db.events, async () => {
+    for (const row of dirtyRecipes) {
+      const sv = data.recipes[row.id];
+      if (sv !== null && sv !== undefined) {
+        const fresh = await db.recipes.get(row.id);
+        // Don't clobber edits that happened *during* the push.
+        if (fresh && fresh.updatedAt === row.updatedAt) {
+          await db.recipes.put({ ...fresh, serverVersion: sv, dirty: false });
+        } else if (fresh) {
+          // Local edit during push — keep dirty so we push again next cycle.
+        }
+      }
+    }
+    for (const row of dirtyEvents) {
+      const sv = data.events[row.id];
+      if (sv !== null && sv !== undefined) {
+        const fresh = await db.events.get(row.id);
+        if (fresh && fresh.updatedAt === row.updatedAt) {
+          await db.events.put({ ...fresh, serverVersion: sv, dirty: false });
+        }
+      }
+    }
+  });
+}
+
+async function pullSince(userId: string, opts: SyncOptions): Promise<void> {
+  // Use the highest serverVersion we've ever applied as the watermark. We
+  // need the max across both tables for the request, but pull each table's
+  // delta independently so a slow-changing table doesn't pull the other
+  // table's whole history.
+  const [recipesMax, eventsMax] = await Promise.all([
+    maxServerVersion(db.recipes, userId),
+    maxServerVersion(db.events, userId),
+  ]);
+  const since = Math.min(recipesMax, eventsMax);
+  const url = `/api/sync/pull?since=${since}`;
+  const res = await authedFetch(url, { method: 'GET' }, opts);
+  if (!res.ok) throw new Error(`pull failed: ${res.status}`);
+  const data = (await res.json()) as PullResponse;
+
+  await db.transaction('rw', db.recipes, db.events, async () => {
+    for (const row of data.recipes) {
+      if (row.serverVersion <= recipesMax) continue;
+      await applyPulledRow(db.recipes, row, userId);
+    }
+    for (const row of data.events) {
+      if (row.serverVersion <= eventsMax) continue;
+      await applyPulledRow(db.events, row, userId);
+    }
+  });
+}
+
+async function applyPulledRow<T extends Recipe | KitchenEvent>(
+  table: import('dexie').Table<T, string>,
+  row: SyncRow,
+  userId: string,
+): Promise<void> {
+  const local = await table.get(row.id);
+
+  // Tombstone — hard delete locally so it doesn't keep appearing. We only
+  // accept the tombstone if it's at least as new as the local row; if the
+  // user edited locally after the server delete, LWW keeps their edit and
+  // the next push will overwrite the tombstone.
+  if (row.deletedAt !== null && row.deletedAt !== undefined) {
+    if (!local || local.updatedAt <= row.updatedAt) {
+      await table.delete(row.id);
+    }
+    return;
+  }
+
+  // Live row — apply unless the user edited locally more recently than the
+  // server's copy (their next push will win on LWW).
+  if (local && local.updatedAt > row.updatedAt) return;
+  await table.put({
+    ...(row.payload as T),
+    ownerId: userId,
+    serverVersion: row.serverVersion,
+    dirty: false,
+  });
+}
+
+async function maxServerVersion(
+  table: import('dexie').Table<Recipe | KitchenEvent, string>,
+  userId: string,
+): Promise<number> {
+  const rows = await table.where('ownerId').equals(userId).toArray();
+  let max = 0;
+  for (const r of rows) {
+    if (r.serverVersion && r.serverVersion > max) max = r.serverVersion;
+  }
+  return max;
+}
+
+async function authedFetch(
+  path: string,
+  init: RequestInit,
+  opts: SyncOptions,
+): Promise<Response> {
+  const getToken = opts.getToken ?? defaultGetToken;
+  const token = await getToken();
+  if (!token) throw new Error('Not signed in');
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  const origin = (opts.origin ?? DEFAULT_ORIGIN).replace(/\/+$/, '');
+  const url = `${origin}${path}`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    ...(init.headers as Record<string, string> | undefined),
+  };
+  if (init.body) headers['Content-Type'] = 'application/json';
+  return fetchImpl(url, { ...init, headers });
+}

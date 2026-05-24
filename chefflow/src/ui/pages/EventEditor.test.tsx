@@ -4,11 +4,15 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import EventEditor from './EventEditor';
 import { db } from '../../db/dexie';
+import { setCurrentUserId } from '../../state/currentUser';
 import type { KitchenEvent, Recipe } from '../../core/types';
+
+const TEST_USER = 'user_page_test';
 
 beforeEach(async () => {
   await db.events.clear();
   await db.recipes.clear();
+  setCurrentUserId(TEST_USER);
   // Save button now confirms — auto-accept in tests.
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -25,6 +29,7 @@ const seed: KitchenEvent = {
   dishes: [],
   createdAt: 1,
   updatedAt: 1,
+  ownerId: TEST_USER,
 };
 
 const ribeyeRecipe: Recipe = {
@@ -35,6 +40,7 @@ const ribeyeRecipe: Recipe = {
   steps: [],
   createdAt: 1,
   updatedAt: 1,
+  ownerId: TEST_USER,
 };
 
 function renderEditorAt(id: string) {

@@ -1,9 +1,12 @@
 import { db } from './dexie';
 import type { KitchenEvent } from '../core/types';
+import { requireCurrentUserId } from '../state/currentUser';
 
 export async function listEvents(): Promise<KitchenEvent[]> {
-  const all = await db.events.toArray();
-  return all.sort((a, b) => {
+  const userId = requireCurrentUserId();
+  const all = await db.events.where('ownerId').equals(userId).toArray();
+  const live = all.filter((e) => !e.deletedAt);
+  return live.sort((a, b) => {
     // Upcoming events (with serveAt) first, chronologically.
     // Unscheduled events go to the end, sorted by updatedAt desc within that group.
     const aHas = Boolean(a.serveAt);
@@ -16,13 +19,32 @@ export async function listEvents(): Promise<KitchenEvent[]> {
 }
 
 export async function getEvent(id: string): Promise<KitchenEvent | undefined> {
-  return db.events.get(id);
+  const userId = requireCurrentUserId();
+  const e = await db.events.get(id);
+  if (!e || e.ownerId !== userId || e.deletedAt) return undefined;
+  return e;
 }
 
 export async function saveEvent(event: KitchenEvent): Promise<void> {
-  await db.events.put(event);
+  const userId = requireCurrentUserId();
+  await db.events.put({
+    ...event,
+    ownerId: userId,
+    updatedAt: Date.now(),
+    dirty: true,
+  });
 }
 
+// Soft delete — see recipesRepo.deleteRecipe for the rationale.
 export async function deleteEvent(id: string): Promise<void> {
-  await db.events.delete(id);
+  const userId = requireCurrentUserId();
+  const e = await db.events.get(id);
+  if (!e || e.ownerId !== userId) return;
+  const now = Date.now();
+  await db.events.put({
+    ...e,
+    deletedAt: now,
+    updatedAt: now,
+    dirty: true,
+  });
 }

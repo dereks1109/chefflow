@@ -2,11 +2,13 @@ import { verifyToken } from '@clerk/backend';
 import { verifyClerkRequest, UnauthorizedError } from './auth';
 import { consumeDailyQuota, RateLimitExceeded } from './rateLimit';
 import { handleEndpoint, ENDPOINTS, type EndpointName } from './endpoints';
+import { handlePull, handlePush, type PushBody } from './sync';
 import type { ProxyRequestBody, ProxyResponseBody } from './types';
 
 export interface Env {
   AI: Ai;
   RATE_LIMIT: KVNamespace;
+  DB: D1Database;
   CLERK_ISSUER: string;
   CLERK_SECRET_KEY: string;
   DAILY_LIMIT: string;
@@ -16,7 +18,7 @@ type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => 
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 } as const;
 
@@ -43,6 +45,48 @@ export async function handleRequest(
   }
 
   const url = new URL(req.url);
+
+  // Sync routes — auth-only (no rate limit). Owner isolation is enforced in
+  // the SQL itself: every query filters on `owner_id = ?` from the JWT.
+  const syncMatch = /^\/api\/sync\/(pull|push)\/?$/.exec(url.pathname);
+  if (syncMatch) {
+    let userId: string;
+    try {
+      userId = await verifyClerkRequest(req, env, verify);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return json({ error: err.message }, 401);
+      throw err;
+    }
+    const op = syncMatch[1];
+    if (op === 'pull') {
+      if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+      const sinceParam = url.searchParams.get('since');
+      const since = sinceParam ? parseInt(sinceParam, 10) || 0 : 0;
+      try {
+        const data = await handlePull(env.DB, userId, since);
+        return json(data, 200);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return json({ error: msg }, 500);
+      }
+    }
+    // push
+    if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+    let body: PushBody;
+    try {
+      body = (await req.json()) as PushBody;
+    } catch {
+      return json({ error: 'Request body must be JSON' }, 400);
+    }
+    try {
+      const data = await handlePush(env.DB, userId, body);
+      return json(data, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return json({ error: msg }, 500);
+    }
+  }
+
   const match = /^\/api\/llm\/([a-z]+)\/?$/.exec(url.pathname);
   if (!match) return json({ error: 'Not found' }, 404);
 

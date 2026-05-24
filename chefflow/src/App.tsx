@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { SignedIn, SignedOut } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, useUser } from '@clerk/clerk-react';
 import AppLayout from './ui/layout/AppLayout';
 import KitchenPlaceholder from './ui/pages/KitchenPlaceholder';
 import RecipesLibrary from './ui/pages/RecipesLibrary';
@@ -13,16 +13,57 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SignInScreen from './ui/components/SignInScreen';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
+import { claimLegacyRows } from './db/dexie';
+import { setCurrentUserId } from './state/currentUser';
+import { syncNow, refreshPendingCount } from './db/syncClient';
 // Bootstrap dark mode from localStorage before first render (default: dark)
 import './ui/theme/useTheme';
 
-export default function App() {
-  const [booted, setBooted] = useState(false);
-  useEffect(() => {
-    Promise.all([seedDemoRecipes(), seedDemoEvents()]).finally(() => setBooted(true));
-  }, []);
+const SYNC_INTERVAL_MS = 60_000;
 
-  if (!booted) {
+export default function App() {
+  const { isLoaded, isSignedIn, user } = useUser();
+  const [booted, setBooted] = useState(false);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isSignedIn || !user) {
+      setCurrentUserId(null);
+      // Async to keep setState out of the effect's synchronous body.
+      Promise.resolve().then(() => setBooted(true));
+      return;
+    }
+
+    let cancelled = false;
+    const userId = user.id;
+    setCurrentUserId(userId);
+
+    (async () => {
+      try {
+        await claimLegacyRows(userId);
+        await Promise.all([seedDemoRecipes(userId), seedDemoEvents(userId)]);
+        await refreshPendingCount(userId);
+      } finally {
+        if (!cancelled) setBooted(true);
+      }
+      // Fire-and-forget initial sync — never blocks the UI from rendering.
+      void syncNow();
+    })();
+
+    // Background sync: trigger on reconnect and every minute. Same `syncNow`
+    // call sites, so the in-flight lock handles overlap.
+    const onOnline = () => { void syncNow(); };
+    window.addEventListener('online', onOnline);
+    const intervalId = window.setInterval(() => { void syncNow(); }, SYNC_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('online', onOnline);
+      window.clearInterval(intervalId);
+    };
+  }, [isLoaded, isSignedIn, user]);
+
+  if (!isLoaded || !booted) {
     return <div className="p-6 text-slate-500">Loading…</div>;
   }
 

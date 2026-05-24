@@ -25,10 +25,21 @@ function makeAi(captured: { calls: number; model?: string } = { calls: 0 }): Ai 
   } as unknown as Ai;
 }
 
+function makeD1Stub(): D1Database {
+  // Not exercised by the LLM-route tests below; sync.test.ts has its own
+  // richer stub. A throwing stub would catch any accidental D1 access here.
+  return {
+    prepare() {
+      throw new Error('D1 not stubbed for this test');
+    },
+  } as unknown as D1Database;
+}
+
 function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     AI: makeAi(),
     RATE_LIMIT: makeKv(),
+    DB: makeD1Stub(),
     CLERK_ISSUER: 'https://example.clerk.accounts.dev',
     CLERK_SECRET_KEY: 'sk_test_fake',
     DAILY_LIMIT: '3', // small so the 429 test runs fast

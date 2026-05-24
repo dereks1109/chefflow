@@ -4,10 +4,14 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import RecipesLibrary from './RecipesLibrary';
 import { db } from '../../db/dexie';
+import { setCurrentUserId } from '../../state/currentUser';
 import type { Recipe } from '../../core/types';
+
+const TEST_USER = 'user_page_test';
 
 beforeEach(async () => {
   await db.recipes.clear();
+  setCurrentUserId(TEST_USER);
 });
 
 function renderPage() {
@@ -26,6 +30,7 @@ const stew: Recipe = {
   steps: [],
   createdAt: 1,
   updatedAt: 1,
+  ownerId: TEST_USER,
 };
 
 describe('RecipesLibrary', () => {
@@ -66,9 +71,13 @@ describe('RecipesLibrary', () => {
       renderPage();
       await waitFor(() => screen.getByText('Beef Stew'));
       await userEvent.click(screen.getByRole('button', { name: /delete/i }));
-      await waitFor(async () => {
-        expect(await db.recipes.count()).toBe(0);
+      // Soft-delete: row stays as a tombstone (for sync), but the listing
+      // filters it out so the UI shows the empty state.
+      await waitFor(() => {
+        expect(screen.getByText(/no recipes yet/i)).toBeInTheDocument();
       });
+      const raw = await db.recipes.get('r_test_001');
+      expect(raw?.deletedAt).toBeGreaterThan(0);
     } finally {
       window.confirm = originalConfirm;
     }

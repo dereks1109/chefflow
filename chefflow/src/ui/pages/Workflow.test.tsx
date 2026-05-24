@@ -4,11 +4,20 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Workflow, { scheduledStepsToMilestones, milestonesToScheduledSteps } from './Workflow';
 import { db } from '../../db/dexie';
+import { setCurrentUserId } from '../../state/currentUser';
 import { scheduleEvent } from '../../core/scheduler/scheduleEvent';
 import { hashDishes } from '../../core/scheduler/hash';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { DEMO_EVENT, RIBEYE_RECIPE, SALAD_RECIPE } from '../../core/scheduler/__fixtures__/demoEvent';
-import type { ScheduledStep } from '../../core/types';
+import type { KitchenEvent, Recipe, ScheduledStep } from '../../core/types';
+
+const TEST_USER = 'user_page_test';
+
+// Stamp test fixtures with the current ownerId so the repo filter returns
+// them. The fixtures themselves stay framework-free (used by non-Dexie
+// scheduler tests as well).
+function ownedEvent(e: KitchenEvent): KitchenEvent { return { ...e, ownerId: TEST_USER }; }
+function ownedRecipe(r: Recipe): Recipe { return { ...r, ownerId: TEST_USER }; }
 
 // ---------------------------------------------------------------------------
 // LLM stub: all tests get a fake fetch that returns a valid workflow JSON
@@ -41,6 +50,7 @@ function stubGroqOk() {
 beforeEach(async () => {
   await db.events.clear();
   await db.recipes.clear();
+  setCurrentUserId(TEST_USER);
   // Default: ready-to-go LLM. Set an API key so the page doesn't park on needs-key.
   useLlmSettingsStore.setState({ apiKey: 'gsk_test', model: 'llama-3.3-70b-versatile' });
   stubGroqOk();
@@ -63,8 +73,8 @@ function renderWorkflowAt(eventId: string) {
 
 describe('Workflow page', () => {
   it('renders the event header (title + date)', async () => {
-    await db.events.put(DEMO_EVENT);
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    await db.events.put(ownedEvent(DEMO_EVENT));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -73,8 +83,8 @@ describe('Workflow page', () => {
   });
 
   it('renders scheduled step content from the algorithm (not the old placeholder)', async () => {
-    await db.events.put(DEMO_EVENT);
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    await db.events.put(ownedEvent(DEMO_EVENT));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     // Wait for both the event load AND the milestone render
@@ -92,7 +102,7 @@ describe('Workflow page', () => {
   });
 
   it('shows a hint when the event has no dishes', async () => {
-    await db.events.put({ ...DEMO_EVENT, dishes: [] });
+    await db.events.put(ownedEvent({ ...DEMO_EVENT, dishes: [] }));
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -168,14 +178,14 @@ describe('scheduledStepsToMilestones adapter', () => {
 
 describe('Workflow page — chef filter', () => {
   it('renders chef-filter chips, one per unique dish color', async () => {
-    await db.events.put({
+    await db.events.put(ownedEvent({
       ...DEMO_EVENT,
       dishes: [
         { ...DEMO_EVENT.dishes[0], colorTag: 'green' },
         { ...DEMO_EVENT.dishes[1], colorTag: 'blue' },
       ],
-    });
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    }));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -186,8 +196,8 @@ describe('Workflow page — chef filter', () => {
   });
 
   it('shows a hint when no dish has a color assigned yet', async () => {
-    await db.events.put(DEMO_EVENT);  // no colorTags on dishes
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    await db.events.put(ownedEvent(DEMO_EVENT));  // no colorTags on dishes
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -196,14 +206,14 @@ describe('Workflow page — chef filter', () => {
   });
 
   it('filtering to a color shows only that chef\'s steps in a read-only list', async () => {
-    await db.events.put({
+    await db.events.put(ownedEvent({
       ...DEMO_EVENT,
       dishes: [
         { ...DEMO_EVENT.dishes[0], colorTag: 'green' },  // ribeye
         { ...DEMO_EVENT.dishes[1], colorTag: 'blue' },   // salad
       ],
-    });
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    }));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => screen.getByRole('tab', { name: /Green/ }));
@@ -245,8 +255,8 @@ describe('Workflow page — persistence', () => {
       workflow: [customStep],
       workflowDishesHash: hashDishes(DEMO_EVENT.dishes),
     };
-    await db.events.put(eventWithSnapshot);
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    await db.events.put(ownedEvent(eventWithSnapshot));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -255,7 +265,7 @@ describe('Workflow page — persistence', () => {
   });
 
   it('shows a stale banner when the saved hash no longer matches the current dishes', async () => {
-    await db.events.put({
+    await db.events.put(ownedEvent({
       ...DEMO_EVENT,
       workflow: [
         {
@@ -278,8 +288,8 @@ describe('Workflow page — persistence', () => {
         },
       ],
       workflowDishesHash: 'not-matching',
-    });
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    }));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
@@ -288,7 +298,7 @@ describe('Workflow page — persistence', () => {
   });
 
   it('Regenerate clears the saved snapshot and re-runs the algorithm', async () => {
-    await db.events.put({
+    await db.events.put(ownedEvent({
       ...DEMO_EVENT,
       workflow: [
         {
@@ -311,8 +321,8 @@ describe('Workflow page — persistence', () => {
         },
       ],
       workflowDishesHash: hashDishes(DEMO_EVENT.dishes),
-    });
-    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    }));
+    await db.recipes.bulkPut([ownedRecipe(RIBEYE_RECIPE), ownedRecipe(SALAD_RECIPE)]);
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {

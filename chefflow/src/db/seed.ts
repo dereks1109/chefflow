@@ -2,12 +2,29 @@ import { db } from './dexie';
 import { randomId } from '../core/util/id';
 import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, RecipeAnalysis } from '../core/types';
 
-// Bump when demo recipe content changes — existing IndexedDB copies are
-// overwritten on next load so chefs see the new fields. v3 adds analysis +
-// pricePerPortion to the three demo recipes.
-const SEED_FLAG = 'chefflow:seeded-demo-v3';
-// v4 adds contact name / email / phone on the demo event.
-const EVENTS_SEED_FLAG = 'chefflow:seeded-demo-events-v4';
+// v5 swaps the legacy single-flag gate for a per-user gate (multiple users
+// on the same browser each get their own copy of the demos). Bumping the
+// version invalidates any old flag from v3/v4.
+const SEED_FLAG_PREFIX = 'chefflow:seeded-demo:';
+const EVENTS_SEED_FLAG_PREFIX = 'chefflow:seeded-demo-events:';
+const SEED_VERSION = 'v5';
+
+function flagFor(prefix: string, userId: string): string {
+  return `${prefix}${userId}:${SEED_VERSION}`;
+}
+
+// Per-user demo IDs so two Clerk users on the same browser don't collide on
+// `r_demo_ribeye`. Encoded so the result is a safe string but still readable
+// in DevTools.
+function demoRecipeId(userId: string, slug: string): string {
+  return `r_demo_${slug}__${userId}`;
+}
+function demoDishId(userId: string, slug: string): string {
+  return `d_demo_${slug}__${userId}`;
+}
+function demoEventId(userId: string, slug: string): string {
+  return `e_demo_${slug}__${userId}`;
+}
 
 function ing(amount: number, unit: string, name: string, locked = false): Ingredient {
   return {
@@ -33,6 +50,7 @@ function step(text: string, phase: StepPhase = 'cook'): WorkflowStep {
 }
 
 function makeRecipe(
+  ownerId: string,
   id: string,
   title: string,
   originalYield: number,
@@ -60,13 +78,17 @@ function makeRecipe(
       analyzedAt: now,
       source: 'manual',
     },
+    ownerId,
+    serverVersion: 0,
+    dirty: true,
   };
 }
 
-function demoRecipes(): Recipe[] {
+function demoRecipes(userId: string): Recipe[] {
   return [
     makeRecipe(
-      'r_demo_ribeye',
+      userId,
+      demoRecipeId(userId, 'ribeye'),
       '(Demo) Ribeye',
       2,
       '5m',
@@ -95,7 +117,8 @@ function demoRecipes(): Recipe[] {
       },
     ),
     makeRecipe(
-      'r_demo_salad',
+      userId,
+      demoRecipeId(userId, 'salad'),
       '(Demo) Garden Salad',
       4,
       '10m',
@@ -124,7 +147,8 @@ function demoRecipes(): Recipe[] {
       },
     ),
     makeRecipe(
-      'r_demo_soup',
+      userId,
+      demoRecipeId(userId, 'soup'),
       '(Demo) Tomato Basil Soup',
       4,
       '10m',
@@ -158,11 +182,12 @@ function demoRecipes(): Recipe[] {
   ];
 }
 
-export async function seedDemoRecipes(): Promise<void> {
+export async function seedDemoRecipes(userId: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  if (window.localStorage.getItem(SEED_FLAG) === '1') return;
-  await db.recipes.bulkPut(demoRecipes());
-  window.localStorage.setItem(SEED_FLAG, '1');
+  const flag = flagFor(SEED_FLAG_PREFIX, userId);
+  if (window.localStorage.getItem(flag) === '1') return;
+  await db.recipes.bulkPut(demoRecipes(userId));
+  window.localStorage.setItem(flag, '1');
 }
 
 function demoDish(
@@ -181,18 +206,30 @@ function demoDish(
   };
 }
 
-function demoEvents(): KitchenEvent[] {
+function demoEvents(userId: string): KitchenEvent[] {
   // Local-time construction: 2026-05-14 18:00 in the user's timezone.
   const serve = new Date(2026, 4, 14, 18, 0, 0);
   const ribeyeStart = new Date(2026, 4, 14, 17, 30, 0);
   const saladStart = new Date(2026, 4, 14, 17, 45, 0);
   const now = Date.now();
   // Pinned dish ids so the section buckets below can reference them by id.
-  const ribeye = demoDish('d_demo_ribeye', '(Demo) Ribeye', 'r_demo_ribeye', 2, ribeyeStart);
-  const salad = demoDish('d_demo_salad', '(Demo) Garden Salad', 'r_demo_salad', 4, saladStart);
+  const ribeye = demoDish(
+    demoDishId(userId, 'ribeye'),
+    '(Demo) Ribeye',
+    demoRecipeId(userId, 'ribeye'),
+    2,
+    ribeyeStart,
+  );
+  const salad = demoDish(
+    demoDishId(userId, 'salad'),
+    '(Demo) Garden Salad',
+    demoRecipeId(userId, 'salad'),
+    4,
+    saladStart,
+  );
   return [
     {
-      id: 'e_demo_main',
+      id: demoEventId(userId, 'main'),
       title: 'Demo Event',
       serveAt: serve.toISOString(),
       location: 'Home kitchen',
@@ -203,18 +240,22 @@ function demoEvents(): KitchenEvent[] {
       notes: 'Nothing',
       dishes: [ribeye, salad],
       sections: [
-        { id: 's_demo_starters', name: 'Starters', dishIds: [salad.id] },
-        { id: 's_demo_mains', name: 'Mains', dishIds: [ribeye.id] },
+        { id: `s_demo_starters__${userId}`, name: 'Starters', dishIds: [salad.id] },
+        { id: `s_demo_mains__${userId}`, name: 'Mains', dishIds: [ribeye.id] },
       ],
       createdAt: now,
       updatedAt: now,
+      ownerId: userId,
+      serverVersion: 0,
+      dirty: true,
     },
   ];
 }
 
-export async function seedDemoEvents(): Promise<void> {
+export async function seedDemoEvents(userId: string): Promise<void> {
   if (typeof window === 'undefined') return;
-  if (window.localStorage.getItem(EVENTS_SEED_FLAG) === '1') return;
-  await db.events.bulkPut(demoEvents());
-  window.localStorage.setItem(EVENTS_SEED_FLAG, '1');
+  const flag = flagFor(EVENTS_SEED_FLAG_PREFIX, userId);
+  if (window.localStorage.getItem(flag) === '1') return;
+  await db.events.bulkPut(demoEvents(userId));
+  window.localStorage.setItem(flag, '1');
 }

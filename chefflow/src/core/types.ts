@@ -62,7 +62,25 @@ export interface RecipeAnalysis {
   source?: 'llm-text' | 'llm-vision' | 'manual';
 }
 
-export interface Recipe {
+// Sync metadata attached to every owned record. Optional on the type so
+// pre-sync data (and unit-test fixtures) still type-check; the repos always
+// set these fields on save. See chefflow/src/db/syncClient.ts for semantics.
+export interface SyncFields {
+  // Clerk userId (`user_…`) of the row's owner. Listings filter by this so
+  // multiple Clerk users on the same browser can't see each other's data.
+  ownerId?: string;
+  // Epoch ms returned by the server on the last successful push or pull. 0
+  // (or undefined) means "never synced" — the row is local-only until push.
+  serverVersion?: number;
+  // Local-only flag: needs to be pushed to the server. Cleared after the
+  // server acknowledges the write. Never sent to the server.
+  dirty?: boolean;
+  // Soft-delete tombstone (epoch ms). Listings filter these out. The row
+  // stays in IndexedDB so the delete can propagate to the server.
+  deletedAt?: number;
+}
+
+export interface Recipe extends SyncFields {
   id: string;
   title: string;
   originalYield: number;
@@ -100,7 +118,7 @@ export interface EventSection {
   dishIds: string[];
 }
 
-export interface KitchenEvent {
+export interface KitchenEvent extends SyncFields {
   id: string;
   title: string;
   serveAt?: string;      // ISO datetime — when food is served / event anchor
