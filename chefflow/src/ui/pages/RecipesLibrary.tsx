@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Plus } from 'lucide-react';
 import RecipeCard from '../components/RecipeCard';
 import GenerateRecipeSheet from '../components/GenerateRecipeSheet';
+import AllergenAdvisoryBanner from '../components/AllergenAdvisoryBanner';
 import { listRecipes, saveRecipe, deleteRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
 import type { Recipe } from '../../core/types';
@@ -11,6 +12,14 @@ export default function RecipesLibrary() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [newRecipeOpen, setNewRecipeOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Banner is shown only when the library actually contains an
+  // AI-flagged allergen — first-time users with empty / unflagged
+  // libraries see no nag.
+  const hasAllergens = useMemo(
+    () => (recipes ?? []).some((r) => (r.analysis?.allergens?.length ?? 0) > 0),
+    [recipes],
+  );
 
   async function handleCreated(r: Recipe) {
     await saveRecipe(r);
@@ -87,6 +96,8 @@ export default function RecipesLibrary() {
           New recipe
         </button>
       </header>
+
+      <AllergenAdvisoryBanner enabled={hasAllergens} />
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {recipes.map((r) => (
           <li key={r.id}>

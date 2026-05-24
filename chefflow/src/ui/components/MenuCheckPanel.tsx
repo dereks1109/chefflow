@@ -4,6 +4,7 @@ import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { checkMenu } from '../../core/events/llm/menuCheck';
 import { getRecipe } from '../../db/recipesRepo';
 import { saveEvent } from '../../db/eventsRepo';
+import FoodSafetyAdvisory from './FoodSafetyAdvisory';
 import type { KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
 
 interface Props {
@@ -101,7 +102,17 @@ export default function MenuCheckPanel({ event, onAnalysisChange }: Props) {
         </div>
       )}
 
-      {analysis && <VerdictView analysis={analysis} />}
+      {analysis && (
+        <>
+          <VerdictView analysis={analysis} />
+          <div className="mt-3">
+            <FoodSafetyAdvisory
+              variant="block"
+              message="Menu-suitability checks are AI-assisted and advisory. Cross-check guest allergies and dietary requirements directly with the host before service."
+            />
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -83,7 +83,15 @@ function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysi
   const allergens = analysis.allergens ?? [];
   if (kcal === undefined && keyTags.length === 0 && allergens.length === 0) return null;
   return (
-    <section className="mt-2 flex flex-wrap gap-1.5" aria-label="Recipe tags">
+    <section
+      className="mt-2 flex flex-wrap gap-1.5"
+      aria-label="Recipe tags"
+      title={
+        allergens.length > 0
+          ? 'Allergens are AI-assisted estimates — verify before serving.'
+          : undefined
+      }
+    >
       {/* Allergens first — safety-critical info gets the most visible slot. */}
       {allergens.map((a) => (
         <AllergenPill key={a} tag={a} />

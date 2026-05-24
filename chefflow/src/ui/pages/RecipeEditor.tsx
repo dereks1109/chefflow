@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
 import AnalysisSection from '../components/AnalysisSection';
+import VerificationToggle from '../components/VerificationToggle';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
+import { getPrefs } from '../../db/prefsRepo';
 import { findAllergensInIngredient } from '../../core/recipes/llm/allergens';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
@@ -17,8 +20,22 @@ type LoadState =
 export default function RecipeEditor() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useUser();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [dirty, setDirty] = useState(false);
+  const [chefName, setChefName] = useState('');
+
+  useEffect(() => {
+    // Display-name preference takes priority; fall back to Clerk's name.
+    let cancelled = false;
+    void getPrefs().then((prefs) => {
+      if (cancelled) return;
+      const fromPrefs = prefs?.displayName?.trim();
+      const fromClerk = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+      setChefName(fromPrefs || fromClerk || '');
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +67,13 @@ export default function RecipeEditor() {
   const r = state.recipe;
 
   function update<K extends keyof Recipe>(key: K, value: Recipe[K]) {
-    setState({ kind: 'ready', recipe: { ...r, [key]: value } });
+    // Clear verification when a safety-relevant field changes — chef must
+    // re-confirm after edits to ingredients or the AI-generated analysis.
+    const clearsVerification = key === 'ingredients' || key === 'analysis';
+    const nextRecipe: Recipe = clearsVerification
+      ? { ...r, [key]: value, verifiedAt: undefined, verifiedBy: undefined }
+      : { ...r, [key]: value };
+    setState({ kind: 'ready', recipe: nextRecipe });
     setDirty(true);
   }
 
@@ -109,8 +132,20 @@ export default function RecipeEditor() {
 
   return (
     <section className="p-4 md:p-6">
-      <header className="flex items-center justify-between mb-4 gap-2">
-        <h1 className="text-2xl font-bold">Edit recipe</h1>
+      <header className="flex flex-wrap items-center justify-between mb-4 gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold">Edit recipe</h1>
+          <VerificationToggle
+            verifiedAt={r.verifiedAt}
+            verifiedBy={r.verifiedBy}
+            chefName={chefName}
+            onChange={(next) => {
+              setState({ kind: 'ready', recipe: { ...r, ...next } });
+              setDirty(true);
+            }}
+            label="this recipe"
+          />
+        </div>
         <div className="flex gap-2">
           <button type="button" onClick={handleCancel} className="btn-secondary">
             Cancel

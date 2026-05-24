@@ -56,12 +56,14 @@ These all belong inside Plan 3 Task A but are easy to forget:
 
 ---
 
-## ⚖️ Legal / privacy follow-ups (from Part 3 plan)
+## ⚖️ Legal / privacy follow-ups (from Part 3 + Part 4 plans)
 
-Items deferred from the legal-risk audit at `/root/.claude/plans/1-make-every-user-serene-leaf.md` Part 3:
+Items still deferred from the legal-risk audit at `/root/.claude/plans/1-make-every-user-serene-leaf.md` Parts 3 & 4:
 
-- [ ] Write a privacy policy + ToS at `chefflow/public/privacy.html` and `terms.html`. Blocker: pick a real data-controller contact email (placeholder "privacy@chefflow.example" was rejected this session).
+- [ ] Write a privacy policy + ToS at `chefflow/public/privacy.html` and `terms.html`. Blocker: pick a real data-controller contact email.
 - [ ] Add a consent checkbox to `SignUpScreen.tsx` once the policy pages exist ("I agree to the Terms and acknowledge the Privacy Policy"), block submit until ticked.
+- [ ] Add the food-safety carve-out clause (Part 4 §5) to the ToS when it lands.
+- [ ] Add the age statement ("ChefFlow is intended for professional/adult kitchen use") to the privacy policy when it lands.
 - [ ] Separate `KitchenEvent.dietaryRequirements?: string[]` from the freeform `notes` field so health data is independently controllable. Larger refactor — Tier 2 plan item.
 - [ ] D1 region pinning (`location_hint = "weur"`) if EU/UK customers materialize. Document in privacy.html when it exists.
 - [ ] Sign Cloudflare's + Clerk's DPAs and link them from the privacy policy.
@@ -86,6 +88,7 @@ Items deferred from the legal-risk audit at `/root/.claude/plans/1-make-every-us
 
 ## ✅ Recently done (for reference; trim periodically)
 
+- 2026-05-24: Food-safety mitigations (Part 4 of the legal-risk plan). New `FoodSafetyAdvisory` + `AllergenAdvisoryBanner` + `VerificationToggle` components; allergen advisory now shown in `AnalysisSection` editor + on the recipe library page; menu-suitability verdicts in `MenuCheckPanel` carry an "advisory only" caveat; new `verifiedAt` / `verifiedBy` audit fields on `Recipe` + `KitchenEvent` with a Mark-as-verified chip in both the recipe editor and the event view (auto-clears on safety-relevant edits); LLM allergen prompt instructs conservative tagging for chef-verification draft.
 - 2026-05-24: Legal-risk remediation pass — Tier 1 + Tier 2 of the audit at `/root/.claude/plans/1-make-every-user-serene-leaf.md` Part 3. MIT `LICENSE` + `THIRD_PARTY_NOTICES.md` at repo root; `AccountDataSheet` UI for GDPR Art. 17 delete + Art. 20 export; new `DELETE /api/account` + `GET /api/account/export` worker routes; `chefflow/src/core/llm/sanitize.ts` defense-in-depth PII stripper; truthful Cloudflare-Workers-AI disclosure in `LlmSettingsSheet`; "Powered by Google" attribution in `LocationAutocomplete`; demo recipe authorship comment in `seed.ts`.
 - 2026-05-24: Account setup wizard + sign-up toggle. New `AccountSetupSheet` collects display name / unit system / kitchen role on first sign-in (re-openable from the Clerk UserButton menu); `SignInScreen` exposes a Sign in / Create account tab toggle (`ece5bca`).
 - 2026-05-24: Pages → Worker forwarding for `/api/sync/*` so the deployed frontend can reach the D1-backed sync handlers (`d406c81`).

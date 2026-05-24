@@ -69,6 +69,7 @@ ALLERGEN RULE:
 - If a recipe contains no declarable allergens, return [].
 - Do NOT invent new tag keys.
 - Tag conservatively: if an ingredient typically contains an allergen (e.g. soy sauce → "soybeans" AND "gluten"), include it.
+- This tagging is an AI-assisted draft for a human chef to verify before serving. When an ingredient name is ambiguous, vague (e.g. "stock", "sauce"), or could plausibly contain an allergen depending on the brand or preparation, INCLUDE the candidate tag rather than omit it — the chef will reject false positives.
 
 PORTION RULE:
 - If the user specifies portions, set originalYield exactly and scale ingredient amounts to match.
@@ -152,6 +153,7 @@ ALLERGEN RULE:
 - Return ONLY tag keys from the list above.
 - If a recipe contains no declarable allergens, return [].
 - Tag conservatively: if an ingredient typically contains an allergen, include it.
+- This is an AI-assisted draft for a human chef to verify before serving. When an ingredient is ambiguous or could plausibly contain an allergen depending on brand or preparation, INCLUDE the candidate tag rather than omit it.
 
 Return ONLY the JSON object.`;
 }

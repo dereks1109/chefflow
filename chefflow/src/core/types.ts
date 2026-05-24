@@ -20,6 +20,11 @@ export interface UserPrefs {
   kitchenRole?: string;
   onboardedAt?: number;
   onboardSkippedAt?: number;
+  // First-time allergen advisory banner. Set when the user dismisses
+  // the "Allergens are AI-assisted estimates" notice (or — when they
+  // first see an allergen-bearing recipe and acknowledge it). Presence
+  // suppresses the banner across devices via the existing prefs sync.
+  allergenAdvisoryAckedAt?: number;
 }
 
 export type ThermalClass = 'flash' | 'stable' | 'normal';
@@ -117,6 +122,12 @@ export interface Recipe extends SyncFields {
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().
   pricePerPortion?: number;
+  // Chef-verification audit trail. Set when the chef explicitly confirms
+  // they've reviewed the allergen flags + nutrition data for this recipe.
+  // Stale-check: clears (unset) on any subsequent edit to ingredients or
+  // analysis so the chef has to re-verify after meaningful changes.
+  verifiedAt?: number;       // epoch ms
+  verifiedBy?: string;       // chef's display name (from UserPrefs)
 }
 
 export interface Dish {
@@ -165,6 +176,12 @@ export interface KitchenEvent extends SyncFields {
   sections?: EventSection[];
   createdAt: number;
   updatedAt: number;
+
+  // Chef-verification audit trail. Same semantics as Recipe.verifiedAt —
+  // set when the chef explicitly confirms the menu suits the declared
+  // dietary requirements and any pre-service safety checks are done.
+  verifiedAt?: number;
+  verifiedBy?: string;
 
   // Plan 3: saved workflow snapshot — present once user clicks Save on the
   // workflow page. Staleness is detected by comparing workflowDishesHash to

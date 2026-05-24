@@ -2,9 +2,9 @@ import { AlertTriangle } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
 import type { AllergenTag } from '../../core/types';
 
-// TODO(v2): pair AllergenPill with a "LLM-estimated — verify before serving"
-// disclaimer in the editor. A missed allergen is a safety concern; the badge
-// alone should not be treated as a regulatory declaration.
+// Allergens shown via `AllergenPill` are AI-assisted estimates. Anywhere the
+// pill is rendered, pair it with `<FoodSafetyAdvisory />` so the user sees
+// the verify-before-serving caveat. See plan Part 4.
 
 export function KeyTagPill({ children }: { children: React.ReactNode }) {
   return (

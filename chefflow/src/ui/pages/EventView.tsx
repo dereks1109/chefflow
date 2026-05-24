@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import { ArrowLeft, BookOpen, Calendar, Clock, Edit3, ExternalLink, Hand, Layers, Mail, MapPin, Phone, Sparkles, StickyNote, User, Users, Wallet } from 'lucide-react';
-import { getEvent } from '../../db/eventsRepo';
+import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { getRecipe } from '../../db/recipesRepo';
+import { getPrefs } from '../../db/prefsRepo';
 import { swatchClassFor } from '../components/ColorPicker';
 import MenuCheckPanel from '../components/MenuCheckPanel';
+import VerificationToggle from '../components/VerificationToggle';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
 import { groupDishesBySections } from '../../core/events/sections';
@@ -18,11 +21,24 @@ type LoadState =
 export default function EventView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useUser();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   // Recipe lookup keyed by recipeId. Populated after the event loads so dishes
   // can be priced (recipe.pricePerPortion × dish.portions) for the per-dish
   // line + event-total summary.
   const [recipesById, setRecipesById] = useState<Map<string, Recipe>>(new Map());
+  const [chefName, setChefName] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPrefs().then((prefs) => {
+      if (cancelled) return;
+      const fromPrefs = prefs?.displayName?.trim();
+      const fromClerk = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+      setChefName(fromPrefs || fromClerk || '');
+    });
+    return () => { cancelled = true; };
+  }, [user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +126,20 @@ export default function EventView() {
       </header>
 
       <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
-        <h1 className="text-3xl font-bold">{e.title || 'Untitled event'}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="text-3xl font-bold">{e.title || 'Untitled event'}</h1>
+          <VerificationToggle
+            verifiedAt={e.verifiedAt}
+            verifiedBy={e.verifiedBy}
+            chefName={chefName}
+            label="this menu"
+            onChange={async (next) => {
+              const updated: KitchenEvent = { ...e, ...next, updatedAt: Date.now() };
+              setState({ kind: 'ready', event: updated });
+              await saveEvent(updated);
+            }}
+          />
+        </div>
         <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(e.serveAt)}</span>

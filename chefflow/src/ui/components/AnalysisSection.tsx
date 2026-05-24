@@ -3,6 +3,7 @@ import { AlertTriangle, Plus, Sparkles, X } from 'lucide-react';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
 import { analyzeRecipe } from '../../core/recipes/llm/recipeGen';
+import FoodSafetyAdvisory from './FoodSafetyAdvisory';
 import type { AllergenTag, Recipe, RecipeAnalysis } from '../../core/types';
 
 interface Props {
@@ -197,6 +198,12 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
             </EditablePill>
           ))}
         </div>
+
+        {allergens.length > 0 && (
+          <div className="mt-2">
+            <FoodSafetyAdvisory variant="block" />
+          </div>
+        )}
         <div className="flex gap-2 mt-2">
           <input
             type="text"
