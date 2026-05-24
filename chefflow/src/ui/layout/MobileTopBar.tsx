@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { Command, UserCog, Database } from 'lucide-react';
+import { Command, UserCog, Database, LifeBuoy } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 import { useAccountSetupStore } from '../../state/accountSetupStore';
 import { useAccountDataStore } from '../../state/accountDataStore';
+import { useHelpStore } from '../../state/helpStore';
 
 interface MobileTopBarProps {
   onOpenPalette: () => void;
@@ -12,6 +13,7 @@ interface MobileTopBarProps {
 export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
   const openSetup = useAccountSetupStore((s) => s.setOpen);
   const openData = useAccountDataStore((s) => s.setOpen);
+  const openHelp = useHelpStore((s) => s.setOpen);
   return (
     <header
       className={[
@@ -69,6 +71,11 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
                 label="Account data"
                 labelIcon={<Database size={14} aria-hidden="true" />}
                 onClick={() => openData(true)}
+              />
+              <UserButton.Action
+                label="Help & feedback"
+                labelIcon={<LifeBuoy size={14} aria-hidden="true" />}
+                onClick={() => openHelp(true)}
               />
             </UserButton.MenuItems>
           </UserButton>
