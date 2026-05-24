@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Recipe, KitchenEvent } from '../core/types';
+import type { Recipe, KitchenEvent, UserPrefs } from '../core/types';
 
 // Sentinel ownerId assigned to legacy rows during the v4 migration. The
 // first signed-in user post-upgrade claims these via claimLegacyRows() in
@@ -9,6 +9,7 @@ export const LEGACY_OWNER = '__legacy__';
 class ChefFlowDB extends Dexie {
   recipes!: Table<Recipe, string>;
   events!: Table<KitchenEvent, string>;
+  userPrefs!: Table<UserPrefs, string>;
 
   constructor() {
     super('chefflow');
@@ -59,6 +60,16 @@ class ChefFlowDB extends Dexie {
         if (row.serverVersion === undefined) row.serverVersion = 0;
         if (row.dirty === undefined) row.dirty = true;
       });
+    });
+    // v5: per-user preferences (unit system) — a single row per user, keyed
+    // by the user's id so the sync layer can reuse the same row schema as
+    // recipes/events. Settings the chef would expect to follow them across
+    // devices go here; sensitive (API keys) and device-specific (theme) ones
+    // stay in localStorage.
+    this.version(5).stores({
+      recipes: 'id, ownerId, updatedAt, title, [ownerId+updatedAt]',
+      events: 'id, ownerId, updatedAt, title, serveAt, [ownerId+updatedAt]',
+      userPrefs: 'id, ownerId, updatedAt',
     });
   }
 }

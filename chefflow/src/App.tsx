@@ -15,6 +15,7 @@ import SignInScreen from './ui/components/SignInScreen';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 import { claimLegacyRows } from './db/dexie';
 import { setCurrentUserId } from './state/currentUser';
+import { startPrefsSync } from './state/userPrefsSync';
 import { syncNow, refreshPendingCount } from './db/syncClient';
 // Bootstrap dark mode from localStorage before first render (default: dark)
 import './ui/theme/useTheme';
@@ -37,11 +38,13 @@ export default function App() {
     let cancelled = false;
     const userId = user.id;
     setCurrentUserId(userId);
+    let stopPrefsSync: (() => void) | null = null;
 
     (async () => {
       try {
         await claimLegacyRows(userId);
         await Promise.all([seedDemoRecipes(userId), seedDemoEvents(userId)]);
+        stopPrefsSync = await startPrefsSync();
         await refreshPendingCount(userId);
       } finally {
         if (!cancelled) setBooted(true);
@@ -60,6 +63,7 @@ export default function App() {
       cancelled = true;
       window.removeEventListener('online', onOnline);
       window.clearInterval(intervalId);
+      stopPrefsSync?.();
     };
   }, [isLoaded, isSignedIn, user]);
 

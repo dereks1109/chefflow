@@ -1,7 +1,9 @@
 import { db } from './dexie';
-import type { Recipe, KitchenEvent } from '../core/types';
+import type { Recipe, KitchenEvent, UserPrefs } from '../core/types';
 import { getCurrentUserId } from '../state/currentUser';
 import { useSyncStore } from '../state/syncStore';
+import { useUnitSystemStore } from '../state/unitSystemStore';
+import { suppressNextWrite } from '../state/userPrefsSync';
 
 // Where the worker lives. Default same-origin; tests can override.
 const DEFAULT_ORIGIN = '';
@@ -14,12 +16,13 @@ interface SyncRow {
   updatedAt: number;
   serverVersion: number;
   deletedAt: number | null;
-  payload: Recipe | KitchenEvent;
+  payload: Recipe | KitchenEvent | UserPrefs;
 }
 
 interface PullResponse {
   recipes: SyncRow[];
   events: SyncRow[];
+  prefs?: SyncRow[];   // 0–1 rows; older worker versions may omit
   serverNow: number;
 }
 
@@ -28,6 +31,7 @@ interface PushResponse {
   // its existing row (incoming was older by updatedAt).
   recipes: Record<string, number | null>;
   events: Record<string, number | null>;
+  prefs?: Record<string, number | null>;
   serverNow: number;
 }
 
@@ -99,23 +103,26 @@ export async function refreshPendingCount(userId?: string): Promise<void> {
     useSyncStore.getState().setPendingCount(0);
     return;
   }
-  const [recipesDirty, eventsDirty] = await Promise.all([
+  const [recipesDirty, eventsDirty, prefsDirty] = await Promise.all([
     db.recipes.where('ownerId').equals(uid).filter((r) => r.dirty === true).count(),
     db.events.where('ownerId').equals(uid).filter((e) => e.dirty === true).count(),
+    db.userPrefs.where('ownerId').equals(uid).filter((p) => p.dirty === true).count(),
   ]);
-  useSyncStore.getState().setPendingCount(recipesDirty + eventsDirty);
+  useSyncStore.getState().setPendingCount(recipesDirty + eventsDirty + prefsDirty);
 }
 
 async function pushDirty(userId: string, opts: SyncOptions): Promise<void> {
-  const [dirtyRecipes, dirtyEvents] = await Promise.all([
+  const [dirtyRecipes, dirtyEvents, dirtyPrefs] = await Promise.all([
     db.recipes.where('ownerId').equals(userId).filter((r) => r.dirty === true).toArray(),
     db.events.where('ownerId').equals(userId).filter((e) => e.dirty === true).toArray(),
+    db.userPrefs.where('ownerId').equals(userId).filter((p) => p.dirty === true).toArray(),
   ]);
-  if (dirtyRecipes.length === 0 && dirtyEvents.length === 0) return;
+  if (dirtyRecipes.length === 0 && dirtyEvents.length === 0 && dirtyPrefs.length === 0) return;
 
   const body = {
     recipes: dirtyRecipes,
     events: dirtyEvents,
+    prefs: dirtyPrefs,
   };
   const res = await authedFetch('/api/sync/push', {
     method: 'POST',
@@ -127,7 +134,7 @@ async function pushDirty(userId: string, opts: SyncOptions): Promise<void> {
   // Clear `dirty` on rows the server accepted. Rows the server rejected
   // (incoming updatedAt < stored) stay dirty so the next pull updates the
   // local copy and the row will not re-push (because pull bumps updatedAt).
-  await db.transaction('rw', db.recipes, db.events, async () => {
+  await db.transaction('rw', db.recipes, db.events, db.userPrefs, async () => {
     for (const row of dirtyRecipes) {
       const sv = data.recipes[row.id];
       if (sv !== null && sv !== undefined) {
@@ -149,25 +156,35 @@ async function pushDirty(userId: string, opts: SyncOptions): Promise<void> {
         }
       }
     }
+    for (const row of dirtyPrefs) {
+      const sv = data.prefs?.[row.id];
+      if (sv !== null && sv !== undefined) {
+        const fresh = await db.userPrefs.get(row.id);
+        if (fresh && fresh.updatedAt === row.updatedAt) {
+          await db.userPrefs.put({ ...fresh, serverVersion: sv, dirty: false });
+        }
+      }
+    }
   });
 }
 
 async function pullSince(userId: string, opts: SyncOptions): Promise<void> {
   // Use the highest serverVersion we've ever applied as the watermark. We
-  // need the max across both tables for the request, but pull each table's
+  // need the max across the tables for the request, but pull each table's
   // delta independently so a slow-changing table doesn't pull the other
   // table's whole history.
-  const [recipesMax, eventsMax] = await Promise.all([
+  const [recipesMax, eventsMax, prefsMax] = await Promise.all([
     maxServerVersion(db.recipes, userId),
     maxServerVersion(db.events, userId),
+    maxServerVersion(db.userPrefs, userId),
   ]);
-  const since = Math.min(recipesMax, eventsMax);
+  const since = Math.min(recipesMax, eventsMax, prefsMax);
   const url = `/api/sync/pull?since=${since}`;
   const res = await authedFetch(url, { method: 'GET' }, opts);
   if (!res.ok) throw new Error(`pull failed: ${res.status}`);
   const data = (await res.json()) as PullResponse;
 
-  await db.transaction('rw', db.recipes, db.events, async () => {
+  await db.transaction('rw', db.recipes, db.events, db.userPrefs, async () => {
     for (const row of data.recipes) {
       if (row.serverVersion <= recipesMax) continue;
       await applyPulledRow(db.recipes, row, userId);
@@ -176,10 +193,24 @@ async function pullSince(userId: string, opts: SyncOptions): Promise<void> {
       if (row.serverVersion <= eventsMax) continue;
       await applyPulledRow(db.events, row, userId);
     }
+    for (const row of data.prefs ?? []) {
+      if (row.serverVersion <= prefsMax) continue;
+      await applyPulledRow(db.userPrefs, row, userId);
+      // Mirror the pulled prefs into the in-memory store so the UI reflects
+      // them immediately (e.g. switching from imperial → metric on another
+      // device propagates to this tab on the next sync).
+      const payload = row.payload as UserPrefs;
+      if (payload.unitSystem) {
+        // Tell userPrefsSync this setState is server-originated so its
+        // subscription doesn't echo it back to Dexie as a dirty write.
+        suppressNextWrite();
+        useUnitSystemStore.setState({ system: payload.unitSystem });
+      }
+    }
   });
 }
 
-async function applyPulledRow<T extends Recipe | KitchenEvent>(
+async function applyPulledRow<T extends Recipe | KitchenEvent | UserPrefs>(
   table: import('dexie').Table<T, string>,
   row: SyncRow,
   userId: string,
@@ -209,7 +240,7 @@ async function applyPulledRow<T extends Recipe | KitchenEvent>(
 }
 
 async function maxServerVersion(
-  table: import('dexie').Table<Recipe | KitchenEvent, string>,
+  table: import('dexie').Table<Recipe | KitchenEvent | UserPrefs, string>,
   userId: string,
 ): Promise<number> {
   const rows = await table.where('ownerId').equals(userId).toArray();

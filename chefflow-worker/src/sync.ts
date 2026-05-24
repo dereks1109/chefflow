@@ -13,6 +13,8 @@ export interface SyncRowIn {
 export interface PushBody {
   recipes?: SyncRowIn[];
   events?: SyncRowIn[];
+  prefs?: SyncRowIn[];   // 0–1 rows (one per user); kept as an array so the
+                         // same upsert path handles it.
 }
 
 export interface SyncRowOut {
@@ -26,6 +28,7 @@ export interface SyncRowOut {
 export interface PullResponse {
   recipes: SyncRowOut[];
   events: SyncRowOut[];
+  prefs: SyncRowOut[];
   serverNow: number;
 }
 
@@ -34,6 +37,7 @@ export interface PushResponse {
   // its existing row because the incoming updatedAt was older.
   recipes: Record<string, number | null>;
   events: Record<string, number | null>;
+  prefs: Record<string, number | null>;
   serverNow: number;
 }
 
@@ -47,16 +51,17 @@ export async function handlePull(
   since: number,
   now: NowFn = Date.now,
 ): Promise<PullResponse> {
-  const [recipes, events] = await Promise.all([
+  const [recipes, events, prefs] = await Promise.all([
     selectSince(db, 'recipes', userId, since),
     selectSince(db, 'events', userId, since),
+    selectSince(db, 'user_prefs', userId, since),
   ]);
-  return { recipes, events, serverNow: now() };
+  return { recipes, events, prefs, serverNow: now() };
 }
 
 async function selectSince(
   db: D1Database,
-  table: 'recipes' | 'events',
+  table: 'recipes' | 'events' | 'user_prefs',
   userId: string,
   since: number,
 ): Promise<SyncRowOut[]> {
@@ -89,6 +94,7 @@ export async function handlePush(
 ): Promise<PushResponse> {
   const recipesResult: Record<string, number | null> = {};
   const eventsResult: Record<string, number | null> = {};
+  const prefsResult: Record<string, number | null> = {};
 
   for (const row of body.recipes ?? []) {
     recipesResult[row.id] = await upsertRow(db, 'recipes', userId, row, now);
@@ -96,7 +102,21 @@ export async function handlePush(
   for (const row of body.events ?? []) {
     eventsResult[row.id] = await upsertRow(db, 'events', userId, row, now);
   }
-  return { recipes: recipesResult, events: eventsResult, serverNow: now() };
+  for (const row of body.prefs ?? []) {
+    // Prefs convention: client sets row.id == userId. Reject mismatches so
+    // a malformed client can't pollute another user's row.
+    if (row.id !== userId) {
+      prefsResult[row.id] = null;
+      continue;
+    }
+    prefsResult[row.id] = await upsertRow(db, 'user_prefs', userId, row, now);
+  }
+  return {
+    recipes: recipesResult,
+    events: eventsResult,
+    prefs: prefsResult,
+    serverNow: now(),
+  };
 }
 
 // LWW: write only if incoming.updatedAt >= stored.updated_at. Tombstones
@@ -104,7 +124,7 @@ export async function handlePush(
 // later /pull calls return the delete to other devices.
 async function upsertRow(
   db: D1Database,
-  table: 'recipes' | 'events',
+  table: 'recipes' | 'events' | 'user_prefs',
   userId: string,
   row: SyncRowIn,
   now: NowFn,

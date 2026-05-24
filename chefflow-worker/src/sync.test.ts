@@ -13,7 +13,7 @@ interface Row {
 }
 
 function makeD1(): D1Database {
-  const tables: Record<string, Row[]> = { recipes: [], events: [] };
+  const tables: Record<string, Row[]> = { recipes: [], events: [], user_prefs: [] };
 
   function exec(sql: string, params: unknown[]): { rows: Row[]; mutated: boolean } {
     if (/^SELECT updated_at FROM (\w+)/.test(sql)) {
@@ -91,6 +91,7 @@ describe('worker sync — handlePush LWW', () => {
     const res = await handlePush(db, 'userA', body, clock);
     expect(res.recipes.r1).toBe(10_000);
     expect(res.events).toEqual({});
+    expect(res.prefs).toEqual({});
   });
 
   it('overwrites an older row (incoming.updatedAt > stored)', async () => {
@@ -131,6 +132,35 @@ describe('worker sync — handlePush LWW', () => {
     }, clock);
     const pull = await handlePull(db, 'userA', 0, clock);
     expect(pull.recipes[0].deletedAt).toBe(2000);
+  });
+});
+
+describe('worker sync — handlePush prefs', () => {
+  it('upserts a prefs row keyed by userId', async () => {
+    const res = await handlePush(db, 'userA', {
+      prefs: [{ id: 'userA', updatedAt: 1000, unitSystem: 'metric' }],
+    }, clock);
+    expect(res.prefs.userA).toBe(10_000);
+    const pull = await handlePull(db, 'userA', 0, clock);
+    expect(pull.prefs).toHaveLength(1);
+    expect(pull.prefs[0].payload.unitSystem).toBe('metric');
+  });
+
+  it('rejects a prefs row whose id != userId (cross-user spoofing)', async () => {
+    const res = await handlePush(db, 'userA', {
+      prefs: [{ id: 'userB', updatedAt: 1000, unitSystem: 'imperial' }],
+    }, clock);
+    expect(res.prefs.userB).toBeNull();
+    const pull = await handlePull(db, 'userA', 0, clock);
+    expect(pull.prefs).toHaveLength(0);
+  });
+
+  it('does not return userA prefs to userB', async () => {
+    await handlePush(db, 'userA', {
+      prefs: [{ id: 'userA', updatedAt: 1000, unitSystem: 'metric' }],
+    }, clock);
+    const pull = await handlePull(db, 'userB', 0, clock);
+    expect(pull.prefs).toHaveLength(0);
   });
 });
 

@@ -1,5 +1,19 @@
 export type UnitSystem = 'metric' | 'imperial' | 'auto';
 
+// User-scoped preferences synced across devices. The row's id == ownerId so
+// the same sync row schema as recipes/events applies (single row per user).
+export interface UserPrefs {
+  // Set to ownerId — collapses the (id, ownerId) pair the sync layer expects
+  // into a natural single-row-per-user layout.
+  id: string;
+  unitSystem: UnitSystem;
+  updatedAt: number;
+  ownerId?: string;
+  serverVersion?: number;
+  dirty?: boolean;
+  deletedAt?: number;
+}
+
 export type ThermalClass = 'flash' | 'stable' | 'normal';
 export type AllergenClass = 'allergen-free' | 'allergen';
 export type StepKind = 'active' | 'passive';
