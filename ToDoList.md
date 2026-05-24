@@ -28,9 +28,8 @@ Engine exists in [chefflow/src/core/scaler/scaleRecipe.ts](chefflow/src/core/sca
 - [ ] Re-introduce the 🔒 lock toggle on `IngredientRow` (was removed when the scaler was deferred). Required so salt/spices don't over-scale.
 
 ### Unit System Toggle
-Zustand store exists (`state/unitSystemStore.ts`) but nothing flips it.
-- [ ] Add a `UnitSystemToggle` component (Metric / Imperial / Auto).
-- [ ] Mount in a settings sheet or app header.
+Zustand store exists (`state/unitSystemStore.ts`). The new `AccountSetupSheet` exposes a Metric / Imperial / Auto picker, but there's no always-visible toggle in the app chrome.
+- [ ] Add a `UnitSystemToggle` component (Metric / Imperial / Auto) in the header / mobile top bar so chefs can flip mid-session without opening the setup sheet.
 
 ### Plan 2b — Recipe sharing
 Originally drafted in the Plan 2a tail; never written as a separate plan doc.
@@ -70,13 +69,17 @@ These all belong inside Plan 3 Task A but are easy to forget:
 - **Chef entities**: named chefs with persistent colors instead of anonymous color tags. Lets task-list headers say "Alice's list" instead of "Red list".
 - **Resource awareness**: pan / oven / hob capacity in the scheduler — replace the "infinite parallelism" warning with actual conflict detection.
 - **Live cooking mode**: `KitchenPlaceholder` at `/events/:id/cook` becomes the active on-station view ticking through the saved workflow with timers and Web Audio alerts.
-- **PWA / offline**: `chefflow/src/pwa/` directory exists but is empty. Service worker + manifest for true offline kitchen use (matches CLAUDE.md's stated tech direction).
-- **Demo data refresh**: bump `chefflow:seeded-demo-v2` → `-v3` if demo recipes get a content edit that should propagate to existing local installs.
+- **PWA / offline**: Dexie + sync now handle offline reads/writes (commit `0994648`), but `chefflow/src/pwa/` is still empty — no service worker / installable manifest. Adding those would let chefs install the app and load it cold without network.
+- **Demo data refresh**: per-user seed keys are now `chefflow:seeded-demo:<userId>:v5` / `chefflow:seeded-demo-events:<userId>:v5`. Bump the `v5` suffix if demo content changes and should propagate.
 
 ---
 
 ## ✅ Recently done (for reference; trim periodically)
 
+- 2026-05-24: Account setup wizard + sign-up toggle. New `AccountSetupSheet` collects display name / unit system / kitchen role on first sign-in (re-openable from the Clerk UserButton menu); `SignInScreen` exposes a Sign in / Create account tab toggle (`ece5bca`).
+- 2026-05-24: Pages → Worker forwarding for `/api/sync/*` so the deployed frontend can reach the D1-backed sync handlers (`d406c81`).
+- 2026-05-24: Unit-system preference syncs across devices via the `userPrefs` row (`3b128f0`).
+- 2026-05-24: Per-user demo recipes + Cloudflare D1 sync with offline support. Dexie v4 adds `ownerId` indexes + soft-delete tombstones; new `syncClient.ts` does push/pull with LWW; new D1 tables `recipes` / `events` / `user_prefs` keyed by `(owner_id, id)`; demo seeds are now per-user with v5 storage keys (`0994648`).
 - 2026-05-14: Workflow tab + per-event workflow pages with DnD template (`a78c524`).
 - 2026-05-14: Nested drag-and-drop template at `/demo/nested-dnd` (`6864cc3`).
 - 2026-05-14: Plan 3 (workflow scheduler) drafted at `docs/superpowers/plans/2026-05-14-chefflow-plan-3-workflow-scheduler.md` (uncommitted).
