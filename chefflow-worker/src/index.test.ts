@@ -125,6 +125,25 @@ describe('worker router', () => {
     expect(limited.headers.get('Retry-After')).toMatch(/^\d+$/);
   });
 
+  it('200 on GET /api/health without auth', async () => {
+    // Pass a fresh verifier that would throw if called — the 200 below is
+    // proof that the route bypasses auth (otherwise the throw would 500).
+    const wouldThrow = vi.fn(async () => { throw new Error('should not be called'); });
+    const req = new Request('https://api.test/api/health', { method: 'GET' });
+    const res = await handleRequest(req, makeEnv(), wouldThrow);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; service: string };
+    expect(body.ok).toBe(true);
+    expect(body.service).toBe('chefflow-llm-proxy');
+    expect(wouldThrow).not.toHaveBeenCalled();
+  });
+
+  it('405 on POST /api/health', async () => {
+    const req = new Request('https://api.test/api/health', { method: 'POST' });
+    const res = await handleRequest(req, makeEnv(), verifyRejects);
+    expect(res.status).toBe(405);
+  });
+
   it('204 on OPTIONS with CORS headers', async () => {
     const res = await handleRequest(
       new Request('https://api.test/api/llm/generate', { method: 'OPTIONS' }),

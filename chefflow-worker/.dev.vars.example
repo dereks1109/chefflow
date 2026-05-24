@@ -1,0 +1,13 @@
+# ChefFlow Worker secrets — copy to `.dev.vars` for local `wrangler dev`.
+# In production these are set via `wrangler secret put <NAME>` and never
+# committed. Wrangler reads .dev.vars in dev mode only.
+
+# Required: Clerk backend (secret) key, used by chefflow-worker/src/auth.ts to
+# verify the JWT on every /api/* request. Get from clerk.com → Dashboard →
+# API Keys. Use sk_live_… in production, sk_test_… in dev.
+CLERK_SECRET_KEY=sk_test_replace_me
+
+# Optional: Sentry DSN for the worker. Leave blank to skip Sentry init.
+# Use a separate Sentry project from the SPA so client and server errors
+# can be filtered independently.
+# SENTRY_DSN=

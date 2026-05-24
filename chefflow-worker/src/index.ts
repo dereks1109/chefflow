@@ -55,6 +55,14 @@ export async function handleRequest(
 
   const url = new URL(req.url);
 
+  // Health endpoint — no auth, no rate limit. Returns 200 + a tiny JSON
+  // payload. Intended for UptimeRobot / Cloudflare healthchecks and the
+  // post-deploy smoke test in DEPLOY.md. Don't leak environment info here.
+  if (url.pathname === '/api/health' || url.pathname === '/api/health/') {
+    if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+    return json({ ok: true, service: 'chefflow-llm-proxy' }, 200);
+  }
+
   // Sync routes — auth-only (no rate limit). Owner isolation is enforced in
   // the SQL itself: every query filters on `owner_id = ?` from the JWT.
   const syncMatch = /^\/api\/sync\/(pull|push)\/?$/.exec(url.pathname);

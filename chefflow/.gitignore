@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Vite reads .env.* — only commit .env.example, never the filled-in copy.
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
