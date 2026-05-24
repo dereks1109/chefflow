@@ -13,14 +13,18 @@
 // `TierSync` component mounted inside `<SignedIn>`.
 // ---------------------------------------------------------------------------
 
-export type Tier = 'free' | 'pro' | 'business';
+export type Tier = 'free' | 'pro' | 'business' | 'enterprise';
 
-export const TIER_ORDER: readonly Tier[] = ['free', 'pro', 'business'] as const;
+// Order is also the upgrade ramp: free < pro < business < enterprise. The
+// `business` tier is retained for backward-compat with historical Stripe
+// subscriptions; new product surfaces present Free / Pro / Enterprise.
+export const TIER_ORDER: readonly Tier[] = ['free', 'pro', 'business', 'enterprise'] as const;
 
 const TIER_RANK: Record<Tier, number> = {
   free: 0,
   pro: 1,
   business: 2,
+  enterprise: 3,
 };
 
 export interface TierLimits {
@@ -65,19 +69,37 @@ export const TIER_LIMITS: Record<Tier, TierLimits> = {
     hasPlacesAutocomplete: true,
     hasWorkflowScheduler: true,
   },
+  // Enterprise: hotels + large banquet restaurants. No daily caps anywhere,
+  // generous seat allowance for back-of-house teams, and the same feature
+  // surface as business — priority support is a service commitment tracked
+  // outside this object.
+  enterprise: {
+    maxRecipesPerDay: UNLIMITED,
+    maxEventsPerDay: UNLIMITED,
+    maxLlmCallsPerDay: UNLIMITED,
+    maxSeats: 50,
+    hasPlacesAutocomplete: true,
+    hasWorkflowScheduler: true,
+  },
 };
 
 export const TIER_LABEL: Record<Tier, string> = {
   free: 'Free',
   pro: 'Pro',
   business: 'Business',
+  enterprise: 'Enterprise',
 };
 
 /** GBP, integers — see the business model plan for justification. */
 export const TIER_PRICE_GBP: Record<Tier, { monthly: number; annual: number }> = {
   free: { monthly: 0, annual: 0 },
-  pro: { monthly: 12, annual: 108 },
+  // Pro: bumped from £12→£15 (annual £108→£135) to reflect new positioning
+  // toward private chefs + small bistros. Existing £12 subscribers stay on
+  // their old Stripe price until they cancel + resubscribe.
+  pro: { monthly: 15, annual: 135 },
   business: { monthly: 39, annual: 390 },
+  // Enterprise: same 25% annual discount as Pro (£50/mo → £450/yr).
+  enterprise: { monthly: 50, annual: 450 },
 };
 
 /** True when `current < TIER_LIMITS[tier][key]` or the limit is UNLIMITED. */
@@ -104,6 +126,6 @@ export function meetsTier(actual: Tier, required: Tier): boolean {
 
 /** Coerce an unknown string (e.g. from Clerk publicMetadata) to a valid Tier. */
 export function parseTier(raw: unknown): Tier {
-  if (raw === 'pro' || raw === 'business' || raw === 'free') return raw;
+  if (raw === 'pro' || raw === 'business' || raw === 'free' || raw === 'enterprise') return raw;
   return 'free';
 }

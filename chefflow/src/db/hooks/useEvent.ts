@@ -21,6 +21,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { liveQuery, type Subscription } from 'dexie';
 import { db } from '../dexie';
+import { getEvent } from '../eventsRepo';
 import { listRecipes } from '../recipesRepo';
 import type { KitchenEvent, Recipe } from '../../core/types';
 
@@ -62,7 +63,19 @@ export function useEvent(id: string | undefined): UseEventResult {
   useEffect(() => {
     if (!id) return;
 
-    const observable = liveQuery<KitchenEvent | undefined>(() => db.events.get(id));
+    // Route through the repo's `getEvent` so soft-deleted tombstones become
+    // 'not-found' for callers (the underlying Dexie row is still there but
+    // flagged isDeleted; the repo filters that out). The `db.events` table
+    // is still consulted as a dependency so liveQuery re-runs on writes.
+    const observable = liveQuery<KitchenEvent | undefined>(async () => {
+      // Touch the table so liveQuery tracks it as a dependency. Dexie's
+      // liveQuery only reruns when a watched table changes — calling
+      // `db.events.get(id)` here registers the dependency; the actual row
+      // we expose is whatever `getEvent` decides (which respects userId +
+      // isDeleted).
+      await db.events.get(id);
+      return getEvent(id);
+    });
     const subscription: Subscription = observable.subscribe({
       next: (event) => {
         if (event === undefined) {

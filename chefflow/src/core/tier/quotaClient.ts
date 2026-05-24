@@ -129,6 +129,7 @@ interface BillingOptions {
  */
 export async function createCheckoutUrl(
   interval: 'month' | 'year',
+  tier: 'pro' | 'enterprise' = 'pro',
   opts: BillingOptions = {},
 ): Promise<string> {
   const token = await getClerkToken();
@@ -138,7 +139,7 @@ export async function createCheckoutUrl(
   const res = await fetchImpl(`${origin}/billing/checkout-session`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ interval }),
+    body: JSON.stringify({ interval, tier }),
   });
   if (!res.ok) throw new QuotaClientError(`Billing worker ${res.status}`, res.status);
   const body = (await res.json()) as { url?: string };

@@ -9,6 +9,14 @@ binding = "AI"
 binding = "RATE_LIMIT"
 id = "6300f5a914fa4ea885b73ae1860d3a1e"
 
+# Per-user sync database (recipes / events / menus / allergen audits).
+# Schema lives in migrations/. Apply via `wrangler d1 migrations apply chefflow-sync --remote`.
+[[d1_databases]]
+binding = "DB"
+database_name = "chefflow-sync"
+database_id = "8f70e28a-3304-4f81-b83c-4bbc5fb537af"
+migrations_dir = "migrations"
+
 [vars]
 CLERK_ISSUER = "https://engaging-bat-5.clerk.accounts.dev"
 # Legacy LLM daily cap, superseded by per-tier maxLlmCallsPerDay in src/limits.ts.

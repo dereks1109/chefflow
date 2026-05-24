@@ -165,6 +165,55 @@ describe('analyzeRecipe', () => {
       }),
     ).rejects.toBeInstanceOf(LlmRecipeValidationError);
   });
+
+  it('passes uncertainIngredients through to the analysis when LLM emits them — chef gets the amber warning', async () => {
+    // The recipe has one real ingredient: "beef chuck". The LLM flagged it
+    // as uncertain (let's say a fusion preparation it couldn't classify).
+    // The projection should keep the name on the analysis so the editor
+    // + card render the amber pill.
+    const json = JSON.stringify({
+      keyIngredientTags: ['beef'],
+      allergens: [],
+      uncertainIngredients: ['beef chuck'],
+    });
+    const analysis = await analyzeRecipe({
+      recipe: sampleRecipe,
+      apiKey: 'k',
+      model: 'm',
+      fetchImpl: fetchReturning(json),
+    });
+    expect(analysis.uncertainIngredients).toEqual(['beef chuck']);
+  });
+
+  it('filters out hallucinated uncertain names that do not match a real ingredient — defensive guard against LLM drift', async () => {
+    const json = JSON.stringify({
+      keyIngredientTags: [],
+      allergens: [],
+      // "house chilli paste" is NOT in sampleRecipe. The projection should drop it.
+      uncertainIngredients: ['house chilli paste', 'beef chuck'],
+    });
+    const analysis = await analyzeRecipe({
+      recipe: sampleRecipe,
+      apiKey: 'k',
+      model: 'm',
+      fetchImpl: fetchReturning(json),
+    });
+    expect(analysis.uncertainIngredients).toEqual(['beef chuck']);
+  });
+
+  it('omits uncertainIngredients entirely when the LLM emits nothing / empty array', async () => {
+    const json = JSON.stringify({
+      keyIngredientTags: ['beef'],
+      allergens: [],
+    });
+    const analysis = await analyzeRecipe({
+      recipe: sampleRecipe,
+      apiKey: 'k',
+      model: 'm',
+      fetchImpl: fetchReturning(json),
+    });
+    expect(analysis.uncertainIngredients).toBeUndefined();
+  });
 });
 
 describe('generateRecipeFromPhoto', () => {

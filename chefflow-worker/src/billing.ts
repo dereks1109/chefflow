@@ -8,6 +8,11 @@ export interface BillingEnv {
   STRIPE_SECRET_KEY: string;
   STRIPE_PRICE_ID_PRO_MONTHLY: string;
   STRIPE_PRICE_ID_PRO_ANNUAL: string;
+  // Enterprise prices are optional — when missing, the worker returns a
+  // clean 500 with "Enterprise checkout not configured" instead of failing
+  // at runtime. Set via `wrangler secret put` in the deploy environment.
+  STRIPE_PRICE_ID_ENTERPRISE_MONTHLY?: string;
+  STRIPE_PRICE_ID_ENTERPRISE_ANNUAL?: string;
   CLERK_SECRET_KEY: string;
   RATE_LIMIT: KVNamespace;
 }

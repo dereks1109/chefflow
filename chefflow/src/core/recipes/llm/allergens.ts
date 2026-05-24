@@ -7,7 +7,7 @@
 // the UI badge component pull from one source of truth.
 // ---------------------------------------------------------------------------
 
-import type { AllergenTag } from '../../types';
+import type { AllergenTag, Recipe } from '../../types';
 
 export const ALLERGEN_TAGS: readonly AllergenTag[] = [
   'celery',
@@ -109,4 +109,59 @@ export function findAllergensInIngredient(
 ): AllergenTag[] {
   if (!ingredientName || declaredAllergens.length === 0) return [];
   return declaredAllergens.filter((tag) => ALLERGEN_PATTERNS[tag].test(ingredientName));
+}
+
+/**
+ * Reverse lookup — given a recipe and an allergen tag, which ingredient names
+ * triggered it? Used by the library card popover so chefs see "Caused by:
+ * butter, cream" when hovering the Milk pill. Returns ingredient names
+ * deduped + in original order.
+ *
+ * Two sources are surfaced as causes:
+ *   1. Any ingredient with `tag` in its `allergenFlags` — the chef's manual
+ *      override always wins, even if `tag` was never in `recipe.analysis`.
+ *   2. Any ingredient whose name matches the tag's regex AND the recipe
+ *      already declares `tag` at the analysis level — guards against false
+ *      positives when AI analysis hasn't run yet.
+ */
+export function findIngredientsForAllergen(recipe: Recipe, tag: AllergenTag): string[] {
+  const declared = recipe.analysis?.allergens ?? [];
+  const tagDeclared = declared.includes(tag);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const ing of recipe.ingredients) {
+    const name = ing.name?.trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    const manuallyFlagged = ing.allergenFlags?.includes(tag) === true;
+    const autoMatch = tagDeclared && findAllergensInIngredient(name, declared).includes(tag);
+    if (manuallyFlagged || autoMatch) {
+      seen.add(name.toLowerCase());
+      out.push(name);
+    }
+  }
+  return out;
+}
+
+/**
+ * Effective allergen list for display purposes: union of the recipe-level
+ * `analysis.allergens` (set by AI or the editor's tag input) and every
+ * `ingredient.allergenFlags` (manual per-ingredient overrides). Sorted
+ * stable-alphabetically so the library card and editor render in the same
+ * order regardless of insertion sequence.
+ *
+ * NOT persisted — computed at read time so a future re-run of the AI
+ * analyzer can independently refresh `analysis.allergens` without clobbering
+ * the chef's manual flags.
+ */
+export function getRecipeAllergens(recipe: Recipe): AllergenTag[] {
+  const set = new Set<AllergenTag>();
+  for (const a of recipe.analysis?.allergens ?? []) {
+    if (isAllergenTag(a)) set.add(a);
+  }
+  for (const ing of recipe.ingredients) {
+    for (const a of ing.allergenFlags ?? []) {
+      if (isAllergenTag(a)) set.add(a);
+    }
+  }
+  return Array.from(set).sort();
 }

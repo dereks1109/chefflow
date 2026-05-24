@@ -33,6 +33,11 @@ export interface LlmAnalysis {
   caloriesTotal?: number;
   keyIngredientTags: string[];
   allergens: AllergenTag[];
+  /** Ingredient names (lowercase, verbatim from the recipe) the LLM was
+   *  unsure about. Surfaced as amber "AI to review" pills so the chef
+   *  knows to verify them manually. Optional + tolerant — older responses
+   *  without this field render no pill. */
+  uncertainIngredients?: string[];
 }
 
 export interface LlmRecipe {
@@ -200,11 +205,22 @@ function validateAnalysis(raw: unknown): LlmAnalysis {
     ? Array.from(new Set(a.allergens.filter(isAllergenTag)))
     : [];
 
+  const uncertainIngredients: string[] = Array.isArray(a.uncertainIngredients)
+    ? Array.from(
+        new Set(
+          a.uncertainIngredients
+            .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+            .map((t) => t.trim().toLowerCase()),
+        ),
+      )
+    : [];
+
   return {
     caloriesPerPortion,
     caloriesTotal,
     keyIngredientTags,
     allergens,
+    ...(uncertainIngredients.length > 0 ? { uncertainIngredients } : {}),
   };
 }
 

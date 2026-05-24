@@ -189,7 +189,7 @@ export async function getMetrics(
   if (cached) {
     try { return JSON.parse(cached) as MetricsResult; } catch { /* fall through */ }
   }
-  const byTier: Record<Tier, number> = { free: 0, pro: 0, business: 0 };
+  const byTier: Record<Tier, number> = { free: 0, pro: 0, business: 0, enterprise: 0 };
   let totalMembers = 0;
   let offset = 0;
   const limit = 200;

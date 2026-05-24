@@ -12,15 +12,19 @@ import {
 
 describe('tier limits', () => {
   it('orders tiers from least to most privileged', () => {
-    expect(TIER_ORDER).toEqual(['free', 'pro', 'business']);
+    expect(TIER_ORDER).toEqual(['free', 'pro', 'business', 'enterprise']);
   });
 
   it('uses the prices the business model committed to (GBP)', () => {
     expect(TIER_PRICE_GBP.free.monthly).toBe(0);
-    expect(TIER_PRICE_GBP.pro.monthly).toBe(12);
-    expect(TIER_PRICE_GBP.pro.annual).toBe(108);
+    // Pro: bumped to £15/mo (£135/yr) to reflect new positioning.
+    expect(TIER_PRICE_GBP.pro.monthly).toBe(15);
+    expect(TIER_PRICE_GBP.pro.annual).toBe(135);
     expect(TIER_PRICE_GBP.business.monthly).toBe(39);
     expect(TIER_PRICE_GBP.business.annual).toBe(390);
+    // Enterprise: hotels + large banquets. 25% annual discount.
+    expect(TIER_PRICE_GBP.enterprise.monthly).toBe(50);
+    expect(TIER_PRICE_GBP.enterprise.annual).toBe(450);
   });
 
   it('free tier rate-limits recipes to 5/day and events to 1/day', () => {
@@ -93,7 +97,11 @@ describe('parseTier', () => {
   it('defaults to free for unknown / missing values', () => {
     expect(parseTier(undefined)).toBe('free');
     expect(parseTier(null)).toBe('free');
-    expect(parseTier('enterprise')).toBe('free');
+    expect(parseTier('not-a-tier')).toBe('free');
     expect(parseTier(42)).toBe('free');
+  });
+
+  it('passes the enterprise tier through (added v9 for hotels + large banquets)', () => {
+    expect(parseTier('enterprise')).toBe('enterprise');
   });
 });

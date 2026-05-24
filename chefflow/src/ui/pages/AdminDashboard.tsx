@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Shield, RefreshCw, AlertCircle, X, Activity, Users, PoundSterling, BadgeCheck } from 'lucide-react';
+import { Shield, RefreshCw, AlertCircle, X, Activity, Users, PoundSterling, BadgeCheck, MessageSquare, AlertTriangle } from 'lucide-react';
 import { useAdminStore } from '../../state/useAdminStore';
 import {
   listMembers,
   getMetrics,
   getActivity,
+  listContactSubmissions,
+  listAllergenAudits,
+  listD1AllergenAudits,
   grantPro,
   revokePro,
   cancelSubscription,
@@ -13,6 +16,9 @@ import {
   type MemberRow,
   type MetricsResult,
   type ActivityEvent,
+  type ContactSubmissionRow,
+  type AllergenAuditRow,
+  type D1AllergenAuditRow,
 } from '../../core/admin/adminClient';
 import { TIER_LABEL } from '../../core/tier/limits';
 
@@ -41,6 +47,9 @@ function AdminDashboardBody() {
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(0);
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
+  const [contactSubmissions, setContactSubmissions] = useState<ContactSubmissionRow[]>([]);
+  const [allergenAudits, setAllergenAudits] = useState<AllergenAuditRow[]>([]);
+  const [d1Audits, setD1Audits] = useState<D1AllergenAuditRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, setLoadingPage] = useState(true);
   const [selected, setSelected] = useState<MemberRow | null>(null);
@@ -51,11 +60,21 @@ function AdminDashboardBody() {
     setLoadError(null);
     setLoadingPage(true);
     try {
-      const [m, msPage, a] = await Promise.all([getMetrics(), listMembers(0, 50), getActivity()]);
+      const [m, msPage, a, cs, aa, d1] = await Promise.all([
+        getMetrics(),
+        listMembers(0, 50),
+        getActivity(),
+        listContactSubmissions(),
+        listAllergenAudits(),
+        listD1AllergenAudits(),
+      ]);
       setMetrics(m);
       setMembers(msPage.members);
       setNextOffset(msPage.nextOffset);
       setActivity(a.events);
+      setContactSubmissions(cs.items);
+      setAllergenAudits(aa.items);
+      setD1Audits(d1.items);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load admin data');
     } finally {
@@ -67,13 +86,23 @@ function AdminDashboardBody() {
   // synchronously inside the effect body (lint: react-hooks/set-state-in-effect).
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getMetrics(), listMembers(0, 50), getActivity()])
-      .then(([m, msPage, a]) => {
+    void Promise.all([
+      getMetrics(),
+      listMembers(0, 50),
+      getActivity(),
+      listContactSubmissions(),
+      listAllergenAudits(),
+      listD1AllergenAudits(),
+    ])
+      .then(([m, msPage, a, cs, aa, d1]) => {
         if (cancelled) return;
         setMetrics(m);
         setMembers(msPage.members);
         setNextOffset(msPage.nextOffset);
         setActivity(a.events);
+        setContactSubmissions(cs.items);
+        setAllergenAudits(aa.items);
+        setD1Audits(d1.items);
         setLoadingPage(false);
       })
       .catch((err: unknown) => {
@@ -146,6 +175,12 @@ function AdminDashboardBody() {
         />
         <ActivityFeed events={activity} />
       </div>
+
+      <ContactSubmissionsPanel submissions={contactSubmissions} />
+
+      <AllergenAuditsPanel audits={allergenAudits} />
+
+      <D1AllergenAuditsPanel audits={d1Audits} />
 
       {selected && (
         <MemberDrawer
@@ -290,6 +325,201 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
               <p className="text-xs text-slate-500 mt-0.5">
                 {formatRelative(ev.ts)} · <span className="font-mono">{ev.type}</span>
               </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const REASON_LABEL: Record<string, string> = {
+  'ingredient-changed': 'Ingredient changed to a non-allergenic version',
+  'recipe-changed': 'Recipe changed',
+  'mistakenly-added': 'Tag was accidentally or mistakenly added',
+  other: 'Other',
+};
+
+function AllergenAuditsPanel({ audits }: { audits: AllergenAuditRow[] }) {
+  return (
+    <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4">
+      <header className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="h-4 w-4 text-rose-600" aria-hidden="true" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Allergen-removal audits
+        </h2>
+        <span className="text-xs text-slate-400 ml-auto">{audits.length} total</span>
+      </header>
+      <p className="text-xs text-slate-500 mb-3">
+        Every allergen tag removed by a signed-in chef syncs here. Anonymous removals stay
+        on their device only.
+      </p>
+      {audits.length === 0 ? (
+        <p className="text-sm text-slate-500 italic">No audits yet.</p>
+      ) : (
+        <ul className="space-y-3" data-testid="admin-allergen-audits">
+          {audits.map((a) => (
+            <li
+              key={a.id}
+              className="rounded-md border border-slate-200 dark:border-slate-700 p-3 text-xs"
+            >
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="font-semibold text-rose-700 dark:text-rose-300">
+                  {a.removedTag}
+                </span>
+                <time
+                  className="text-[11px] text-slate-500"
+                  dateTime={new Date(a.removedAt).toISOString()}
+                >
+                  {new Date(a.removedAt).toLocaleString()}
+                </time>
+              </div>
+              <p className="mt-1 text-slate-700 dark:text-slate-200">
+                <span className="text-slate-500">Recipe:</span> {a.recipeTitleAtTime}
+              </p>
+              <p className="mt-0.5 text-slate-700 dark:text-slate-200">
+                <span className="text-slate-500">By:</span>{' '}
+                {a.userDisplayName || '(no display name)'}{' '}
+                <span className="text-[11px] text-slate-400">({a.userClerkId})</span>
+              </p>
+              <p className="mt-1 text-slate-700 dark:text-slate-200">
+                {a.reasons.map((r) => REASON_LABEL[r] ?? r).join('; ')}
+                {a.otherText ? ` — ${a.otherText}` : ''}
+              </p>
+              {a.ingredientsAtTime.length > 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Ingredients at the time: {a.ingredientsAtTime.join(', ')}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function D1AllergenAuditsPanel({ audits }: { audits: D1AllergenAuditRow[] }) {
+  return (
+    <section className="rounded-lg border border-emerald-300 dark:border-emerald-900/40 bg-emerald-50/30 dark:bg-emerald-900/10 p-4">
+      <header className="flex items-center gap-2 mb-3">
+        <AlertTriangle className="h-4 w-4 text-emerald-700 dark:text-emerald-300" aria-hidden="true" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Allergen removals (D1 — all chefs)
+        </h2>
+        <span className="text-xs text-slate-500 ml-auto">{audits.length} total</span>
+      </header>
+      <p className="text-xs text-slate-500 mb-3">
+        Cross-user view sourced from the D1 sync table. Updates ~30s after each
+        signed-in chef removes a tag. Server-authoritative — user_id comes from
+        the verified Clerk JWT, never from the client.
+      </p>
+      {audits.length === 0 ? (
+        <p className="text-sm text-slate-500 italic">No audits yet in D1.</p>
+      ) : (
+        <ul className="space-y-3" data-testid="admin-d1-allergen-audits">
+          {audits.map((a) => (
+            <li
+              key={a.id}
+              className="rounded-md border border-emerald-200 dark:border-emerald-900/40 bg-white dark:bg-kitchen-ink p-3 text-xs"
+            >
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="font-semibold text-rose-700 dark:text-rose-300">
+                  {a.removedTag}
+                  <span className="ml-2 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300">
+                    D1
+                  </span>
+                </span>
+                <time
+                  className="text-[11px] text-slate-500"
+                  dateTime={new Date(a.removedAt || a.updatedAt).toISOString()}
+                >
+                  {new Date(a.removedAt || a.updatedAt).toLocaleString()}
+                </time>
+              </div>
+              <p className="mt-1 text-slate-700 dark:text-slate-200">
+                <span className="text-slate-500">Recipe:</span>{' '}
+                {a.recipeTitleAtTime || <em className="text-slate-400">(no title)</em>}
+              </p>
+              <p className="mt-0.5 text-slate-700 dark:text-slate-200">
+                <span className="text-slate-500">By:</span>{' '}
+                {a.userDisplayName || '(no display name)'}{' '}
+                <span className="text-[11px] text-slate-400">({a.userClerkId})</span>
+              </p>
+              {a.reasons.length > 0 && (
+                <p className="mt-1 text-slate-700 dark:text-slate-200">
+                  {a.reasons.map((r) => REASON_LABEL[r] ?? r).join('; ')}
+                  {a.otherText ? ` — ${a.otherText}` : ''}
+                </p>
+              )}
+              {a.ingredientsAtTime.length > 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Ingredients at the time: {a.ingredientsAtTime.join(', ')}
+                </p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ContactSubmissionsPanel({ submissions }: { submissions: ContactSubmissionRow[] }) {
+  return (
+    <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4">
+      <header className="flex items-center gap-2 mb-3">
+        <MessageSquare className="h-4 w-4 text-accent" aria-hidden="true" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Contact submissions
+        </h2>
+        <span className="text-xs text-slate-400 ml-auto">{submissions.length} total</span>
+      </header>
+      {submissions.length === 0 ? (
+        <p className="text-sm text-slate-500 italic">No submissions yet.</p>
+      ) : (
+        <ul className="space-y-3" data-testid="admin-contact-submissions">
+          {submissions.map((s) => (
+            <li
+              key={s.id}
+              className="rounded-md border border-slate-200 dark:border-slate-700 p-3 text-xs"
+            >
+              <div className="flex items-baseline justify-between gap-2 flex-wrap">
+                <span className="font-semibold text-slate-800 dark:text-slate-100">
+                  {s.name}{' '}
+                  <a
+                    href={`mailto:${s.email}?subject=Re:%20ChefFlow%20feedback`}
+                    className="font-normal text-slate-500 hover:text-accent hover:underline"
+                  >
+                    &lt;{s.email}&gt;
+                  </a>
+                </span>
+                <time
+                  className="text-[11px] text-slate-500"
+                  dateTime={new Date(s.createdAt).toISOString()}
+                >
+                  {new Date(s.createdAt).toLocaleString()}
+                </time>
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                {s.message}
+              </p>
+              {s.screenshotDataUrl && (
+                <a
+                  href={s.screenshotDataUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-block"
+                  title="Open screenshot in new tab"
+                >
+                  <img
+                    src={s.screenshotDataUrl}
+                    alt="Submitted screenshot"
+                    className="max-h-48 rounded border border-slate-200 dark:border-slate-700"
+                  />
+                </a>
+              )}
+              <p className="mt-1 text-[11px] text-slate-400">IP: {s.ip}</p>
             </li>
           ))}
         </ul>

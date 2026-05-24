@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Heart, Download, ArrowLeft } from 'lucide-react';
 import {
   getCommunityRecipe,
@@ -79,6 +79,7 @@ export default function CommunityRecipeView() {
       const local: Recipe = {
         id: randomId(),
         title: `${state.recipe.title} (community)`,
+        description: state.recipe.description,
         originalYield: state.recipe.originalYield,
         ingredients: (state.recipe.ingredients as Ingredient[]) ?? [],
         steps: (state.recipe.steps as WorkflowStep[]) ?? [],
@@ -86,6 +87,9 @@ export default function CommunityRecipeView() {
         updatedAt: now,
         coverPhoto: state.recipe.coverPhoto,
         analysis: state.recipe.analysis as Recipe['analysis'],
+        // Anchor back to the community source so a later soft-delete fires
+        // the uncopy webhook automatically (see recipesRepo.deleteRecipe).
+        copiedFromCommunityId: state.recipe.id,
       };
       await saveRecipe(local);
       const out = await recordCopy(state.recipe.id);
@@ -152,11 +156,28 @@ export default function CommunityRecipeView() {
       <header className="mb-4">
         <h1 className="text-2xl md:text-3xl font-bold">{r.title || 'Untitled recipe'}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          by {r.authorDisplayName} — published {publishedDate}
+          by{' '}
+          {r.authorClerkId ? (
+            <Link
+              to={`/chef/${encodeURIComponent(r.authorClerkId)}`}
+              className="hover:text-accent hover:underline"
+              data-testid="community-recipe-view-author-link"
+            >
+              {r.authorDisplayName}
+            </Link>
+          ) : (
+            r.authorDisplayName
+          )}
+          {' '}— published {publishedDate}
         </p>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
           Yields {r.originalYield} portion{r.originalYield === 1 ? '' : 's'}
         </p>
+        {r.description && (
+          <p className="mt-3 text-sm text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+            {r.description}
+          </p>
+        )}
       </header>
 
       <div className="flex flex-wrap items-center gap-2 mb-6">

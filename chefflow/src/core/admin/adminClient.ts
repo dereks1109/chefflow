@@ -101,6 +101,59 @@ export function getActivity(): Promise<{ events: ActivityEvent[] }> {
   return adminFetch<{ events: ActivityEvent[] }>('/admin/activity', { method: 'GET' });
 }
 
+export interface ContactSubmissionRow {
+  id: string;
+  name: string;
+  email: string;
+  message: string;
+  screenshotDataUrl?: string;
+  ip: string;
+  createdAt: number;
+}
+
+export function listContactSubmissions(): Promise<{ items: ContactSubmissionRow[] }> {
+  return adminFetch<{ items: ContactSubmissionRow[] }>('/admin/contact-submissions', { method: 'GET' });
+}
+
+export interface AllergenAuditRow {
+  id: string;
+  recipeId: string;
+  recipeTitleAtTime: string;
+  removedTag: string;
+  reasons: string[];
+  otherText?: string;
+  ingredientsAtTime: string[];
+  removedAt: number;
+  userClerkId: string;
+  userDisplayName?: string;
+  receivedAt: number;
+}
+
+export function listAllergenAudits(): Promise<{ items: AllergenAuditRow[] }> {
+  return adminFetch<{ items: AllergenAuditRow[] }>('/admin/allergen-audits', { method: 'GET' });
+}
+
+// Cross-user D1-backed view. Same logical row as the KV path but sourced from
+// the sync engine's allergen_audits table — every signed-in chef's removals
+// land here ~30s after the click, with no need for the bespoke KV push.
+export interface D1AllergenAuditRow {
+  id: string;
+  userClerkId: string;
+  updatedAt: number;
+  recipeId: string;
+  recipeTitleAtTime: string;
+  removedTag: string;
+  reasons: string[];
+  otherText?: string;
+  ingredientsAtTime: string[];
+  removedAt: number;
+  userDisplayName?: string;
+}
+
+export function listD1AllergenAudits(): Promise<{ items: D1AllergenAuditRow[] }> {
+  return adminFetch<{ items: D1AllergenAuditRow[] }>('/admin/d1/allergen-audits', { method: 'GET' });
+}
+
 export function grantPro(userId: string): Promise<{ ok: true; tier: 'pro' }> {
   return adminFetch(`/admin/members/${encodeURIComponent(userId)}/grant-pro`, { method: 'POST' });
 }

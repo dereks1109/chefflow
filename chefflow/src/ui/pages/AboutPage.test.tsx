@@ -1,15 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import AboutPage from './AboutPage';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 
-const openWith = vi.fn();
-
-vi.mock('../../state/useUpgradeSheetStore', () => ({
-  useUpgradeSheetStore: {
-    getState: () => ({ openWith }),
-  },
-}));
+beforeEach(() => {
+  useUpgradeSheetStore.setState({ open: false, reason: null });
+});
 
 function renderPage() {
   return render(
@@ -20,90 +17,67 @@ function renderPage() {
 }
 
 describe('AboutPage', () => {
-  it('renders the hero heading', () => {
+  it('renders the hero heading with the Plan/Prep/Serve tagline', () => {
     renderPage();
     expect(
-      screen.getByRole('heading', { level: 1, name: /chefflow.*plan.*prep.*serve/i }),
+      screen.getByRole('heading', { level: 1, name: /plan.*prep.*serve/i }),
     ).toBeInTheDocument();
   });
 
-  it('renders the "Built For" section heading', () => {
+  it('renders the "Built for" section listing private chefs + small bistros + hotels', () => {
     renderPage();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /built for/i }),
-    ).toBeInTheDocument();
-  });
-
-  it('renders all three "Built For" cards', () => {
-    renderPage();
+    expect(screen.getByRole('heading', { level: 2, name: /built for/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 3, name: /private chefs/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /supper clubs/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /small caterers/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /small bistros/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /hotels/i })).toBeInTheDocument();
   });
 
-  it('renders the "What ChefFlow Does" section heading', () => {
+  it('renders the three selling points — reliability, audit, scheduler', () => {
     renderPage();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /what chefflow does/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /kitchen-grade reliability/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /ai co-chef that respects allergens/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /workflow scheduler that prevents collisions/i })).toBeInTheDocument();
   });
 
-  it('renders flow diagram with all three steps and accessible list label', () => {
+  it('renders the Pricing section with three tiers (Free, Pro, Enterprise)', () => {
     renderPage();
-    const flowList = screen.getByRole('list', { name: /chefflow three-step workflow/i });
-    expect(flowList).toBeInTheDocument();
-    expect(screen.getByText('Recipe Library')).toBeInTheDocument();
-    expect(screen.getByText('Event Planning')).toBeInTheDocument();
-    expect(screen.getByText('Kitchen Workflows')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /^pricing$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /^free$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /^pro$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /^enterprise$/i })).toBeInTheDocument();
   });
 
-  it('renders the "Simple Pricing" section heading and both plans', () => {
+  it('Pricing section has id="pricing" for /about#pricing deep-linking', () => {
     renderPage();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /simple pricing/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /free tier/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /pro tier/i })).toBeInTheDocument();
-  });
-
-  it('Simple Pricing section has id="pricing" for hash deep-linking', () => {
-    renderPage();
-    const pricingSection = screen.getByRole('region', { name: /simple pricing/i });
+    const pricingSection = screen.getByRole('region', { name: /^pricing$/i });
     expect(pricingSection).toHaveAttribute('id', 'pricing');
   });
 
-  it('"Start Free Now" link points to /recipes', () => {
+  it('"Open the kitchen" link points to /recipes', () => {
     renderPage();
-    const startLink = screen.getByRole('link', { name: /start free now/i });
-    expect(startLink).toBeInTheDocument();
+    const startLink = screen.getByRole('link', { name: /open the kitchen/i });
     expect(startLink).toHaveAttribute('href', '/recipes');
   });
 
-  it('"Upgrade to Pro" button calls openWith("general")', () => {
+  it('Upgrade to Pro CTA flips the UpgradeSheet store to open with reason=general', () => {
     renderPage();
-    const upgradeBtn = screen.getByRole('button', { name: /upgrade to pro/i });
-    expect(upgradeBtn).toBeInTheDocument();
+    const upgradeBtn = screen.getByTestId('about-cta-pro');
     fireEvent.click(upgradeBtn);
-    expect(openWith).toHaveBeenCalledWith('general');
+    expect(useUpgradeSheetStore.getState().open).toBe(true);
+    expect(useUpgradeSheetStore.getState().reason).toBe('general');
   });
 
-  it('hero section is labelled for accessibility', () => {
+  it('Upgrade to Enterprise CTA also flips the store open — separate target audience', () => {
     renderPage();
-    const heroSection = screen.getByRole('region', { name: /chefflow.*plan.*prep.*serve/i });
-    expect(heroSection).toBeInTheDocument();
+    const upgradeBtn = screen.getByTestId('about-cta-enterprise');
+    fireEvent.click(upgradeBtn);
+    expect(useUpgradeSheetStore.getState().open).toBe(true);
   });
 
-  it('renders feature section headings for recipe library, event planning, and kitchen workflows', () => {
+  it('renders the trust + contact note with the support email link', () => {
     renderPage();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /smart recipe library/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /seamless event planning/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { level: 2, name: /automated kitchen workflows/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: /a note on trust/i })).toBeInTheDocument();
+    const email = screen.getByRole('link', { name: /dereks1109@gmail\.com/i });
+    expect(email).toHaveAttribute('href', expect.stringContaining('mailto:dereks1109@gmail.com'));
   });
-
 });

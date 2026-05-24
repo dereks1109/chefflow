@@ -157,7 +157,7 @@ describe('getMetrics', () => {
     const out = await getMetrics(makeEnv(), stripe, fetchImpl);
 
     expect(out.totalMembers).toBe(3);
-    expect(out.byTier).toEqual({ free: 1, pro: 2, business: 0 });
+    expect(out.byTier).toEqual({ free: 1, pro: 2, business: 0, enterprise: 0 });
     // Active subs are returned twice (once per status iteration: active + trialing).
     // sub_1 = 1200 pence/month; sub_2 = 10800/12 = 900 pence/month → 2100 per pass × 2 = 4200.
     expect(out.mrrPence).toBe(4200);

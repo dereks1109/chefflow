@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Download, Heart, ImageOff } from 'lucide-react';
 import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { resolveCoverPhoto } from '../../core/demos/demoPhotoMap';
 import type { CommunityRecipeSummary } from '../../core/community/communityClient';
 
 interface Props {
@@ -16,13 +17,22 @@ interface Props {
 // Footer carries the community-specific signal: author + like count + copy
 // count. Clicking title or cover navigates to /community/:id.
 export default function CommunityRecipeCard({ recipe }: Props) {
+  // Pipe through the demo photo map so the 15 canonical demo recipes show
+  // their bundled JPEG when shared to community (the worker stores them
+  // with empty coverPhoto to keep payloads small). The community id is
+  // per-publication (e.g. `c_xyz`); demo lookup is keyed by sourceLocalId
+  // (e.g. `r_demo_ribeye`), so prefer that when present.
+  const coverSrc = resolveCoverPhoto({
+    id: recipe.sourceLocalId ?? recipe.id,
+    coverPhoto: recipe.coverPhoto,
+  });
   return (
     <article className="flex flex-col h-full border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-kitchen-ink">
       <div className="relative">
-        {recipe.coverPhoto ? (
+        {coverSrc ? (
           <Link to={`/community/${recipe.id}`} className="block">
             <img
-              src={recipe.coverPhoto}
+              src={coverSrc}
               alt={`${recipe.title || 'Recipe'} cover photo`}
               className="w-full aspect-video object-cover rounded-md mb-2"
               data-testid="community-card-cover-photo-img"
@@ -48,7 +58,18 @@ export default function CommunityRecipeCard({ recipe }: Props) {
           {recipe.title || 'Untitled recipe'}
         </Link>
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
-          by {recipe.authorDisplayName || 'anonymous'}
+          by{' '}
+          {recipe.authorClerkId ? (
+            <Link
+              to={`/chef/${encodeURIComponent(recipe.authorClerkId)}`}
+              className="hover:text-accent hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {recipe.authorDisplayName || 'anonymous'}
+            </Link>
+          ) : (
+            recipe.authorDisplayName || 'anonymous'
+          )}
         </p>
       </header>
 

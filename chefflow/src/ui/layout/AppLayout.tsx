@@ -15,16 +15,17 @@ export default function AppLayout() {
         className={[
           'flex-1',
           'pb-20 lg:pb-0',
+          'print:pb-0',
           'w-full',
         ].join(' ')}
       >
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 print:p-0">
           <Outlet />
         </div>
       </main>
 
       <footer
-        className="mb-14 lg:mb-0 border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
+        className="mb-14 lg:mb-0 print:!hidden border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
         aria-label="Legal"
       >
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 dark:text-slate-400">

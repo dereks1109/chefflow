@@ -6,6 +6,7 @@ import {
   get,
   toggleLike,
   recordCopy,
+  uncopyRecipe,
   hasLiked,
   CommunityForbidden,
   CommunityNotFound,
@@ -81,7 +82,7 @@ describe('publish', () => {
   it('republishing same author+sourceLocalId updates in place and preserves counters', async () => {
     const { id: first } = await publish(kv, 'user_a', 'Alice', sampleRecipe({ id: 'rX', title: 'V1' }), 1000);
     await toggleLike(kv, 'user_b', first);
-    await recordCopy(kv, first);
+    await recordCopy(kv, 'user_b', first);
 
     const { id: second } = await publish(kv, 'user_a', 'Alice', sampleRecipe({ id: 'rX', title: 'V2' }), 2000);
     expect(second).toBe(first);
@@ -168,16 +169,65 @@ describe('toggleLike', () => {
 });
 
 describe('recordCopy', () => {
-  it('increments the copies counter', async () => {
+  it('increments the copies counter on first call for a user', async () => {
     const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
-    const a = await recordCopy(kv, id);
-    expect(a.copies).toBe(1);
-    const b = await recordCopy(kv, id);
-    expect(b.copies).toBe(2);
+    const out = await recordCopy(kv, 'user_b', id);
+    expect(out).toEqual({ copied: true, copies: 1 });
+  });
+
+  it('is per-user idempotent — same user calling twice does NOT double-count (no more append-only inflation)', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    await recordCopy(kv, 'user_b', id);
+    const second = await recordCopy(kv, 'user_b', id);
+    expect(second.copies).toBe(1);
+  });
+
+  it('two different users each count once → counter = 2', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    await recordCopy(kv, 'user_b', id);
+    const out = await recordCopy(kv, 'user_c', id);
+    expect(out.copies).toBe(2);
   });
 
   it('throws CommunityNotFound on unknown id', async () => {
-    await expect(recordCopy(kv, 'cr_nope')).rejects.toBeInstanceOf(CommunityNotFound);
+    await expect(recordCopy(kv, 'user_b', 'cr_nope')).rejects.toBeInstanceOf(CommunityNotFound);
+  });
+});
+
+describe('uncopyRecipe', () => {
+  it('decrements the counter when the user had previously copied (rewind on local-delete)', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    await recordCopy(kv, 'user_b', id);
+    await recordCopy(kv, 'user_c', id);
+    const out = await uncopyRecipe(kv, 'user_b', id);
+    expect(out).toEqual({ copied: false, copies: 1 });
+  });
+
+  it('no-ops when the user never copied — uncopy must be idempotent + safe to retry', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    const out = await uncopyRecipe(kv, 'user_b', id);
+    expect(out).toEqual({ copied: false, copies: 0 });
+  });
+
+  it('cannot push the counter below zero (Math.max(0, …) floor guards against KV drift)', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    // Force a stale per-user marker without a matching counter increment
+    // by writing the KV key directly. Mimics a historical bug or admin reset.
+    await kv.put(`c:cp:${id}:user_b`, '1');
+    const out = await uncopyRecipe(kv, 'user_b', id);
+    expect(out.copies).toBe(0);
+  });
+
+  it('allows a recopy after uncopy — full round trip', async () => {
+    const { id } = await publish(kv, 'user_a', 'Alice', sampleRecipe());
+    await recordCopy(kv, 'user_b', id);
+    await uncopyRecipe(kv, 'user_b', id);
+    const re = await recordCopy(kv, 'user_b', id);
+    expect(re.copies).toBe(1);
+  });
+
+  it('throws CommunityNotFound on unknown id', async () => {
+    await expect(uncopyRecipe(kv, 'user_b', 'cr_nope')).rejects.toBeInstanceOf(CommunityNotFound);
   });
 });
 

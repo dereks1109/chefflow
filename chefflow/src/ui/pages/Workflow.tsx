@@ -431,7 +431,7 @@ export default function Workflow() {
   const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
 
   return (
-    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
+    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 print:p-0 print:space-y-2 print:text-black print:[&_*]:!text-black">
       <div className="flex items-center justify-between gap-2 flex-wrap print:hidden">
         <div className="flex items-center gap-2 flex-wrap">
           <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
@@ -449,9 +449,9 @@ export default function Workflow() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
-        <h1 className="text-3xl font-bold">{event.title || 'Untitled event'}</h1>
-        <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink text-sm">
+        <h1 className="text-2xl font-bold">{event.title || 'Untitled event'}</h1>
+        <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(event.serveAt)}</span>
         </div>
@@ -484,7 +484,7 @@ export default function Workflow() {
           </div>
         )}
         {event.notes && (
-          <div className="mt-4 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
             <p className="whitespace-pre-wrap">{event.notes}</p>
           </div>
@@ -492,7 +492,7 @@ export default function Workflow() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center justify-between mb-3 gap-2 print:hidden">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-2">
             <Compass className="h-3.5 w-3.5" aria-hidden="true" />
             Workflow
@@ -574,7 +574,7 @@ export default function Workflow() {
         {isFallback && workflowStatus.kind === 'ready' && (
           <div
             role="status"
-            className="mb-3 flex items-start gap-2 rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm text-slate-700 dark:text-slate-300"
+            className="mb-3 flex items-start gap-2 rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm text-slate-700 dark:text-slate-300 print:hidden"
           >
             <Compass className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" aria-hidden="true" />
             <div className="flex-1">
@@ -601,7 +601,7 @@ export default function Workflow() {
         {isStale && workflowStatus.kind === 'ready' && (
           <div
             role="status"
-            className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200"
+            className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200 print:hidden"
           >
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
             <p>

@@ -8,6 +8,27 @@ export interface WebhookEnv {
   STRIPE_WEBHOOK_SECRET: string;
   CLERK_SECRET_KEY: string;
   RATE_LIMIT: KVNamespace;
+  // Price IDs used to map a Stripe subscription back to a logical tier.
+  // Pro is required (every deploy has it); Enterprise is optional and only
+  // present when the enterprise tier has been provisioned in Stripe.
+  STRIPE_PRICE_ID_PRO_MONTHLY?: string;
+  STRIPE_PRICE_ID_PRO_ANNUAL?: string;
+  STRIPE_PRICE_ID_ENTERPRISE_MONTHLY?: string;
+  STRIPE_PRICE_ID_ENTERPRISE_ANNUAL?: string;
+}
+
+type PaidTier = 'pro' | 'enterprise';
+
+/** Map a Stripe price id back to the logical product tier. Falls back to
+ *  'pro' for unknown prices — chefs whose checkouts somehow ran against a
+ *  pre-existing Pro price get the correct tier; anything genuinely
+ *  enterprise-shaped lands as enterprise. */
+function tierFromPriceId(priceId: string | null | undefined, env: WebhookEnv): PaidTier {
+  if (!priceId) return 'pro';
+  if (priceId === env.STRIPE_PRICE_ID_ENTERPRISE_MONTHLY || priceId === env.STRIPE_PRICE_ID_ENTERPRISE_ANNUAL) {
+    return 'enterprise';
+  }
+  return 'pro';
 }
 
 /**
@@ -39,7 +60,7 @@ export async function handleStripeWebhook(
   try {
     switch (event.type) {
       case 'checkout.session.completed':
-        await onCheckoutCompleted(event.data.object as Stripe.Checkout.Session, env, fetchImpl);
+        await onCheckoutCompleted(event.data.object as Stripe.Checkout.Session, env, fetchImpl, stripe);
         break;
       case 'customer.subscription.updated':
         await onSubscriptionUpdated(event.data.object as Stripe.Subscription, env, stripe, fetchImpl);
@@ -61,12 +82,26 @@ async function onCheckoutCompleted(
   session: Stripe.Checkout.Session,
   env: WebhookEnv,
   fetchImpl: FetchLike,
+  stripe: StripeLike,
 ): Promise<void> {
   const userId = session.client_reference_id;
   const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.id;
   if (!userId || !customerId) return;
+  // Resolve the subscription's price id so we map to the right tier. Falls
+  // back to 'pro' if the subscription/line items are missing — that matches
+  // the prior single-tier behaviour for any unexpected payload shape.
+  let tier: PaidTier = 'pro';
+  if (typeof session.subscription === 'string') {
+    try {
+      const sub = await stripe.subscriptions.retrieve(session.subscription);
+      const priceId = sub.items?.data?.[0]?.price?.id;
+      tier = tierFromPriceId(priceId, env);
+    } catch {
+      // Ignore — keep default tier.
+    }
+  }
   await writeClerkMetadata(userId, env.CLERK_SECRET_KEY, fetchImpl, {
-    tier: 'pro',
+    tier,
     stripeCustomerId: customerId,
   });
   await invalidateTierCache(userId, env.RATE_LIMIT);
@@ -80,9 +115,13 @@ async function onSubscriptionUpdated(
 ): Promise<void> {
   const userId = await resolveClerkUserId(sub.customer, stripe);
   if (!userId) return;
-  // `active` and `trialing` keep tier=pro; anything else (past_due, unpaid,
-  // canceled, paused, incomplete*) drops them back to free.
-  const tier = sub.status === 'active' || sub.status === 'trialing' ? 'pro' : 'free';
+  // `active` and `trialing` keep the chef on whatever paid tier the
+  // subscription's price id maps to (pro or enterprise). Anything else
+  // (past_due, unpaid, canceled, paused, incomplete*) drops them to free.
+  const isLive = sub.status === 'active' || sub.status === 'trialing';
+  const tier: 'pro' | 'enterprise' | 'free' = isLive
+    ? tierFromPriceId(sub.items?.data?.[0]?.price?.id, env)
+    : 'free';
   await writeClerkMetadata(userId, env.CLERK_SECRET_KEY, fetchImpl, { tier });
   await invalidateTierCache(userId, env.RATE_LIMIT);
 }
@@ -121,7 +160,7 @@ async function writeClerkMetadata(
   userId: string,
   clerkSecret: string,
   fetchImpl: FetchLike,
-  patch: { tier: 'pro' | 'free'; stripeCustomerId?: string },
+  patch: { tier: 'pro' | 'enterprise' | 'free'; stripeCustomerId?: string },
 ): Promise<void> {
   // Read current metadata first so we don't blow away unrelated fields.
   const current = await fetchImpl(`https://api.clerk.com/v1/users/${userId}`, {

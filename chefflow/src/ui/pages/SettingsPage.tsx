@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, LogIn, Lock, Sparkles, UserRound, XCircle } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/clerk-react';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
@@ -14,11 +14,10 @@ import {
   type QuotaSnapshotResponse,
 } from '../../core/tier/quotaClient';
 import { downscaleToDataUrl } from '../../core/util/image';
-import ThemeToggle from '../components/ThemeToggle';
 import { useTheme } from '../theme/useTheme';
 
 export default function SettingsPage() {
-  const { theme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const tier = useTierStore((s) => s.tier);
   const { isSignedIn } = useUser();
   const clerk = useClerk();
@@ -56,6 +55,8 @@ export default function SettingsPage() {
   const [snapshot, setSnapshot] = useState<QuotaSnapshotResponse | null>(null);
 
   const displayName = useProfileStore((s) => s.displayName);
+  const showNameOnCommunity = useProfileStore((s) => s.showNameOnCommunity);
+  const setShowNameOnCommunity = useProfileStore((s) => s.setShowNameOnCommunity);
   const avatarDataUrl = useProfileStore((s) => s.avatarDataUrl);
   const setDisplayName = useProfileStore((s) => s.setDisplayName);
   const setAvatarDataUrl = useProfileStore((s) => s.setAvatarDataUrl);
@@ -251,6 +252,21 @@ export default function SettingsPage() {
                 className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
               />
             </label>
+            <label className="flex items-start gap-2 text-xs cursor-pointer mt-1">
+              <input
+                type="checkbox"
+                checked={showNameOnCommunity}
+                onChange={(e) => setShowNameOnCommunity(e.target.checked)}
+                data-testid="settings-show-name-on-community"
+                className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-accent focus:ring-accent"
+              />
+              <span className="text-slate-700 dark:text-slate-200">
+                Show my name on community recipes
+                <span className="block text-slate-500">
+                  When off, recipes you publish appear as "Anonymous chef".
+                </span>
+              </span>
+            </label>
           </div>
         </div>
       </section>
@@ -268,6 +284,8 @@ export default function SettingsPage() {
                 ? 'bg-accent/15 text-accent'
                 : tier === 'business'
                 ? 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
+                : tier === 'enterprise'
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
                 : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
             ].join(' ')}
             data-testid="settings-tier-chip"
@@ -280,6 +298,9 @@ export default function SettingsPage() {
           )}
           {tier === 'pro' && (
             <span className="text-sm text-slate-500">£{TIER_PRICE_GBP.pro.monthly}/mo or £{TIER_PRICE_GBP.pro.annual}/yr</span>
+          )}
+          {tier === 'enterprise' && (
+            <span className="text-sm text-slate-500">£{TIER_PRICE_GBP.enterprise.monthly}/mo or £{TIER_PRICE_GBP.enterprise.annual}/yr</span>
           )}
         </div>
 
@@ -354,11 +375,46 @@ export default function SettingsPage() {
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
       >
         <h2 id="settings-theme-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Theme</h2>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-slate-700 dark:text-slate-200">
-            {theme === 'dark' ? 'Dark' : 'Light'}
-          </span>
-          <ThemeToggle />
+        {/* Segmented two-button control: chefs see both options at once and
+            the active one is highlighted. Same useTheme contract — applies
+            to <html class="dark"> + persists to localStorage. */}
+        <div
+          role="radiogroup"
+          aria-label="Theme"
+          className="mt-3 inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-surface-2 p-1"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={theme === 'light'}
+            onClick={() => setTheme('light')}
+            data-testid="settings-theme-light"
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              theme === 'light'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100',
+            ].join(' ')}
+          >
+            <Sun className="h-4 w-4" aria-hidden="true" />
+            Light
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={theme === 'dark'}
+            onClick={() => setTheme('dark')}
+            data-testid="settings-theme-dark"
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              theme === 'dark'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100',
+            ].join(' ')}
+          >
+            <Moon className="h-4 w-4" aria-hidden="true" />
+            Dark
+          </button>
         </div>
       </section>
 
@@ -382,6 +438,30 @@ export default function SettingsPage() {
           Free accounts reset at UTC midnight. Limits: {TIER_LIMITS.free.maxRecipesPerDay} recipes / {TIER_LIMITS.free.maxEventsPerDay} event / {TIER_LIMITS.free.maxLlmCallsPerDay} AI calls per day.
         </p>
       </section>
+
+      {/* Sign-out moved here from the top nav so it's not a one-tap-away
+          accident risk in the chrome and so it sits naturally beside the
+          rest of the account controls (display name + avatar). */}
+      {!isE2E && isSignedIn && (
+        <section
+          aria-labelledby="settings-account-heading"
+          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+        >
+          <h2 id="settings-account-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Account</h2>
+          <p className="mt-2 text-xs text-slate-500">
+            Signing out ends your session and returns you to the sign-in page. Your local recipes stay on this device.
+          </p>
+          <button
+            type="button"
+            onClick={() => void clerk.signOut?.({ redirectUrl: '/' })}
+            data-testid="settings-sign-out"
+            className="mt-3 inline-flex items-center gap-2 px-3 h-9 rounded-md text-sm font-medium border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-900/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            Sign out
+          </button>
+        </section>
+      )}
 
       <p className="text-xs text-slate-500">
         Need help? <Link to="/disclaimer" className="text-accent hover:underline">Disclaimer</Link>

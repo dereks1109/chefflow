@@ -149,13 +149,14 @@ export default function RecipesLibrary() {
     return filterRecipes(byMenu, debouncedQuery);
   }, [recipes, activeMenu, debouncedQuery]);
 
-  // Map of recipeId → number of OTHER recipes that reference it via an
-  // ingredient's componentRecipeId. Lets RecipeCard render a "used in N"
-  // badge so chefs see which recipes are sub-components before they delete
-  // one and silently orphan another's #-reference.
-  const usedByCount = useMemo(() => {
+  // Maps of recipeId → count and recipeId → parent titles for "used in N"
+  // badge + hover tooltip. Lets RecipeCard render which OTHER recipes
+  // reference it via an `@` (componentRecipeId) ingredient line, so chefs
+  // see what they'd orphan before deleting a sub-recipe.
+  const { usedByCount, usedByTitles } = useMemo(() => {
     const counts = new Map<string, number>();
-    if (!recipes) return counts;
+    const titles = new Map<string, string[]>();
+    if (!recipes) return { usedByCount: counts, usedByTitles: titles };
     for (const parent of recipes) {
       const seenInThisParent = new Set<string>();
       for (const ing of parent.ingredients) {
@@ -163,9 +164,12 @@ export default function RecipesLibrary() {
         if (seenInThisParent.has(ing.componentRecipeId)) continue;
         seenInThisParent.add(ing.componentRecipeId);
         counts.set(ing.componentRecipeId, (counts.get(ing.componentRecipeId) ?? 0) + 1);
+        const existing = titles.get(ing.componentRecipeId);
+        if (existing) existing.push(parent.title);
+        else titles.set(ing.componentRecipeId, [parent.title]);
       }
     }
-    return counts;
+    return { usedByCount: counts, usedByTitles: titles };
   }, [recipes]);
 
   const selectedRecipes = useMemo(
@@ -389,6 +393,7 @@ export default function RecipesLibrary() {
                 <RecipeCard
                   recipe={r}
                   usedByCount={usedByCount.get(r.id) ?? 0}
+                  usedByTitles={usedByTitles.get(r.id)}
                   onTogglePin={handleTogglePin}
                   onDuplicate={handleDuplicate}
                   onDelete={handleDelete}

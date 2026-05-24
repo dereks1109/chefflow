@@ -7,6 +7,7 @@ import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 export interface CommunityRecipe {
   id: string;
   title: string;
+  description?: string;
   originalYield: number;
   ingredients: unknown[];
   steps: unknown[];
@@ -22,8 +23,14 @@ export interface CommunityRecipe {
 
 export interface CommunityRecipeSummary {
   id: string;
+  /** The author's LOCAL recipe id (e.g. `r_demo_ribeye`). Used by the card
+   *  to look up bundled demo photos via demoPhotoMap. */
+  sourceLocalId?: string;
   title: string;
   coverPhoto?: string;
+  /** Clerk id of the author — present on summaries served by the worker.
+   *  Powers the /chef/:clerkId profile link from cards + recipe pages. */
+  authorClerkId?: string;
   authorDisplayName: string;
   likes: number;
   copies: number;
@@ -90,6 +97,7 @@ export async function publishRecipe(
       recipe: {
         id: recipe.id,
         title: recipe.title,
+        description: recipe.description,
         originalYield: recipe.originalYield,
         ingredients: recipe.ingredients,
         steps: recipe.steps,
@@ -119,6 +127,21 @@ export async function listCommunityRecipes(opts: Options = {}): Promise<Communit
   if (isE2E()) return [];
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const res = await fetchImpl(`${originOf(opts)}/community/list`, { method: 'GET' });
+  if (!res.ok) throw new CommunityClientError(`Community worker ${res.status}`, res.status);
+  const body = (await res.json()) as { items: CommunityRecipeSummary[] };
+  return body.items;
+}
+
+export async function listCommunityRecipesByAuthor(
+  authorClerkId: string,
+  opts: Options = {},
+): Promise<CommunityRecipeSummary[]> {
+  if (isE2E()) return [];
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  const res = await fetchImpl(
+    `${originOf(opts)}/community/by-author/${encodeURIComponent(authorClerkId)}`,
+    { method: 'GET' },
+  );
   if (!res.ok) throw new CommunityClientError(`Community worker ${res.status}`, res.status);
   const body = (await res.json()) as { items: CommunityRecipeSummary[] };
   return body.items;
@@ -172,8 +195,8 @@ export async function getLiked(
 export async function recordCopy(
   communityId: string,
   opts: Options = {},
-): Promise<{ copies: number }> {
-  if (isE2E()) return { copies: 1 };
+): Promise<{ copied: true; copies: number }> {
+  if (isE2E()) return { copied: true, copies: 1 };
   const token = await getClerkToken();
   if (!token) throw new CommunityClientError('Not signed in', 401);
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
@@ -182,5 +205,26 @@ export async function recordCopy(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new CommunityClientError(`Community worker ${res.status}`, res.status);
-  return (await res.json()) as { copies: number };
+  return (await res.json()) as { copied: true; copies: number };
+}
+
+/**
+ * Rewind a recorded copy. Fired by the recipes repo when the user deletes
+ * a local recipe that carries a `copiedFromCommunityId`. Idempotent + safe
+ * to retry; the worker treats "user never copied" as a no-op.
+ */
+export async function uncopyRecipe(
+  communityId: string,
+  opts: Options = {},
+): Promise<{ copied: false; copies: number }> {
+  if (isE2E()) return { copied: false, copies: 0 };
+  const token = await getClerkToken();
+  if (!token) throw new CommunityClientError('Not signed in', 401);
+  const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
+  const res = await fetchImpl(`${originOf(opts)}/community/${communityId}/uncopy`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new CommunityClientError(`Community worker ${res.status}`, res.status);
+  return (await res.json()) as { copied: false; copies: number };
 }

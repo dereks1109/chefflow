@@ -96,8 +96,12 @@ describe('RecipesLibrary', () => {
       await waitFor(() => screen.getByText('Beef Stew'));
       await openActions('Beef Stew');
       await userEvent.click(screen.getByRole('menuitem', { name: /delete/i }));
+      // The recipe is soft-deleted (tombstone retained for sync), so query
+      // via the repo, which filters out `isDeleted` rows. The user-visible
+      // contract — "delete removes the recipe from the library" — still holds.
+      const { listRecipes } = await import('../../db/recipesRepo');
       await waitFor(async () => {
-        expect(await db.recipes.count()).toBe(0);
+        expect((await listRecipes()).length).toBe(0);
       });
     } finally {
       window.confirm = originalConfirm;
@@ -284,8 +288,10 @@ describe('RecipesLibrary', () => {
         screen.getByTestId('recipes-filter-chip-delete-m_seed_2')
       );
 
+      // Repo filters tombstones; check via listMenus, not raw db.menus.count.
+      const { listMenus } = await import('../../db/menusRepo');
       await waitFor(async () => {
-        expect(await db.menus.count()).toBe(0);
+        expect((await listMenus()).length).toBe(0);
       });
       expect(screen.queryByTestId('recipes-filter-chip-m_seed_2')).toBeNull();
       // Chip row disappears entirely because there are no menus left.

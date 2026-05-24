@@ -283,19 +283,19 @@ export default function EventView() {
         <WorkflowCta event={e} />
       </header>
 
-      <div className="relative rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
+      <div className="relative rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink text-sm">
         <button
           type="button"
           onClick={() => setDetailsSheetOpen(true)}
           aria-label="Edit event details"
           data-testid="event-view-edit-details"
-          className="absolute top-4 right-4 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          className="absolute top-3 right-3 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           title="Edit event details"
         >
           <Edit3 className="h-4 w-4" aria-hidden="true" />
         </button>
-        <h1 className="text-3xl font-bold pr-8" data-testid="event-view-title">{e.title || 'Untitled event'}</h1>
-        <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+        <h1 className="text-2xl font-bold pr-8" data-testid="event-view-title">{e.title || 'Untitled event'}</h1>
+        <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(e.serveAt)}</span>
         </div>
@@ -330,7 +330,7 @@ export default function EventView() {
           </div>
         )}
         {e.notes && (
-          <div className="mt-3 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <NotesList notes={e.notes} />

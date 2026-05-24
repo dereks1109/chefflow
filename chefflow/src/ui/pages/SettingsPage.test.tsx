@@ -173,12 +173,11 @@ describe('SettingsPage', () => {
     expect(useProfileStore.getState().displayName).toBe('Derek');
   });
 
-  it('renders the Theme section with a ThemeToggle and current mode label', () => {
+  it('renders the Theme section as a segmented Light/Dark radiogroup so chefs see both options at once', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: /^theme$/i })).toBeInTheDocument();
-    expect(screen.getByText(/^(light|dark)$/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: /switch to (light|dark) mode/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /theme/i })).toBeInTheDocument();
+    expect(screen.getByTestId('settings-theme-light')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-theme-dark')).toBeInTheDocument();
   });
 });

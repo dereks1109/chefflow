@@ -182,8 +182,12 @@ function contributeIngredient(
     }
     const nextVisited = new Set(visited);
     nextVisited.add(ing.componentRecipeId);
+    // Breadcrumb provenance: each level of sub-recipe descent appends
+    // " > <sub.title>". Chefs reading the order list at the station need
+    // to know which sub-dish an ingredient is for (Rule 9 — encodes WHY).
+    const subDishLabel = `${dishLabel} > ${sub.title || 'Untitled sub-recipe'}`;
     for (const subIng of sub.ingredients) {
-      contributeIngredient(subIng, parentRatio * subFraction, dishLabel, recipes, buckets, warnings, nextVisited, depth + 1);
+      contributeIngredient(subIng, parentRatio * subFraction, subDishLabel, recipes, buckets, warnings, nextVisited, depth + 1);
     }
     return;
   }

@@ -23,18 +23,40 @@ import {
   publish as communityPublish,
   unpublish as communityUnpublish,
   listRecent as communityListRecent,
+  listByAuthor as communityListByAuthor,
   get as communityGet,
   toggleLike as communityToggleLike,
   recordCopy as communityRecordCopy,
+  uncopyRecipe as communityUncopyRecipe,
   hasLiked as communityHasLiked,
   CommunityForbidden,
   CommunityNotFound,
   type SourceRecipe,
 } from './community';
+import {
+  submit as contactSubmit,
+  listSubmissions as contactListSubmissions,
+  ContactValidationError,
+  ContactRateLimitError,
+} from './contact';
+import {
+  submit as allergenAuditSubmit,
+  listAll as allergenAuditListAll,
+  AllergenAuditValidationError,
+} from './allergenAudit';
+import {
+  pull as syncPull,
+  push as syncPush,
+  parseSince,
+  SyncValidationError,
+} from './sync';
+import { provisionDemosForUser } from './demos';
 
 export interface Env {
   AI: Ai;
   RATE_LIMIT: KVNamespace;
+  /** Per-user sync database (recipes / events / menus / allergen audits). */
+  DB: D1Database;
   CLERK_ISSUER: string;
   CLERK_SECRET_KEY: string;
   /** Legacy blanket cap, kept for fallback. Per-tier LLM cap supersedes it. */
@@ -44,6 +66,13 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_ID_PRO_MONTHLY: string;
   STRIPE_PRICE_ID_PRO_ANNUAL: string;
+  // Enterprise tier Stripe price IDs — optional. Provision via
+  // `wrangler secret put STRIPE_PRICE_ID_ENTERPRISE_MONTHLY` (and _ANNUAL).
+  // The /billing/checkout-session route returns a 500 with a clear message
+  // when tier='enterprise' but these are unset, so the SPA can surface a
+  // user-friendly failure instead of a silent Stripe blowup.
+  STRIPE_PRICE_ID_ENTERPRISE_MONTHLY?: string;
+  STRIPE_PRICE_ID_ENTERPRISE_ANNUAL?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -104,11 +133,44 @@ export async function handleRequest(
     const items = await communityListRecent(env.RATE_LIMIT);
     return json({ items }, 200);
   }
+  // GET /community/by-author/:clerkId — public chef-profile listing.
+  const communityByAuthorMatch = /^\/community\/by-author\/(.+)$/.exec(url.pathname);
+  if (req.method === 'GET' && communityByAuthorMatch) {
+    const clerkId = decodeURIComponent(communityByAuthorMatch[1]);
+    const items = await communityListByAuthor(env.RATE_LIMIT, clerkId);
+    return json({ items }, 200);
+  }
   const communityGetMatch = /^\/community\/(cr_[A-Za-z0-9_]+)$/.exec(url.pathname);
   if (req.method === 'GET' && communityGetMatch) {
     const record = await communityGet(env.RATE_LIMIT, communityGetMatch[1]);
     if (!record) return json({ error: 'Not found' }, 404);
     return json(record, 200);
+  }
+
+  // ---- Public contact form — unauth, IP-rate-limited. ----
+  if (req.method === 'POST' && url.pathname === '/contact/submit') {
+    const ip =
+      req.headers.get('cf-connecting-ip') ??
+      req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+      'unknown';
+    const body = await readJson(req);
+    try {
+      await contactSubmit(env, ip, body);
+      return json({ ok: true }, 200);
+    } catch (err) {
+      if (err instanceof ContactRateLimitError) {
+        return json(
+          { error: err.message },
+          429,
+          { 'Retry-After': String(err.retryAfterSeconds) },
+        );
+      }
+      if (err instanceof ContactValidationError) {
+        return json({ error: err.message }, err.status);
+      }
+      const msg = err instanceof Error ? err.message : 'Failed to send';
+      return json({ error: msg }, 500);
+    }
   }
 
   // Auth gates every other route in this worker. Pull userId once up front.
@@ -118,6 +180,63 @@ export async function handleRequest(
   } catch (err) {
     if (err instanceof UnauthorizedError) return json({ error: err.message }, 401);
     throw err;
+  }
+
+  // ---- Per-user sync (D1). Authed; user_id is taken from the verified token.
+  if (req.method === 'GET' && url.pathname === '/api/sync/pull') {
+    const since = parseSince(url.searchParams.get('since'));
+    try {
+      const out = await syncPull(env.DB, userId, since);
+      return json(out, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Sync pull failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /api/demos/provision — idempotent first-sign-in demo seed. Any
+  // signed-in user can call this; the worker fast-skips repeat calls via a
+  // KV marker, and uses INSERT OR IGNORE so user edits/deletes are preserved.
+  if (req.method === 'POST' && url.pathname === '/api/demos/provision') {
+    try {
+      const result = await provisionDemosForUser({ DB: env.DB, RATE_LIMIT: env.RATE_LIMIT }, userId);
+      return json(result, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Demo provision failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/sync/push') {
+    const body = await readJson(req);
+    try {
+      const results = await syncPush(env.DB, userId, body);
+      return json({ results, serverNow: Date.now() }, 200);
+    } catch (err) {
+      if (err instanceof SyncValidationError) {
+        return json({ error: err.message }, err.status);
+      }
+      const msg = err instanceof Error ? err.message : 'Sync push failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /audit/allergen-removal — chef pushes a local audit entry up to the
+  // central log. Idempotent on entry.id; safe to retry. The userClerkId on
+  // the persisted record is overridden with the verified token's sub —
+  // clients can't spoof someone else's removal.
+  if (req.method === 'POST' && url.pathname === '/audit/allergen-removal') {
+    const body = await readJson(req);
+    try {
+      const out = await allergenAuditSubmit(env.RATE_LIMIT, userId, body);
+      return json(out, 200);
+    } catch (err) {
+      if (err instanceof AllergenAuditValidationError) {
+        return json({ error: err.message }, err.status);
+      }
+      const msg = err instanceof Error ? err.message : 'Failed to record audit';
+      return json({ error: msg }, 500);
+    }
   }
 
   // POST /quota/consume — increment counter for {kind}.
@@ -153,10 +272,30 @@ export async function handleRequest(
 
   // POST /billing/checkout-session — mint a Stripe Checkout URL.
   if (req.method === 'POST' && url.pathname === '/billing/checkout-session') {
-    const body = (await readJson(req)) as { interval?: unknown } | null;
+    const body = (await readJson(req)) as { interval?: unknown; tier?: unknown } | null;
     const interval: Interval = body?.interval === 'year' ? 'year' : 'month';
+    // Tier picks which price IDs to use. Defaults to 'pro' for backward
+    // compat with clients that don't send the new field.
+    const tier: 'pro' | 'enterprise' = body?.tier === 'enterprise' ? 'enterprise' : 'pro';
     const origin = req.headers.get('Origin') ?? '';
     if (!origin) return json({ error: 'Missing Origin header' }, 400);
+
+    // Resolve the Stripe price IDs for the requested tier. Enterprise IDs
+    // are optional env vars; if unset, fail loud rather than silently
+    // routing the chef into a Pro checkout.
+    let priceMonthly: string;
+    let priceAnnual: string;
+    if (tier === 'enterprise') {
+      if (!env.STRIPE_PRICE_ID_ENTERPRISE_MONTHLY || !env.STRIPE_PRICE_ID_ENTERPRISE_ANNUAL) {
+        return json({ error: 'Enterprise checkout not configured (missing STRIPE_PRICE_ID_ENTERPRISE_*).' }, 500);
+      }
+      priceMonthly = env.STRIPE_PRICE_ID_ENTERPRISE_MONTHLY;
+      priceAnnual = env.STRIPE_PRICE_ID_ENTERPRISE_ANNUAL;
+    } else {
+      priceMonthly = env.STRIPE_PRICE_ID_PRO_MONTHLY;
+      priceAnnual = env.STRIPE_PRICE_ID_PRO_ANNUAL;
+    }
+
     try {
       const stripe = makeStripe(env.STRIPE_SECRET_KEY);
       const { url: checkoutUrl } = await createCheckoutSession(
@@ -166,8 +305,8 @@ export async function handleRequest(
         interval,
         `${origin}/settings?upgraded=1`,
         `${origin}/settings`,
-        env.STRIPE_PRICE_ID_PRO_MONTHLY,
-        env.STRIPE_PRICE_ID_PRO_ANNUAL,
+        priceMonthly,
+        priceAnnual,
       );
       return json({ url: checkoutUrl }, 200);
     } catch (err) {
@@ -230,6 +369,74 @@ export async function handleRequest(
         return json({ events: out }, 200);
       } catch (err) {
         return json({ error: errMsg(err) }, 502);
+      }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/contact-submissions') {
+      const limit = Math.max(
+        1,
+        Math.min(500, parseInt(url.searchParams.get('limit') ?? '100', 10) || 100),
+      );
+      const items = await contactListSubmissions(env.RATE_LIMIT, limit);
+      return json({ items }, 200);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/admin/allergen-audits') {
+      const limit = Math.max(
+        1,
+        Math.min(1000, parseInt(url.searchParams.get('limit') ?? '200', 10) || 200),
+      );
+      const items = await allergenAuditListAll(env.RATE_LIMIT, limit);
+      return json({ items }, 200);
+    }
+
+    // GET /admin/d1/allergen-audits — cross-user view backed by the D1
+    // per-user sync table (vs the bespoke-KV one above). Source of truth
+    // going forward; the KV view stays for backward compat with any chefs
+    // whose audits were pushed via the legacy /audit/allergen-removal route.
+    if (req.method === 'GET' && url.pathname === '/admin/d1/allergen-audits') {
+      const limit = Math.max(
+        1,
+        Math.min(1000, parseInt(url.searchParams.get('limit') ?? '200', 10) || 200),
+      );
+      try {
+        const result = await env.DB
+          .prepare(
+            `SELECT id, user_id, updated_at, payload FROM allergen_audits
+             WHERE is_deleted = 0
+             ORDER BY updated_at DESC LIMIT ?`,
+          )
+          .bind(limit)
+          .all<{ id: string; user_id: string; updated_at: number; payload: string }>();
+        const items = (result.results ?? []).map((row) => {
+          let parsed: Record<string, unknown> = {};
+          try {
+            parsed = JSON.parse(row.payload) as Record<string, unknown>;
+          } catch {
+            // Skip the parse if payload is malformed; row.id + user_id still
+            // useful for an admin to spot trouble.
+          }
+          // Project the fields the admin panel renders. The userClerkId is
+          // taken from the D1 user_id column (authoritative — server-set at
+          // sync time), NOT from the payload (which could be tampered with).
+          return {
+            id: row.id,
+            userClerkId: row.user_id,
+            updatedAt: row.updated_at,
+            recipeId: typeof parsed.recipeId === 'string' ? parsed.recipeId : '',
+            recipeTitleAtTime: typeof parsed.recipeTitleAtTime === 'string' ? parsed.recipeTitleAtTime : '',
+            removedTag: typeof parsed.removedTag === 'string' ? parsed.removedTag : '',
+            reasons: Array.isArray(parsed.reasons) ? parsed.reasons : [],
+            otherText: typeof parsed.otherText === 'string' ? parsed.otherText : undefined,
+            ingredientsAtTime: Array.isArray(parsed.ingredientsAtTime) ? parsed.ingredientsAtTime : [],
+            removedAt: typeof parsed.removedAt === 'number' ? parsed.removedAt : 0,
+            userDisplayName: typeof parsed.userDisplayName === 'string' ? parsed.userDisplayName : undefined,
+          };
+        });
+        return json({ items }, 200);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'D1 query failed';
+        return json({ error: msg }, 500);
       }
     }
 
@@ -305,7 +512,7 @@ export async function handleRequest(
     }
   }
 
-  const communityIdRoute = /^\/community\/(cr_[A-Za-z0-9_]+)(\/like|\/copy)?$/.exec(url.pathname);
+  const communityIdRoute = /^\/community\/(cr_[A-Za-z0-9_]+)(\/like|\/copy|\/uncopy)?$/.exec(url.pathname);
   if (communityIdRoute) {
     const recipeId = communityIdRoute[1];
     const suffix = communityIdRoute[2];
@@ -338,7 +545,17 @@ export async function handleRequest(
 
     if (req.method === 'POST' && suffix === '/copy') {
       try {
-        const out = await communityRecordCopy(env.RATE_LIMIT, recipeId);
+        const out = await communityRecordCopy(env.RATE_LIMIT, userId, recipeId);
+        return json(out, 200);
+      } catch (err) {
+        if (err instanceof CommunityNotFound) return json({ error: err.message }, 404);
+        throw err;
+      }
+    }
+
+    if (req.method === 'POST' && suffix === '/uncopy') {
+      try {
+        const out = await communityUncopyRecipe(env.RATE_LIMIT, userId, recipeId);
         return json(out, 200);
       } catch (err) {
         if (err instanceof CommunityNotFound) return json({ error: err.message }, 404);

@@ -335,7 +335,7 @@ export default function NestedDragDropBuilder({
                           ref={stepsProvided.innerRef}
                           {...stepsProvided.droppableProps}
                           className={[
-                            'px-3 pb-3 pt-1 space-y-2 transition-colors',
+                            'px-3 pb-3 pt-1 space-y-1 transition-colors',
                             // Visual feedback when a step is hovering over THIS milestone
                             stepsSnapshot.isDraggingOver
                               ? 'bg-accent/5'
@@ -359,7 +359,7 @@ export default function NestedDragDropBuilder({
                                       onChange={(e) => editStep(milestone.id, step.id, e.target.value)}
                                       placeholder="Step description…"
                                       className={[
-                                        'flex-1 bg-transparent text-sm outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1',
+                                        'flex-1 bg-transparent text-xs outline-none focus:ring-2 focus:ring-accent rounded px-2 py-1',
                                         isChecked ? 'line-through text-slate-400 dark:text-slate-500' : '',
                                       ].join(' ')}
                                       aria-label="Step content"
@@ -367,7 +367,7 @@ export default function NestedDragDropBuilder({
                                   ) : (
                                     <p
                                       className={[
-                                        'flex-1 text-sm px-2 py-1 whitespace-pre-wrap break-words leading-relaxed',
+                                        'flex-1 text-xs px-2 py-0.5 whitespace-pre-wrap break-words leading-snug',
                                         isChecked ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-700 dark:text-slate-200',
                                       ].join(' ')}
                                     >
@@ -407,7 +407,7 @@ export default function NestedDragDropBuilder({
                                 <li
                                   key={step.id}
                                   className={[
-                                    'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2 border-slate-200 dark:border-slate-700',
+                                    'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-1 border-slate-200 dark:border-slate-700',
                                     isChecked ? 'opacity-70' : '',
                                   ].join(' ')}
                                 >
@@ -439,7 +439,7 @@ export default function NestedDragDropBuilder({
                                     ref={sp.innerRef}
                                     {...sp.draggableProps}
                                     className={[
-                                      'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-2',
+                                      'rounded-md border bg-slate-50 dark:bg-slate-900 px-2 py-1',
                                       ss.isDragging
                                         ? 'border-accent shadow-md ring-1 ring-accent/30'
                                         : 'border-slate-200 dark:border-slate-700',

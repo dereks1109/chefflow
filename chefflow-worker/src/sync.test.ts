@@ -1,0 +1,160 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { pull, push, type PushBody } from './sync';
+
+// In-memory D1 stub — emulates the prepared-statement subset sync.ts uses.
+// Keyed by (table, user_id, id). Returns a D1Database-shaped object so we
+// don't drag a real sqlite engine into unit tests.
+interface Row { user_id: string; id: string; updated_at: number; is_deleted: number; payload: string; }
+
+function makeDb() {
+  const store: Record<string, Row[]> = {
+    recipes: [], events: [], menus: [], allergen_audits: [],
+  };
+
+  const prepare = (sql: string) => {
+    let boundArgs: unknown[] = [];
+    const tableMatch = sql.match(/(?:FROM|INTO)\s+(\w+)/);
+    const table = tableMatch ? tableMatch[1] : '';
+    return {
+      bind(...args: unknown[]) { boundArgs = args; return this; },
+      async first<T>() {
+        if (sql.startsWith('SELECT updated_at')) {
+          const [userId, id] = boundArgs as [string, string];
+          const row = store[table]?.find((r) => r.user_id === userId && r.id === id);
+          return (row ? { updated_at: row.updated_at } : null) as T;
+        }
+        return null as T;
+      },
+      async all<T>() {
+        if (sql.startsWith('SELECT id, updated_at, is_deleted, payload')) {
+          const [userId, since] = boundArgs as [string, number];
+          const results = (store[table] ?? [])
+            .filter((r) => r.user_id === userId && r.updated_at > since)
+            .map((r) => ({ id: r.id, updated_at: r.updated_at, is_deleted: r.is_deleted, payload: r.payload }))
+            .sort((a, b) => a.updated_at - b.updated_at);
+          return { results, success: true } as T;
+        }
+        return { results: [], success: true } as T;
+      },
+      async run() {
+        if (sql.startsWith('INSERT INTO')) {
+          const [id, userId, updatedAt, isDeleted, payload] = boundArgs as [string, string, number, number, string];
+          const arr = store[table] ?? (store[table] = []);
+          const ix = arr.findIndex((r) => r.user_id === userId && r.id === id);
+          const row: Row = { user_id: userId, id, updated_at: updatedAt, is_deleted: isDeleted, payload };
+          if (ix >= 0) arr[ix] = row;
+          else arr.push(row);
+        }
+        return { success: true };
+      },
+    };
+  };
+
+  return { prepare, store } as unknown as D1Database & { store: typeof store };
+}
+
+const fakePayload = (title: string) => ({ id: 'r1', title, ingredients: [], steps: [] });
+
+describe('sync.push — Last-Write-Wins invariant', () => {
+  let db: D1Database & { store: Record<string, Row[]> };
+  beforeEach(() => { db = makeDb() as D1Database & { store: Record<string, Row[]> }; });
+
+  it('writes a brand-new row → status applied — first time we see it', async () => {
+    const body: PushBody = {
+      recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('original') }],
+    };
+    const out = await push(db, 'user_a', body);
+    expect(out).toEqual([{ table: 'recipes', id: 'r1', status: 'applied' }]);
+    expect(db.store.recipes).toHaveLength(1);
+    expect(JSON.parse(db.store.recipes[0].payload).title).toBe('original');
+  });
+
+  it('overwrites when incoming updated_at is newer — LWW server-side wins', async () => {
+    // Seed an older row.
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('old') }] });
+    // Newer push overwrites.
+    const out = await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 200, payload: fakePayload('newer') }] });
+    expect(out[0].status).toBe('applied');
+    expect(JSON.parse(db.store.recipes[0].payload).title).toBe('newer');
+  });
+
+  it('rejects as stale when incoming updated_at is older — server keeps newer copy', async () => {
+    // Seed a newer row.
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 500, payload: fakePayload('current') }] });
+    // Older push is rebuffed.
+    const out = await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('stale-attempt') }] });
+    expect(out[0].status).toBe('stale');
+    expect(JSON.parse(db.store.recipes[0].payload).title).toBe('current');
+  });
+
+  it('equal updated_at is also stale — no clobbering at the same timestamp', async () => {
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('first') }] });
+    const out = await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('tie') }] });
+    expect(out[0].status).toBe('stale');
+    expect(JSON.parse(db.store.recipes[0].payload).title).toBe('first');
+  });
+});
+
+describe('sync.push — user_id is authoritative from the token, never the body', () => {
+  it("a row pushed by user_a is stamped with user_a even if payload claims otherwise", async () => {
+    // The PushRowInput has no user_id field — but a malicious client could
+    // try to smuggle one inside `payload`. The server stores user_id from
+    // the token, so the smuggled value never lands in the user_id column.
+    const db = makeDb();
+    await push(db, 'user_a', {
+      recipes: [{ id: 'r1', updated_at: 1, payload: { id: 'r1', userId: 'user_b', title: 'sneaky' } }],
+    });
+    expect((db as any).store.recipes[0].user_id).toBe('user_a');
+  });
+
+  it('two users can mint rows with the same id without colliding — PK is (user_id, id)', async () => {
+    const db = makeDb();
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 1, payload: fakePayload('A') }] });
+    await push(db, 'user_b', { recipes: [{ id: 'r1', updated_at: 1, payload: fakePayload('B') }] });
+    const store = (db as any).store.recipes;
+    expect(store).toHaveLength(2);
+    expect(store.find((r: Row) => r.user_id === 'user_a').payload).toContain('"title":"A"');
+    expect(store.find((r: Row) => r.user_id === 'user_b').payload).toContain('"title":"B"');
+  });
+});
+
+describe('sync.pull — delta-only filter', () => {
+  it("returns only rows updated after `since`", async () => {
+    const db = makeDb();
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('a') }] });
+    await push(db, 'user_a', { recipes: [{ id: 'r2', updated_at: 200, payload: fakePayload('b') }] });
+    await push(db, 'user_a', { recipes: [{ id: 'r3', updated_at: 300, payload: fakePayload('c') }] });
+    const out = await pull(db, 'user_a', 150);
+    expect(out.recipes.map((r) => r.id)).toEqual(['r2', 'r3']);
+  });
+
+  it('never returns rows belonging to a different user — even if ids match', async () => {
+    const db = makeDb();
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('A-private') }] });
+    await push(db, 'user_b', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('B-private') }] });
+    const out = await pull(db, 'user_a', 0);
+    expect(out.recipes).toHaveLength(1);
+    expect(JSON.parse(out.recipes[0].payload).title).toBe('A-private');
+  });
+
+  it('includes soft-deleted rows so deletions propagate to other devices', async () => {
+    const db = makeDb();
+    await push(db, 'user_a', { recipes: [{ id: 'r1', updated_at: 100, payload: fakePayload('a'), is_deleted: true }] });
+    const out = await pull(db, 'user_a', 0);
+    expect(out.recipes[0].is_deleted).toBe(1);
+  });
+});
+
+describe('sync.push — payload size cap', () => {
+  it('rejects payloads larger than ~900 KB so D1 row limits never bite', async () => {
+    const db = makeDb();
+    // 1 MB of `x` — exceeds the 900 KB cap.
+    const huge = 'x'.repeat(1_000_000);
+    const out = await push(db, 'user_a', {
+      recipes: [{ id: 'big', updated_at: 1, payload: { id: 'big', title: huge } }],
+    });
+    expect(out[0].status).toBe('rejected');
+    expect(out[0].reason).toMatch(/exceeds/);
+    expect((db as any).store.recipes).toHaveLength(0); // nothing persisted
+  });
+});

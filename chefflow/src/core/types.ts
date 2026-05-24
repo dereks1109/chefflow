@@ -72,13 +72,40 @@ export interface RecipeAnalysis {
   caloriesTotal?: number;
   keyIngredientTags?: string[];     // 2–6 lowercase headline ingredients (e.g. "beef")
   allergens?: AllergenTag[];        // closed UK-14 set, deduped
+  /** Ingredient names (lowercase, verbatim from the recipe) the AI could
+   *  not confidently classify. Surfaced as amber "AI to review" warnings
+   *  so the chef checks them manually. Optional — older recipes (analysed
+   *  before this field shipped) render no warnings until re-analyzed. */
+  uncertainIngredients?: string[];
   analyzedAt?: number;              // epoch ms
   source?: 'llm-text' | 'llm-vision' | 'manual';
 }
 
-export interface Recipe {
+/**
+ * Sync-metadata mixin — shared across every Dexie store that participates in
+ * D1 cloud sync (Recipe, KitchenEvent, Menu, AllergenAuditEntry).
+ *
+ *   userId    — Clerk subject (or `anon:<random>` pre-sign-in). Filter for
+ *               every read; stamped on every write so cross-user reads in
+ *               a shared browser can't see each other's rows.
+ *   isDeleted — soft-delete tombstone. Listings filter it; the row stays
+ *               locally so a stale server pull can't resurrect it.
+ *   synced    — push-queue flag. Writes set this false; the sync engine
+ *               flips it true once the server confirms an LWW-applied
+ *               status. `undefined` is treated the same as `false`.
+ */
+export interface SyncMeta {
+  userId?: string;
+  isDeleted?: boolean;
+  synced?: boolean;
+}
+
+export interface Recipe extends SyncMeta {
   id: string;
   title: string;
+  /** Optional freeform description shown under the title in the editor.
+   *  Not yet surfaced on cards/library — editor-only for now. */
+  description?: string;
   originalYield: number;
   prepTime?: string;
   cookTime?: string;
@@ -93,6 +120,11 @@ export interface Recipe {
   pricePerPortion?: number;
   /** Base64 JPEG data URL, downscaled to <=1600px. Stored in Dexie. */
   coverPhoto?: string;
+  /** The community recipe id this row was copied from (e.g. `cr_xyz`). Set
+   *  when the user uses "Copy to my library" on a community card. Powers
+   *  auto-uncopy on local soft-delete: deleting a recipe with this field
+   *  set fires POST /community/:id/uncopy to rewind the global counter. */
+  copiedFromCommunityId?: string;
 }
 
 export interface Dish {
@@ -116,7 +148,7 @@ export interface EventSection {
   dishIds: string[];
 }
 
-export interface KitchenEvent {
+export interface KitchenEvent extends SyncMeta {
   id: string;
   title: string;
   serveAt?: string;      // ISO datetime — when food is served / event anchor
@@ -164,7 +196,7 @@ export interface MenuIssue {
   message: string;
 }
 
-export interface Menu {
+export interface Menu extends SyncMeta {
   id: string;
   title: string;
   description?: string;
@@ -197,6 +229,38 @@ export interface MenuAnalysis {
 }
 
 export type ColorTag = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
+// Closed set of reasons a chef can pick when removing an allergen tag. Used by
+// the safe-removal modal + the local audit log.
+export type AllergenRemovalReason =
+  | 'ingredient-changed'
+  | 'recipe-changed'
+  | 'mistakenly-added'
+  | 'other';
+
+/**
+ * One audit row per allergen-tag removal. Persisted in Dexie's `allergenAudits`
+ * table. We snapshot `recipeTitleAtTime` + `ingredientsAtTime` so the history
+ * stays readable even if the recipe is later renamed or edited. Multiple
+ * reasons allowed (e.g. ingredient-changed + mistakenly-added co-apply).
+ */
+export interface AllergenAuditEntry extends SyncMeta {
+  id: string;
+  recipeId: string;
+  recipeTitleAtTime: string;
+  removedTag: AllergenTag;
+  reasons: AllergenRemovalReason[];
+  otherText?: string;
+  ingredientsAtTime: string[];
+  removedAt: number;
+  /** Historical Clerk-id field, preserved for the legacy bespoke audit
+   *  endpoint (`/audit/allergen-removal`). The canonical sync-owner field
+   *  is `SyncMeta.userId`; for new audits both are set to the same value. */
+  userClerkId?: string;
+  /** Display name at the time of removal, snapshotted so renames don't
+   *  rewrite history. Falls back to "(anonymous)" in the history view. */
+  userDisplayName?: string;
+}
 
 export interface ScheduledStep {
   // identity — synthesized as `${dishId}:${recipeStepId}`, unique across the workflow

@@ -41,7 +41,7 @@ describe('UpgradeSheet', () => {
   it('shows the un-prompted upgrade copy when reason=general (nav Upgrade button)', () => {
     useUpgradeSheetStore.setState({ open: true, reason: 'general' });
     render(<UpgradeSheet />);
-    expect(screen.getByRole('heading', { name: /upgrade to chefflow pro/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /choose a plan/i })).toBeInTheDocument();
   });
 
   it('closes when the X button is clicked', async () => {
@@ -60,19 +60,29 @@ describe('UpgradeSheet', () => {
     expect(useUpgradeSheetStore.getState().open).toBe(false);
   });
 
-  it('shows the £12/mo Pro pricing pulled from TIER_PRICE_GBP', () => {
+  it('shows the £15/mo Pro pricing pulled from TIER_PRICE_GBP', () => {
     useUpgradeSheetStore.setState({ open: true, reason: 'recipe' });
     render(<UpgradeSheet />);
-    // £12 appears in both the tier card header and the monthly CTA — both ok.
-    expect(screen.getAllByText(/£12/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Annual: £108\/yr/)).toBeInTheDocument();
-    expect(screen.getByTestId('upgrade-sheet-cta-annual')).toHaveTextContent('£108/yr');
+    // £15 appears in both the Pro card price + monthly CTA — both ok.
+    expect(screen.getAllByText(/£15/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Annual: £135\/yr/)).toBeInTheDocument();
+    expect(screen.getByTestId('upgrade-sheet-cta-pro-annual')).toHaveTextContent('£135/yr');
   });
 
-  it('renders both monthly and annual CTAs as enabled', () => {
+  it('shows the £50/mo Enterprise pricing alongside Pro (two-card grid)', () => {
     useUpgradeSheetStore.setState({ open: true, reason: 'recipe' });
     render(<UpgradeSheet />);
-    expect(screen.getByTestId('upgrade-sheet-cta-monthly')).toBeEnabled();
-    expect(screen.getByTestId('upgrade-sheet-cta-annual')).toBeEnabled();
+    expect(screen.getAllByText(/£50/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Annual: £450\/yr/)).toBeInTheDocument();
+    expect(screen.getByTestId('upgrade-sheet-cta-enterprise-monthly')).toBeInTheDocument();
+  });
+
+  it('renders Pro + Enterprise monthly + annual CTAs as enabled', () => {
+    useUpgradeSheetStore.setState({ open: true, reason: 'recipe' });
+    render(<UpgradeSheet />);
+    expect(screen.getByTestId('upgrade-sheet-cta-pro-monthly')).toBeEnabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-pro-annual')).toBeEnabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-enterprise-monthly')).toBeEnabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-enterprise-annual')).toBeEnabled();
   });
 });

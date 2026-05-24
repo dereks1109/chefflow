@@ -119,11 +119,24 @@ export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAn
     throw new LlmRecipeValidationError(`LLM did not return valid JSON: ${message}`, 'root');
   }
   const llmAnalysis = parseLlmAnalysis(parsed);
+  // Filter uncertainIngredients to names that actually exist in the recipe
+  // — defensive against LLM hallucination (e.g. it invents a name that
+  // looks like the user's ingredient but isn't a real match). Comparison is
+  // lowercase + trimmed to handle minor casing differences from the model.
+  const recipeNameSet = new Set(
+    input.recipe.ingredients
+      .map((i) => i.name?.trim().toLowerCase())
+      .filter((n): n is string => Boolean(n)),
+  );
+  const uncertainIngredients = (llmAnalysis.uncertainIngredients ?? []).filter((n) =>
+    recipeNameSet.has(n),
+  );
   return {
     caloriesPerPortion: llmAnalysis.caloriesPerPortion,
     caloriesTotal: llmAnalysis.caloriesTotal,
     keyIngredientTags: llmAnalysis.keyIngredientTags,
     allergens: llmAnalysis.allergens,
+    ...(uncertainIngredients.length > 0 ? { uncertainIngredients } : {}),
     analyzedAt: Date.now(),
     source: 'llm-text',
   };

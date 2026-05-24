@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { LogIn, LogOut, Settings, Shield } from 'lucide-react';
+import { LogIn, Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
+import AccountAvatar from '../components/AccountAvatar';
 import { useAdminStore } from '../../state/useAdminStore';
 
 export default function MobileTopBar() {
@@ -71,6 +72,24 @@ export default function MobileTopBar() {
         </NavLink>
 
         <NavLink
+          to="/contact"
+          aria-label="Contact"
+          className={({ isActive }) =>
+            [
+              'flex items-center justify-center',
+              'min-h-touch min-w-touch rounded-lg',
+              'transition-colors duration-150',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              isActive
+                ? 'text-accent bg-accent/10'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-surface-3',
+            ].join(' ')
+          }
+        >
+          <Mail size={20} aria-hidden="true" />
+        </NavLink>
+
+        <NavLink
           to="/settings"
           aria-label="Settings"
           className={({ isActive }) =>
@@ -89,16 +108,15 @@ export default function MobileTopBar() {
         </NavLink>
 
         {!isE2E && showSignedInChrome && (
-          <button
-            type="button"
-            onClick={() => void clerk.signOut?.({ redirectUrl: '/' })}
-            data-testid="mobile-sign-out"
-            aria-label="Sign out"
-            title="Sign out"
-            className="flex items-center justify-center min-h-touch min-w-touch rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-surface-3"
+          <NavLink
+            to="/settings"
+            aria-label="Account"
+            title="Account"
+            data-testid="mobile-account-avatar"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <LogOut size={20} aria-hidden="true" />
-          </button>
+            <AccountAvatar size={28} label="Account" />
+          </NavLink>
         )}
         {!isE2E && !showSignedInChrome && (
           <button

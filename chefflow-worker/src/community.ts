@@ -5,6 +5,7 @@
 const KEY_RECIPE_PREFIX = 'c:r:';
 const KEY_INDEX = 'c:i:byPublishedDesc';
 const KEY_LIKE_PREFIX = 'c:l:';
+const KEY_COPY_PREFIX = 'c:cp:';
 
 // Cap the recent-list size so the index entry stays well under KV's 25 MB value
 // limit. At V1 the UI shows newest 50 — this leaves plenty of headroom.
@@ -14,6 +15,7 @@ export interface SourceRecipe {
   /** Local Dexie id of the source recipe — used to recognise republishes. */
   id?: string;
   title: string;
+  description?: string;
   originalYield: number;
   ingredients: unknown[];
   steps: unknown[];
@@ -24,6 +26,7 @@ export interface SourceRecipe {
 export interface CommunityRecipe {
   id: string;
   title: string;
+  description?: string;
   originalYield: number;
   ingredients: unknown[];
   steps: unknown[];
@@ -40,8 +43,16 @@ export interface CommunityRecipe {
 
 export interface CommunityRecipeSummary {
   id: string;
+  /** The author's LOCAL recipe id (e.g. `r_demo_ribeye`). Projected so the
+   *  SPA card can look up bundled demo photos via demoPhotoMap and so the
+   *  user's library can detect "I already have this copied" later. */
+  sourceLocalId?: string;
   title: string;
   coverPhoto?: string;
+  /** Clerk id of the author, projected so the SPA can link cards to the
+   *  /chef/:clerkId profile page. Optional for backward-compat with
+   *  summaries that may have been cached before this field was added. */
+  authorClerkId?: string;
   authorDisplayName: string;
   likes: number;
   copies: number;
@@ -139,6 +150,7 @@ export async function publish(
     const updated: CommunityRecipe = {
       ...existing,
       title: recipe.title,
+      description: recipe.description,
       originalYield: recipe.originalYield,
       ingredients: recipe.ingredients,
       steps: recipe.steps,
@@ -154,6 +166,7 @@ export async function publish(
   const record: CommunityRecipe = {
     id,
     title: recipe.title,
+    description: recipe.description,
     originalYield: recipe.originalYield,
     ingredients: recipe.ingredients,
     steps: recipe.steps,
@@ -232,8 +245,10 @@ export async function listRecent(
     } : undefined;
     out.push({
       id: r.id,
+      sourceLocalId: r.sourceLocalId,
       title: r.title,
       coverPhoto: r.coverPhoto,
+      authorClerkId: r.authorClerkId,
       authorDisplayName: r.authorDisplayName,
       likes: r.likes,
       copies: r.copies,
@@ -241,6 +256,52 @@ export async function listRecent(
       originalYield: r.originalYield,
       tags,
     });
+  }
+  return out;
+}
+
+/**
+ * Same projection as listRecent but filtered to a single author. Powers the
+ * /community/by-author/:clerkId endpoint and the SPA ChefProfile page.
+ * Newest-first.
+ */
+export async function listByAuthor(
+  kv: KVNamespace,
+  authorClerkId: string,
+  limit = 100,
+): Promise<CommunityRecipeSummary[]> {
+  const index = await readIndex(kv);
+  const records = await Promise.all(index.map((e) => readRecipe(kv, e.id)));
+  const out: CommunityRecipeSummary[] = [];
+  for (const r of records) {
+    if (!r) continue;
+    if (r.authorClerkId !== authorClerkId) continue;
+    const analysis = (r.analysis ?? null) as null | {
+      allergens?: unknown;
+      keyIngredientTags?: unknown;
+    };
+    const tags = analysis ? {
+      allergens: Array.isArray(analysis.allergens)
+        ? analysis.allergens.filter((x): x is string => typeof x === 'string')
+        : undefined,
+      keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
+        ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
+        : undefined,
+    } : undefined;
+    out.push({
+      id: r.id,
+      sourceLocalId: r.sourceLocalId,
+      title: r.title,
+      coverPhoto: r.coverPhoto,
+      authorClerkId: r.authorClerkId,
+      authorDisplayName: r.authorDisplayName,
+      likes: r.likes,
+      copies: r.copies,
+      publishedAt: r.publishedAt,
+      originalYield: r.originalYield,
+      tags,
+    });
+    if (out.length >= limit) break;
   }
   return out;
 }
@@ -285,14 +346,60 @@ export async function hasLiked(
   return existing !== null;
 }
 
+/**
+ * Per-user idempotent copy: once a user has copied a community recipe, repeat
+ * calls are no-ops (counter stays put). Mirrors `toggleLike`'s KV-marker
+ * pattern so the counter can later be rewound by `uncopyRecipe` when the
+ * user deletes their local copy.
+ */
 export async function recordCopy(
   kv: KVNamespace,
+  userId: string,
   communityId: string,
-): Promise<{ copies: number }> {
+): Promise<{ copied: true; copies: number }> {
   const record = await readRecipe(kv, communityId);
   if (!record) throw new CommunityNotFound();
+
+  const copyKey = `${KEY_COPY_PREFIX}${communityId}:${userId}`;
+  const existing = await kv.get(copyKey);
+  if (existing) {
+    // Already copied — no double-counting. Return the current count so
+    // the SPA can refresh its UI without a second read.
+    return { copied: true, copies: record.copies };
+  }
+
+  await kv.put(copyKey, '1');
   const copies = record.copies + 1;
   const updated: CommunityRecipe = { ...record, copies };
   await kv.put(`${KEY_RECIPE_PREFIX}${communityId}`, JSON.stringify(updated));
-  return { copies };
+  return { copied: true, copies };
+}
+
+/**
+ * Rewind: when a user deletes the recipe they copied from community, the
+ * SPA fires this to decrement the global copies counter. No-op when the
+ * user never had a recorded copy (idempotent + safe to retry).
+ */
+export async function uncopyRecipe(
+  kv: KVNamespace,
+  userId: string,
+  communityId: string,
+): Promise<{ copied: false; copies: number }> {
+  const record = await readRecipe(kv, communityId);
+  if (!record) throw new CommunityNotFound();
+
+  const copyKey = `${KEY_COPY_PREFIX}${communityId}:${userId}`;
+  const existing = await kv.get(copyKey);
+  if (!existing) {
+    // Never had a recorded copy under this user — return current count.
+    return { copied: false, copies: record.copies };
+  }
+
+  await kv.delete(copyKey);
+  // Math.max guards against any historical drift (e.g. counter was already
+  // 0 because someone admin-reset it but the per-user marker survived).
+  const copies = Math.max(0, record.copies - 1);
+  const updated: CommunityRecipe = { ...record, copies };
+  await kv.put(`${KEY_RECIPE_PREFIX}${communityId}`, JSON.stringify(updated));
+  return { copied: false, copies };
 }

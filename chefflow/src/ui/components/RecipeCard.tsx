@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ImageOff, Layers, MoreVertical, Pin } from 'lucide-react';
-import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { ImageOff, Layers, MoreVertical } from 'lucide-react';
+import { AllergenPill, KeyTagPill, UncertainAllergenPill } from './AllergenBadge';
+import { findIngredientsForAllergen, getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import { formatGBP } from '../../core/util/money';
 import { downscaleToDataUrl } from '../../core/util/image';
+import { resolveCoverPhoto } from '../../core/demos/demoPhotoMap';
 import type { Recipe } from '../../core/types';
 
 const COVER_PHOTO_MAX_EDGE = 1600;
 
 interface Props {
   recipe: Recipe;
-  /** Number of OTHER recipes that reference this one via `#` (componentRecipeId).
+  /** Number of OTHER recipes that reference this one via `@` (componentRecipeId).
    *  Drives a "used in N" badge so deleting a component is a visible decision. */
   usedByCount?: number;
+  /** Titles of the parent recipes that reference this one. When provided,
+   *  the "Used in N" badge gains a hover/tap tooltip listing each name. */
+  usedByTitles?: string[];
   onTogglePin: (r: Recipe) => void;
   onDuplicate: (r: Recipe) => void;
   onDelete: (r: Recipe) => void;
@@ -26,18 +31,21 @@ function isDemo(recipe: Recipe): boolean {
 export default function RecipeCard({
   recipe,
   usedByCount = 0,
+  usedByTitles,
   onTogglePin,
   onDuplicate,
   onDelete,
   onCoverPhotoChange,
 }: Props) {
   const pinned = Boolean(recipe.isPinned);
+  const [usedByTapOpen, setUsedByTapOpen] = useState(false);
+  const coverSrc = resolveCoverPhoto(recipe);
   return (
     <article className="flex flex-col h-full border border-slate-200 dark:border-slate-700 rounded-lg p-3 bg-white dark:bg-kitchen-ink">
       <div className="relative">
-        {recipe.coverPhoto ? (
+        {coverSrc ? (
           <img
-            src={recipe.coverPhoto}
+            src={coverSrc}
             alt={`${recipe.title || 'Recipe'} cover photo`}
             className="w-full aspect-video object-cover rounded-md mb-2"
             data-testid="recipe-card-cover-photo-img"
@@ -57,19 +65,51 @@ export default function RecipeCard({
             aria-label="Pinned"
             className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-accent text-white text-[10px] font-semibold uppercase tracking-wide shadow-sm"
           >
-            <Pin className="h-3 w-3" aria-hidden="true" />
+            <img src="/pin.jpg" alt="" aria-hidden="true" className="h-3 w-3 object-contain" />
             Pinned
           </span>
         )}
         {usedByCount > 0 && (
-          <span
-            data-testid="recipe-card-used-by-badge"
-            aria-label={`Used by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'}`}
-            title={`Referenced by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'} via #`}
-            className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800/80 dark:bg-slate-900/80 text-white text-[10px] font-medium shadow-sm"
-          >
-            <Layers className="h-3 w-3" aria-hidden="true" />
-            Used in {usedByCount}
+          <span className="absolute bottom-1.5 left-1.5 inline-block group">
+            <span
+              data-testid="recipe-card-used-by-badge"
+              tabIndex={usedByTitles && usedByTitles.length > 0 ? 0 : -1}
+              role={usedByTitles && usedByTitles.length > 0 ? 'button' : undefined}
+              onClick={(e) => {
+                if (!usedByTitles || usedByTitles.length === 0) return;
+                e.preventDefault();
+                setUsedByTapOpen((v) => !v);
+              }}
+              aria-label={`Used by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'}${
+                usedByTitles && usedByTitles.length > 0 ? `: ${usedByTitles.join(', ')}` : ''
+              }`}
+              title={`Referenced by ${usedByCount} other recipe${usedByCount === 1 ? '' : 's'} via @`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800/80 dark:bg-slate-900/80 text-white text-[10px] font-medium shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-default"
+            >
+              <Layers className="h-3 w-3" aria-hidden="true" />
+              Used in {usedByCount}
+            </span>
+            {usedByTitles && usedByTitles.length > 0 && (
+              <span
+                role="tooltip"
+                className={[
+                  'absolute z-10 top-full left-0 mt-1',
+                  'px-2 py-1.5 rounded-md bg-slate-900 text-white text-[11px] leading-snug shadow-lg',
+                  'min-w-[8rem] max-w-[16rem] text-left whitespace-normal',
+                  'transition-opacity duration-150',
+                  usedByTapOpen
+                    ? 'opacity-100'
+                    : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none',
+                ].join(' ')}
+              >
+                <span className="block font-semibold mb-0.5">Used by</span>
+                <ol className="list-decimal pl-4 space-y-0">
+                  {usedByTitles.map((title, i) => (
+                    <li key={`${title}-${i}`}>{title}</li>
+                  ))}
+                </ol>
+              </span>
+            )}
           </span>
         )}
       </div>
@@ -115,7 +155,7 @@ export default function RecipeCard({
           </div>
         )}
       </dl>
-      {recipe.analysis && <RecipeAnalysisRow analysis={recipe.analysis} />}
+      {recipe.analysis && <RecipeAnalysisRow recipe={recipe} />}
     </article>
   );
 }
@@ -272,15 +312,22 @@ function OverflowMenu({ recipe, onDuplicate, onDelete, onCoverPhotoChange }: Ove
   );
 }
 
-function RecipeAnalysisRow({ analysis }: { analysis: NonNullable<Recipe['analysis']> }) {
-  const keyTags = analysis.keyIngredientTags ?? [];
-  const allergens = analysis.allergens ?? [];
-  if (keyTags.length === 0 && allergens.length === 0) return null;
+function RecipeAnalysisRow({ recipe }: { recipe: Recipe }) {
+  const keyTags = recipe.analysis?.keyIngredientTags ?? [];
+  // Union: analysis-level + per-ingredient manual flags. Picks up tags
+  // the chef added directly on an IngredientRow without re-running the
+  // AI analyzer.
+  const allergens = getRecipeAllergens(recipe);
+  const uncertain = recipe.analysis?.uncertainIngredients ?? [];
+  if (keyTags.length === 0 && allergens.length === 0 && uncertain.length === 0) return null;
   return (
     <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe tags">
       {allergens.map((a) => (
-        <AllergenPill key={a} tag={a} />
+        <AllergenPill key={a} tag={a} ingredients={findIngredientsForAllergen(recipe, a)} />
       ))}
+      {uncertain.length > 0 && (
+        <UncertainAllergenPill count={uncertain.length} ingredients={uncertain} />
+      )}
       {keyTags.slice(0, 2).map((t) => (
         <KeyTagPill key={t}>{t}</KeyTagPill>
       ))}

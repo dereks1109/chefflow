@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Info, LogIn, LogOut, Settings, Shield } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Info, LogIn, Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
+import AccountAvatar from '../components/AccountAvatar';
 import { useAdminStore } from '../../state/useAdminStore';
 
 const navItems = [
@@ -11,6 +12,7 @@ const navItems = [
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
   { to: '/community', label: 'Community', icon: Globe2 },
+  { to: '/contact', label: 'Contact', icon: Mail },
 ];
 
 export default function TopNav() {
@@ -106,17 +108,19 @@ export default function TopNav() {
           <Settings size={20} aria-hidden="true" />
         </NavLink>
 
+        {/* Account avatar — replaces the old sign-out button. Tapping it
+            navigates to Settings, where the chef can edit profile + sign out.
+            Renders the uploaded avatar if present; initials fallback otherwise. */}
         {!isE2E && showSignedInChrome && (
-          <button
-            type="button"
-            onClick={() => void clerk.signOut?.({ redirectUrl: '/' })}
-            data-testid="topnav-sign-out"
-            aria-label="Sign out"
-            title="Sign out"
-            className="flex items-center justify-center min-h-touch min-w-touch rounded-lg text-slate-400 hover:text-slate-100 hover:bg-surface-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          <NavLink
+            to="/settings"
+            aria-label="Account"
+            title="Account"
+            data-testid="topnav-account-avatar"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <LogOut size={20} aria-hidden="true" />
-          </button>
+            <AccountAvatar size={28} label="Account" />
+          </NavLink>
         )}
         {!isE2E && !showSignedInChrome && (
           <button

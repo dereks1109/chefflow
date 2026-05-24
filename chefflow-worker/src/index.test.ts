@@ -25,10 +25,24 @@ function makeAi(captured: { calls: number; model?: string } = { calls: 0 }): Ai 
   } as unknown as Ai;
 }
 
+// Minimal D1 stub — none of the existing tests exercise sync routes, but the
+// Env type requires it. Methods throw if invoked so a wayward sync call in a
+// future test surfaces loud instead of silently passing.
+function makeDb(): D1Database {
+  const fail = (): never => { throw new Error('D1 not stubbed for this test'); };
+  return {
+    prepare: fail,
+    batch: fail,
+    exec: fail,
+    dump: fail,
+  } as unknown as D1Database;
+}
+
 function makeEnv(overrides: Partial<Env> = {}): Env {
   return {
     AI: makeAi(),
     RATE_LIMIT: makeKv(),
+    DB: makeDb(),
     CLERK_ISSUER: 'https://example.clerk.accounts.dev',
     CLERK_SECRET_KEY: 'sk_test_fake',
     DAILY_LIMIT: '30', // legacy; unused after tier migration
@@ -288,13 +302,37 @@ describe('worker router — community', () => {
       env, verifyAccepts('user_b'), stubFetchClerkTier('free'),
     );
     expect(c1.status).toBe(200);
-    expect((await c1.json()) as { copies: number }).toEqual({ copies: 1 });
+    expect((await c1.json()) as { copied: true; copies: number }).toEqual({ copied: true, copies: 1 });
 
     const c2 = await handleRequest(
       authedReq(`/community/cr_unknown_id/copy`, {}),
       env, verifyAccepts('user_b'), stubFetchClerkTier('free'),
     );
     expect(c2.status).toBe(404);
+  });
+
+  it('POST /community/:id/uncopy rewinds the counter after a user copies + then locally deletes', async () => {
+    const pub = await handleRequest(
+      authedReq('/community/publish', {
+        recipe: { id: 'r_local_unc', title: 'Demo', originalYield: 2, ingredients: [], steps: [] },
+        displayName: 'Alice',
+      }),
+      env, verifyAccepts('user_a'), stubFetchClerkTier('free'),
+    );
+    const { id } = (await pub.json()) as { id: string };
+
+    // user_b copies → counter = 1
+    await handleRequest(
+      authedReq(`/community/${id}/copy`, {}),
+      env, verifyAccepts('user_b'), stubFetchClerkTier('free'),
+    );
+    // user_b uncopies → counter = 0
+    const u1 = await handleRequest(
+      authedReq(`/community/${id}/uncopy`, {}),
+      env, verifyAccepts('user_b'), stubFetchClerkTier('free'),
+    );
+    expect(u1.status).toBe(200);
+    expect((await u1.json()) as { copied: false; copies: number }).toEqual({ copied: false, copies: 0 });
   });
 });
 
@@ -361,5 +399,55 @@ describe('worker router — /admin/* gating', () => {
       env, verifyAccepts('user_a'), stubFetchClerkRole('admin'),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+// Tiny D1 stub that returns a fixed result set from .prepare(...).bind(...).all().
+function makeStubDb(rows: Array<{ id: string; user_id: string; updated_at: number; payload: string }>): D1Database {
+  return {
+    prepare: () => ({
+      bind: () => ({
+        all: async () => ({ results: rows, success: true, meta: {} }),
+      }),
+    }),
+  } as unknown as D1Database;
+}
+
+describe('GET /admin/d1/allergen-audits', () => {
+  it('returns 403 when caller is not admin', async () => {
+    const res = await handleRequest(
+      authedReq('/admin/d1/allergen-audits', undefined, 'GET'),
+      env, verifyAccepts('user_a'), stubFetchClerkRole(null),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('projects cross-user D1 rows into admin-friendly items, user_id sourced from D1 column', async () => {
+    const payload = {
+      recipeId: 'r1',
+      recipeTitleAtTime: 'Pavlova',
+      removedTag: 'egg',
+      reasons: ['ingredient-changed'],
+      ingredientsAtTime: ['sugar', 'cream'],
+      removedAt: 1700000000000,
+      userDisplayName: 'Chef A',
+      // The server must NOT trust this — it should come from the D1 user_id column.
+      userClerkId: 'spoofed_id',
+    };
+    env = makeEnv({
+      DB: makeStubDb([
+        { id: 'aud1', user_id: 'user_real', updated_at: 1700000000500, payload: JSON.stringify(payload) },
+      ]),
+    });
+    const res = await handleRequest(
+      authedReq('/admin/d1/allergen-audits', undefined, 'GET'),
+      env, verifyAccepts('user_caller'), stubFetchClerkRole('admin'),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ id: string; userClerkId: string; removedTag: string }> };
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].id).toBe('aud1');
+    expect(body.items[0].userClerkId).toBe('user_real');
+    expect(body.items[0].removedTag).toBe('egg');
   });
 });

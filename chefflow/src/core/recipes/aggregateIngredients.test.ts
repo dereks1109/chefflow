@@ -137,6 +137,37 @@ describe('aggregateIngredients', () => {
     expect(cream!.amount).toBeCloseTo(40, 0);
     // The original 80ml sauce LINE should NOT appear — it's been expanded.
     expect(lines.find((l) => l.name === 'Sauce')).toBeUndefined();
+    // Sub-recipe ingredients carry a breadcrumb tag so chefs at the station
+    // know the stock + cream are for the sauce inside ribeye, not raw ribeye.
+    expect(stock!.dishNames).toEqual(['Ribeye > Sauce']);
+    expect(cream!.dishNames).toEqual(['Ribeye > Sauce']);
+    // Direct (non-sub) ingredients keep the bare dish name.
+    const beef = lines.find((l) => l.name === 'Beef');
+    expect(beef!.dishNames).toEqual(['Ribeye']);
+  });
+
+  it('threads breadcrumbs through nested sub-recipes — Parent > Sub > SubSub on each level of descent', () => {
+    // SubSub: 100ml of vinegar. Sub: 50ml of subsub + 50ml water (so 50/100 = 0.5 fraction).
+    // Parent: 100ml of sub + 100ml broth (so 100/100 = 1.0 fraction of sub).
+    const subsub = recipe('r_subsub', 'SubSub', 1, [ing('Vinegar', 100, 'ml')]);
+    const sub = recipe('r_sub', 'Sub', 1, [
+      ing('SubSub', 50, 'ml', { componentRecipeId: 'r_subsub' }),
+      ing('Water', 50, 'ml'),
+    ]);
+    const parent = recipe('r_parent', 'Parent', 1, [
+      ing('Sub', 100, 'ml', { componentRecipeId: 'r_sub' }),
+      ing('Broth', 100, 'ml'),
+    ]);
+    const event = evt([dish('d1', 'Parent', 'r_parent', 1)]);
+    const recipes = new Map([[subsub.id, subsub], [sub.id, sub], [parent.id, parent]]);
+
+    const { lines } = aggregateIngredients({ event, recipes });
+    const vinegar = lines.find((l) => l.name === 'Vinegar');
+    const water = lines.find((l) => l.name === 'Water');
+    const broth = lines.find((l) => l.name === 'Broth');
+    expect(vinegar!.dishNames).toEqual(['Parent > Sub > SubSub']);
+    expect(water!.dishNames).toEqual(['Parent > Sub']);
+    expect(broth!.dishNames).toEqual(['Parent']);
   });
 
   it('falls back to one full sub-recipe batch + warns when the sub has no compatible-unit total (Rule 12 fail-loud)', () => {
