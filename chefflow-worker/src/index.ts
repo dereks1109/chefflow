@@ -4,6 +4,7 @@ import { consumeDailyQuota, RateLimitExceeded } from './rateLimit';
 import { handleEndpoint, ENDPOINTS, type EndpointName } from './endpoints';
 import { handlePull, handlePush, type PushBody } from './sync';
 import { handleDeleteAccount, handleExportAccount } from './account';
+import { Sentry, sentryOptions, newRequestId, captureWorkerException } from './observability';
 import type { ProxyRequestBody, ProxyResponseBody } from './types';
 
 // PII logging policy: never log request bodies on auth-gated endpoints
@@ -21,6 +22,9 @@ export interface Env {
   CLERK_ISSUER: string;
   CLERK_SECRET_KEY: string;
   DAILY_LIMIT: string;
+  // Optional — set via `wrangler secret put SENTRY_DSN` in production.
+  // Unset = Sentry init is a no-op, all observability code remains safe.
+  SENTRY_DSN?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -39,6 +43,17 @@ function json(body: unknown, status: number, extra: Record<string, string> = {})
 }
 
 /**
+ * Wrap any response with the request_id so the user can correlate a failing
+ * call to a server-side log entry. The id flows back as `x-request-id` and
+ * is the same one attached to any Sentry capture from this request.
+ */
+function withRequestId(res: Response, requestId: string): Response {
+  const headers = new Headers(res.headers);
+  headers.set('x-request-id', requestId);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/**
  * The actual request handler — exported so tests can drive it directly with
  * a mock Env and an injected Clerk verifier (the default verifier requires
  * a real JWT). Production goes through the default export below, which
@@ -48,6 +63,26 @@ export async function handleRequest(
   req: Request,
   env: Env,
   verify: Verifier = verifyToken as unknown as Verifier,
+): Promise<Response> {
+  const requestId = newRequestId();
+  try {
+    const res = await routeRequest(req, env, verify);
+    return withRequestId(res, requestId);
+  } catch (err) {
+    // Caught here ONLY for truly-unhandled exceptions — every route below
+    // has its own try/catch returning a 500. The Sentry capture attaches
+    // the request id so the user can quote it in a support email; safe to
+    // call when Sentry isn't initialised (it's a no-op).
+    captureWorkerException(err, requestId);
+    const msg = err instanceof Error ? err.message : String(err);
+    return withRequestId(json({ error: 'Internal error', request_id: requestId, detail: msg.slice(0, 200) }, 500), requestId);
+  }
+}
+
+async function routeRequest(
+  req: Request,
+  env: Env,
+  verify: Verifier,
 ): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -193,8 +228,16 @@ export async function handleRequest(
   return json(response, 200);
 }
 
-export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
-    return handleRequest(req, env);
+// Wrap with @sentry/cloudflare so unhandled errors are captured with the
+// per-request scope. `withSentry`'s options callback receives the env and
+// returns the SDK config; we return null-equivalent (an empty dsn) when no
+// SENTRY_DSN is set so dev runs incur zero Sentry overhead. The handler
+// shape is unchanged.
+export default Sentry.withSentry(
+  (env: Env) => sentryOptions(env) ?? { dsn: '' },
+  {
+    async fetch(req: Request, env: Env): Promise<Response> {
+      return handleRequest(req, env);
+    },
   },
-};
+);

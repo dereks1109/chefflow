@@ -4,6 +4,7 @@ import { getCurrentUserId } from '../state/currentUser';
 import { useSyncStore } from '../state/syncStore';
 import { useUnitSystemStore } from '../state/unitSystemStore';
 import { suppressNextWrite } from '../state/userPrefsSync';
+import { Sentry } from '../observability/sentry';
 
 // Where the worker lives. Default same-origin; tests can override.
 const DEFAULT_ORIGIN = '';
@@ -87,6 +88,9 @@ async function runSync(opts: SyncOptions): Promise<void> {
     } else {
       store.setStatus('error');
       store.setLastError(msg);
+      // Forward non-network sync failures to Sentry (no-op without DSN).
+      // Network errors are user-induced and don't need a report.
+      Sentry.captureException(err, { tags: { kind: 'sync' } });
     }
   }
 }
