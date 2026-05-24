@@ -13,11 +13,13 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SignInScreen from './ui/components/SignInScreen';
 import AccountSetupSheet from './ui/components/AccountSetupSheet';
+import AccountDataSheet from './ui/components/AccountDataSheet';
 import { seedDemoRecipes, seedDemoEvents } from './db/seed';
 import { claimLegacyRows } from './db/dexie';
 import { setCurrentUserId } from './state/currentUser';
 import { startPrefsSync } from './state/userPrefsSync';
 import { useAccountSetupStore } from './state/accountSetupStore';
+import { useAccountDataStore } from './state/accountDataStore';
 import { getPrefs } from './db/prefsRepo';
 import type { UserPrefs } from './core/types';
 import { syncNow, refreshPendingCount } from './db/syncClient';
@@ -32,6 +34,8 @@ export default function App() {
   const [prefs, setPrefs] = useState<UserPrefs | undefined>(undefined);
   const setupOpen = useAccountSetupStore((s) => s.open);
   const setSetupOpen = useAccountSetupStore((s) => s.setOpen);
+  const dataOpen = useAccountDataStore((s) => s.open);
+  const setDataOpen = useAccountDataStore((s) => s.setOpen);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -111,6 +115,7 @@ export default function App() {
           }}
           initialPrefs={prefs}
         />
+        <AccountDataSheet open={dataOpen} onClose={() => setDataOpen(false)} />
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/recipes" replace />} />

@@ -3,7 +3,16 @@ import { verifyClerkRequest, UnauthorizedError } from './auth';
 import { consumeDailyQuota, RateLimitExceeded } from './rateLimit';
 import { handleEndpoint, ENDPOINTS, type EndpointName } from './endpoints';
 import { handlePull, handlePush, type PushBody } from './sync';
+import { handleDeleteAccount, handleExportAccount } from './account';
 import type { ProxyRequestBody, ProxyResponseBody } from './types';
+
+// PII logging policy: never log request bodies on auth-gated endpoints
+// (/api/sync/*, /api/account/*, /api/llm/*). Their payloads contain
+// recipe ingredients, event contact info, dietary notes, and recipe
+// content — none of which should appear in Worker tail logs. If a
+// future contributor needs to log something for debugging, log a hash
+// or row count, not the body. Cloudflare's platform-level HTTP log
+// metadata (IP, method, status) is out of our control; see THIRD_PARTY_NOTICES.md.
 
 export interface Env {
   AI: Ai;
@@ -18,7 +27,7 @@ type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => 
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type',
 } as const;
 
@@ -80,6 +89,43 @@ export async function handleRequest(
     }
     try {
       const data = await handlePush(env.DB, userId, body);
+      return json(data, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // Account routes — auth-only (no rate limit). Same owner-isolation
+  // pattern as sync: the JWT's `sub` claim filters every query.
+  if (/^\/api\/account\/?$/.test(url.pathname) && req.method === 'DELETE') {
+    let userId: string;
+    try {
+      userId = await verifyClerkRequest(req, env, verify);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return json({ error: err.message }, 401);
+      throw err;
+    }
+    try {
+      const data = await handleDeleteAccount(env.DB, userId);
+      return json(data, 200);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return json({ error: msg }, 500);
+    }
+  }
+
+  if (/^\/api\/account\/export\/?$/.test(url.pathname)) {
+    if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+    let userId: string;
+    try {
+      userId = await verifyClerkRequest(req, env, verify);
+    } catch (err) {
+      if (err instanceof UnauthorizedError) return json({ error: err.message }, 401);
+      throw err;
+    }
+    try {
+      const data = await handleExportAccount(env.DB, userId);
       return json(data, 200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

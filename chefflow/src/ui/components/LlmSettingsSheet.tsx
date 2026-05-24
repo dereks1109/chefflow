@@ -78,18 +78,25 @@ export default function LlmSettingsSheet({ open, onClose }: Props) {
 
         <div className="px-5 py-4 space-y-4 text-sm">
           <p className="text-slate-600 dark:text-slate-400">
-            ChefFlow uses Groq's free tier to turn your events into kitchen workflows.
-            Sign up at{' '}
-            <a
-              href="https://console.groq.com"
-              target="_blank"
-              rel="noreferrer"
-              className="text-accent hover:underline"
-            >
-              console.groq.com
-            </a>
-            , create an API key, then paste it below.
+            ChefFlow can turn events into kitchen workflows using a Large Language Model. There are two paths:
           </p>
+          <ul className="list-disc pl-5 text-slate-600 dark:text-slate-400 space-y-1">
+            <li>
+              <strong>Hosted (default in production):</strong> requests go through ChefFlow's Cloudflare Worker, which calls
+              {' '}<span className="font-mono">@cf/meta/llama-3.3-70b</span> on Cloudflare Workers AI. No key needed.
+            </li>
+            <li>
+              <strong>Bring your own Groq key</strong> (used by local dev builds): paste a key below to route requests directly to{' '}
+              <a
+                href="https://console.groq.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+              >
+                console.groq.com
+              </a>{' '}instead.
+            </li>
+          </ul>
 
           <label className="block">
             <span className="text-xs font-medium text-slate-500">Groq API key</span>
@@ -116,8 +123,9 @@ export default function LlmSettingsSheet({ open, onClose }: Props) {
           </p>
 
           <p className="text-xs text-slate-500">
-            <strong>Privacy:</strong> your event title, dish names, and recipe step text are sent to Groq to
-            generate the workflow.
+            <strong>What gets sent to the LLM:</strong> event title, dish names, dish notes, and recipe step text. Contact
+            details (name / email / phone), event location, budget, and the freeform <code>event.notes</code> field are
+            <em> stripped before sending</em> — see <code className="font-mono">chefflow/src/core/llm/sanitize.ts</code>.
           </p>
         </div>
 

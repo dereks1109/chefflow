@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { Command, UserCog } from 'lucide-react';
+import { Command, UserCog, Database } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 import { useAccountSetupStore } from '../../state/accountSetupStore';
+import { useAccountDataStore } from '../../state/accountDataStore';
 
 interface MobileTopBarProps {
   onOpenPalette: () => void;
@@ -10,6 +11,7 @@ interface MobileTopBarProps {
 
 export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
   const openSetup = useAccountSetupStore((s) => s.setOpen);
+  const openData = useAccountDataStore((s) => s.setOpen);
   return (
     <header
       className={[
@@ -62,6 +64,11 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
                 label="Account setup"
                 labelIcon={<UserCog size={14} aria-hidden="true" />}
                 onClick={() => openSetup(true)}
+              />
+              <UserButton.Action
+                label="Account data"
+                labelIcon={<Database size={14} aria-hidden="true" />}
+                onClick={() => openData(true)}
               />
             </UserButton.MenuItems>
           </UserButton>

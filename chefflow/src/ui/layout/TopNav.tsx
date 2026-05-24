@@ -1,9 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, ListChecks, Command, UserCog } from 'lucide-react';
+import { BookOpen, CalendarDays, ListChecks, Command, UserCog, Database } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 import SyncStatusChip from '../components/SyncStatusChip';
 import { useAccountSetupStore } from '../../state/accountSetupStore';
+import { useAccountDataStore } from '../../state/accountDataStore';
 
 const navItems = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -17,6 +18,7 @@ interface TopNavProps {
 
 export default function TopNav({ onOpenPalette }: TopNavProps) {
   const openSetup = useAccountSetupStore((s) => s.setOpen);
+  const openData = useAccountDataStore((s) => s.setOpen);
   return (
     <header
       className={[
@@ -121,6 +123,11 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
                 label="Account setup"
                 labelIcon={<UserCog size={14} aria-hidden="true" />}
                 onClick={() => openSetup(true)}
+              />
+              <UserButton.Action
+                label="Account data"
+                labelIcon={<Database size={14} aria-hidden="true" />}
+                onClick={() => openData(true)}
               />
             </UserButton.MenuItems>
           </UserButton>

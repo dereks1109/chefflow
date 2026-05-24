@@ -2,6 +2,12 @@ import { db } from './dexie';
 import { randomId } from '../core/util/id';
 import type { Recipe, Ingredient, WorkflowStep, StepPhase, KitchenEvent, Dish, RecipeAnalysis } from '../core/types';
 
+// Authorship: the three demo recipes below ("(Demo) Ribeye", "(Demo)
+// Garden Salad", "(Demo) Tomato Basil Soup") and the demo event are
+// original ChefFlow content. They are not transcribed from any cookbook,
+// blog, or other third-party source. Covered by the project's MIT
+// license alongside the rest of the codebase (see /THIRD_PARTY_NOTICES.md).
+
 // v5 swaps the legacy single-flag gate for a per-user gate (multiple users
 // on the same browser each get their own copy of the demos). Bumping the
 // version invalidates any old flag from v3/v4.

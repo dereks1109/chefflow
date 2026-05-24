@@ -269,3 +269,53 @@ async function authedFetch(
   if (init.body) headers['Content-Type'] = 'application/json';
   return fetchImpl(url, { ...init, headers });
 }
+
+// ---------------------------------------------------------------------------
+// Account-level operations: data export (GDPR Art. 20) and account deletion
+// (GDPR Art. 17). Both share the auth + origin plumbing above.
+// ---------------------------------------------------------------------------
+
+export interface ExportPayload {
+  ownerId: string;
+  exportedAt: number;
+  recipes: unknown[];
+  events: unknown[];
+  prefs: unknown[];
+}
+
+export async function exportAccountData(opts: SyncOptions = {}): Promise<ExportPayload> {
+  const res = await authedFetch('/api/account/export', { method: 'GET' }, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Export failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+  return (await res.json()) as ExportPayload;
+}
+
+export interface DeleteSummary {
+  deleted: { recipes: number; events: number; user_prefs: number };
+}
+
+/**
+ * Delete every server-side row owned by the caller, then wipe the local
+ * Dexie tables. Does NOT delete the Clerk account itself — the UI is
+ * expected to follow up with `user.delete()` (or sign-out) once this
+ * resolves.
+ */
+export async function deleteAccountData(opts: SyncOptions = {}): Promise<DeleteSummary> {
+  const res = await authedFetch('/api/account', { method: 'DELETE' }, opts);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Delete failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+  const summary = (await res.json()) as DeleteSummary;
+  // Local wipe — keep this AFTER the server delete so a network failure
+  // doesn't leave the user with a half-empty browser but a full server.
+  await Promise.all([
+    db.recipes.clear(),
+    db.events.clear(),
+    db.userPrefs.clear(),
+  ]);
+  useSyncStore.getState().setPendingCount(0);
+  return summary;
+}

@@ -239,6 +239,17 @@ export default function LocationAutocomplete({
               </button>
             </li>
           ))}
+          {/* Google Maps Platform ToS § 3.2.4(b) requires the "Powered by
+              Google" attribution to be displayed when showing Place
+              predictions outside a Google Map. */}
+          <li
+            aria-hidden="true"
+            className="px-3 py-1.5 text-[10px] uppercase tracking-wide
+                       text-slate-400 dark:text-slate-500
+                       border-t border-slate-100 dark:border-slate-800"
+          >
+            Powered by Google
+          </li>
         </ul>
       )}
     </div>

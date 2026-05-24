@@ -47,8 +47,12 @@ Return ONLY the JSON object. No prose, no markdown fences, no comments.`;
 }
 
 export function buildUserPrompt(event: KitchenEvent, recipes: Map<string, Recipe>): string {
-  // Shape the event so the LLM sees only what it needs (no Dexie internals,
-  // no UI-only fields like colorTag).
+  // PII boundary: this is an allow-list — only the fields explicitly named
+  // below leave the user's browser. Do NOT widen the shape without an audit.
+  // Stripped (intentional): contactName, contactEmail, contactPhone, location,
+  // budget, and event.notes (which by design holds guest dietary requirements
+  // — health data). See `chefflow/src/core/llm/sanitize.ts` for the
+  // defense-in-depth helper used by tests and any future prompt builders.
   const eventForLlm = {
     id: event.id,
     title: event.title,
