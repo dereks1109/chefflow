@@ -1,4 +1,4 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, Lock, Unlock, X } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
 import type { AllergenTag, Ingredient } from '../../core/types';
 import { randomId } from '../../core/util/id';
@@ -128,6 +128,35 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
                 {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
               </optgroup>
             </select>
+            {/* Lock toggle: when set, the portion scaler in RecipeView leaves
+                this ingredient's amount unchanged so salt / spices don't
+                over-scale at 10× servings. */}
+            <button
+              type="button"
+              onClick={() => update('isLocked', !value.isLocked)}
+              aria-pressed={value.isLocked}
+              aria-label={
+                value.isLocked
+                  ? 'Unlock — let this ingredient scale with servings'
+                  : 'Lock — keep this amount fixed when scaling servings'
+              }
+              title={
+                value.isLocked
+                  ? 'Locked — does not scale with servings'
+                  : 'Click to lock — keeps this amount fixed when scaling servings (use for salt, spices, leavening)'
+              }
+              className={[
+                'touch-target px-3 rounded-md text-sm shrink-0',
+                'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                value.isLocked
+                  ? 'bg-accent/15 text-accent border border-accent/40'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-transparent hover:text-slate-700',
+              ].join(' ')}
+            >
+              {value.isLocked
+                ? <Lock className="h-4 w-4" aria-hidden="true" />
+                : <Unlock className="h-4 w-4" aria-hidden="true" />}
+            </button>
           </div>
         </div>
         <button

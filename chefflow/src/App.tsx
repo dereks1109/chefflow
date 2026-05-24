@@ -8,6 +8,7 @@ import RecipeEditor from './ui/pages/RecipeEditor';
 import EventsLibrary from './ui/pages/EventsLibrary';
 import EventView from './ui/pages/EventView';
 import EventEditor from './ui/pages/EventEditor';
+import RecipeView from './ui/pages/RecipeView';
 import NestedDndDemo from './ui/pages/NestedDndDemo';
 import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
@@ -120,6 +121,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/recipes" replace />} />
             <Route path="/recipes" element={<RecipesLibrary />} />
+            <Route path="/recipes/:id" element={<RecipeView />} />
             <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
             <Route path="/events" element={<EventsLibrary />} />
             <Route path="/events/:id" element={<EventView />} />

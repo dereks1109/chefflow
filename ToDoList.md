@@ -22,11 +22,6 @@ The single biggest unfinished thread is **Plan 3 (the workflow scheduler)**. Tas
 
 ## 🎯 Other deferred features
 
-### Portion Scaler UI
-Engine exists in [chefflow/src/core/scaler/scaleRecipe.ts](chefflow/src/core/scaler/scaleRecipe.ts) (Plan 1) and has tests, but no UI. Was briefly prototyped as `RecipeView` at `/recipes/:id` and reverted at the user's request on 2026-05-13.
-- [ ] Re-introduce a read-only "cook this" view with a Servings stepper.
-- [ ] Re-introduce the 🔒 lock toggle on `IngredientRow` (was removed when the scaler was deferred). Required so salt/spices don't over-scale.
-
 ### Unit System Toggle
 Zustand store exists (`state/unitSystemStore.ts`). The new `AccountSetupSheet` exposes a Metric / Imperial / Auto picker, but there's no always-visible toggle in the app chrome.
 - [ ] Add a `UnitSystemToggle` component (Metric / Imperial / Auto) in the header / mobile top bar so chefs can flip mid-session without opening the setup sheet.
@@ -88,6 +83,7 @@ Items still deferred from the legal-risk audit at `/root/.claude/plans/1-make-ev
 
 ## ✅ Recently done (for reference; trim periodically)
 
+- 2026-05-24: Portion Scaler UI re-introduced. New `RecipeView` at `/recipes/:id` with a Servings stepper that drives `scaleRecipe()` live (locked ingredients pass through unchanged). Lock-toggle button restored to `IngredientRow` so chefs can pin salt/spices. RecipeCard title now links to view; Edit remains one click away. Shows analysis pills + food-safety advisory inline.
 - 2026-05-24: Food-safety mitigations (Part 4 of the legal-risk plan). New `FoodSafetyAdvisory` + `AllergenAdvisoryBanner` + `VerificationToggle` components; allergen advisory now shown in `AnalysisSection` editor + on the recipe library page; menu-suitability verdicts in `MenuCheckPanel` carry an "advisory only" caveat; new `verifiedAt` / `verifiedBy` audit fields on `Recipe` + `KitchenEvent` with a Mark-as-verified chip in both the recipe editor and the event view (auto-clears on safety-relevant edits); LLM allergen prompt instructs conservative tagging for chef-verification draft.
 - 2026-05-24: Legal-risk remediation pass — Tier 1 + Tier 2 of the audit at `/root/.claude/plans/1-make-every-user-serene-leaf.md` Part 3. MIT `LICENSE` + `THIRD_PARTY_NOTICES.md` at repo root; `AccountDataSheet` UI for GDPR Art. 17 delete + Art. 20 export; new `DELETE /api/account` + `GET /api/account/export` worker routes; `chefflow/src/core/llm/sanitize.ts` defense-in-depth PII stripper; truthful Cloudflare-Workers-AI disclosure in `LlmSettingsSheet`; "Powered by Google" attribution in `LocationAutocomplete`; demo recipe authorship comment in `seed.ts`.
 - 2026-05-24: Account setup wizard + sign-up toggle. New `AccountSetupSheet` collects display name / unit system / kitchen role on first sign-in (re-openable from the Clerk UserButton menu); `SignInScreen` exposes a Sign in / Create account tab toggle (`ece5bca`).
