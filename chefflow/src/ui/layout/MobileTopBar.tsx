@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { LogIn, Mail, Settings, Shield } from 'lucide-react';
+import { Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
@@ -107,7 +107,7 @@ export default function MobileTopBar() {
           <Settings size={20} aria-hidden="true" />
         </NavLink>
 
-        {!isE2E && showSignedInChrome && (
+        {showSignedInChrome ? (
           <NavLink
             to="/settings"
             aria-label="Account"
@@ -117,17 +117,16 @@ export default function MobileTopBar() {
           >
             <AccountAvatar size={28} label="Account" />
           </NavLink>
-        )}
-        {!isE2E && !showSignedInChrome && (
+        ) : (
           <button
             type="button"
             onClick={() => clerk.openSignIn?.()}
-            data-testid="mobile-sign-in"
             aria-label="Sign in"
-            className="inline-flex items-center gap-1.5 px-2.5 h-9 rounded-md text-sm font-medium bg-accent text-white hover:bg-accent/90"
+            title="Sign in"
+            data-testid="mobile-sign-in"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <LogIn size={16} aria-hidden="true" />
-            Sign in
+            <AccountAvatar size={28} isGuest label="Guest — sign in" />
           </button>
         )}
       </div>

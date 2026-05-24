@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Info, LogIn, Mail, Settings, Shield } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
@@ -108,10 +108,11 @@ export default function TopNav() {
           <Settings size={20} aria-hidden="true" />
         </NavLink>
 
-        {/* Account avatar — replaces the old sign-out button. Tapping it
-            navigates to Settings, where the chef can edit profile + sign out.
-            Renders the uploaded avatar if present; initials fallback otherwise. */}
-        {!isE2E && showSignedInChrome && (
+        {/* Account avatar — always rendered so the top nav has an identity
+            slot in every state. Signed-in: tap navigates to Settings. Guest:
+            tap opens the Clerk sign-in modal. E2E mode short-circuits to the
+            signed-in branch so Playwright tests still see the avatar. */}
+        {showSignedInChrome ? (
           <NavLink
             to="/settings"
             aria-label="Account"
@@ -121,16 +122,16 @@ export default function TopNav() {
           >
             <AccountAvatar size={28} label="Account" />
           </NavLink>
-        )}
-        {!isE2E && !showSignedInChrome && (
+        ) : (
           <button
             type="button"
             onClick={() => clerk.openSignIn?.()}
+            aria-label="Sign in"
+            title="Sign in"
             data-testid="topnav-sign-in"
-            className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-medium bg-accent text-white hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="flex items-center justify-center min-h-touch min-w-touch rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            <LogIn size={16} aria-hidden="true" />
-            Sign in
+            <AccountAvatar size={28} isGuest label="Guest — sign in" />
           </button>
         )}
       </div>

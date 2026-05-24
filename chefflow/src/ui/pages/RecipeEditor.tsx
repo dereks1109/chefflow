@@ -175,8 +175,20 @@ export default function RecipeEditor() {
 
   async function handleSave() {
     if (!window.confirm('Save changes to this recipe?')) return;
-    await saveRecipe({ ...r, updatedAt: Date.now() });
+    const nextRecipe: Recipe = { ...r, updatedAt: Date.now() };
+    await saveRecipe(nextRecipe);
     setDirty(false);
+    // Auto-republish to community if this recipe is currently in the
+    // publishedSet. Worker treats author+sourceLocalId as the update key,
+    // so likes + copies counters survive. Fire-and-forget — silent log on
+    // failure; the local save still succeeds even if the worker is down.
+    if (communityId) {
+      const nameToSend = showNameOnCommunity ? displayName : '';
+      void publishRecipe(nextRecipe, nameToSend).catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.warn('[RecipeEditor] auto-republish failed', err);
+      });
+    }
     navigate(returnRoute());
   }
 

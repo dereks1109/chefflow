@@ -6,13 +6,17 @@ import TopNav from './TopNav';
 import { useTierStore } from '../../state/useTierStore';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 
+// Hoisted mock state so the @clerk/clerk-react mock + each test can mutate it.
+const clerkState = vi.hoisted(() => ({
+  isSignedIn: true,
+  openSignIn: vi.fn(),
+}));
+
 // UserButton is a Clerk component — stub it out.
 vi.mock('@clerk/clerk-react', () => ({
   UserButton: () => <button data-testid="clerk-user-button">Account</button>,
-  // useUser/useClerk added in the public-by-default refactor; default to
-  // signed-in so existing nav tests still see the avatar slot.
-  useUser: () => ({ isSignedIn: true }),
-  useClerk: () => ({ openSignIn: () => {} }),
+  useUser: () => ({ isSignedIn: clerkState.isSignedIn }),
+  useClerk: () => ({ openSignIn: clerkState.openSignIn }),
 }));
 
 // UsageMeter hits the worker — stub it.
@@ -38,6 +42,8 @@ function renderNav(initialEntries: string[] = ['/recipes']) {
 beforeEach(() => {
   useTierStore.setState({ tier: 'free' });
   useUpgradeSheetStore.setState({ open: false, reason: null });
+  clerkState.isSignedIn = true;
+  clerkState.openSignIn.mockReset();
 });
 
 describe('TopNav', () => {
@@ -106,5 +112,28 @@ describe('TopNav', () => {
     await user.click(screen.getByTestId('nav-upgrade-button'));
     expect(useUpgradeSheetStore.getState().open).toBe(true);
     expect(useUpgradeSheetStore.getState().reason).toBe('general');
+  });
+
+  it('shows the signed-in avatar (initials/photo) when the user is signed in', () => {
+    clerkState.isSignedIn = true;
+    renderNav();
+    expect(screen.getByTestId('topnav-account-avatar')).toBeInTheDocument();
+    expect(screen.queryByTestId('topnav-sign-in')).toBeNull();
+  });
+
+  it('shows a grey guest avatar in place of a Sign-in button when signed out', () => {
+    clerkState.isSignedIn = false;
+    renderNav();
+    expect(screen.getByTestId('topnav-sign-in')).toBeInTheDocument();
+    expect(screen.getByTestId('account-avatar-guest')).toBeInTheDocument();
+    expect(screen.queryByTestId('topnav-account-avatar')).toBeNull();
+  });
+
+  it('clicking the guest avatar opens the Clerk sign-in modal', async () => {
+    clerkState.isSignedIn = false;
+    const user = userEvent.setup();
+    renderNav();
+    await user.click(screen.getByTestId('topnav-sign-in'));
+    expect(clerkState.openSignIn).toHaveBeenCalledTimes(1);
   });
 });

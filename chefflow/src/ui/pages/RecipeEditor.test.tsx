@@ -4,10 +4,24 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import RecipeEditor from './RecipeEditor';
 import { db } from '../../db/dexie';
+import { usePublishedSet } from '../../state/usePublishedSet';
 import type { Recipe } from '../../core/types';
+
+// Hoisted spy so we can assert auto-republish was (or wasn't) invoked
+// without needing to hit the real worker fetch path.
+const publishRecipeMock = vi.hoisted(() => vi.fn(async (_r: unknown, _name: string) => ({ id: 'cr_mock' })));
+const unpublishRecipeMock = vi.hoisted(() => vi.fn(async () => undefined));
+
+vi.mock('../../core/community/communityClient', () => ({
+  publishRecipe: publishRecipeMock,
+  unpublishRecipe: unpublishRecipeMock,
+}));
 
 beforeEach(async () => {
   await db.recipes.clear();
+  usePublishedSet.setState({ map: {} });
+  publishRecipeMock.mockClear();
+  unpublishRecipeMock.mockClear();
   // Save / remove buttons confirm via window.confirm — auto-accept in tests.
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -114,5 +128,64 @@ describe('RecipeEditor — steps', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /remove step 1/i }));
     expect(screen.queryByDisplayValue('Existing')).toBeNull();
+  });
+});
+
+describe('RecipeEditor — auto-republish on save', () => {
+  it('does NOT call publishRecipe when the recipe is not in the published set', async () => {
+    await db.recipes.put(seed);
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Recipe');
+    // Edit + save without ever publishing.
+    const title = screen.getByDisplayValue('Seed Recipe');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Renamed');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(async () => {
+      const updated = await db.recipes.get(seed.id);
+      expect(updated?.title).toBe('Renamed');
+    });
+    expect(publishRecipeMock).not.toHaveBeenCalled();
+  });
+
+  it('auto-republishes when the recipe IS in the published set — community card stays in sync with local edits', async () => {
+    await db.recipes.put(seed);
+    // Mark this recipe as currently published in community.
+    usePublishedSet.setState({ map: { [seed.id]: 'cr_existing' } });
+
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Recipe');
+
+    const title = screen.getByDisplayValue('Seed Recipe');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Renamed V2');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    await waitFor(() => {
+      expect(publishRecipeMock).toHaveBeenCalledTimes(1);
+    });
+    const [recipePayload] = publishRecipeMock.mock.calls[0] as [Recipe, string];
+    expect(recipePayload.title).toBe('Renamed V2');
+  });
+
+  it('survives a publishRecipe failure — local save still succeeds, no error surfaces to UI', async () => {
+    publishRecipeMock.mockRejectedValueOnce(new Error('worker down'));
+    await db.recipes.put(seed);
+    usePublishedSet.setState({ map: { [seed.id]: 'cr_existing' } });
+
+    renderEditorAt(seed.id);
+    await screen.findByDisplayValue('Seed Recipe');
+    const title = screen.getByDisplayValue('Seed Recipe');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'Title After Worker Outage');
+    await userEvent.click(screen.getByRole('button', { name: /save/i }));
+
+    // The save should succeed locally.
+    await waitFor(async () => {
+      const updated = await db.recipes.get(seed.id);
+      expect(updated?.title).toBe('Title After Worker Outage');
+    });
+    // No alert / error region surfaces.
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });
