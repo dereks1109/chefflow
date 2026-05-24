@@ -1,6 +1,8 @@
 name = "chefflow-llm-proxy"
 main = "src/index.ts"
 compatibility_date = "2026-01-15"
+# @sentry/cloudflare pulls in node:async_hooks; the Worker fails to boot without this.
+compatibility_flags = ["nodejs_compat"]
 
 [ai]
 binding = "AI"
