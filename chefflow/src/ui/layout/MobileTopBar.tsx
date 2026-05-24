@@ -1,13 +1,15 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { Command } from 'lucide-react';
+import { Command, UserCog } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
+import { useAccountSetupStore } from '../../state/accountSetupStore';
 
 interface MobileTopBarProps {
   onOpenPalette: () => void;
 }
 
 export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
+  const openSetup = useAccountSetupStore((s) => s.setOpen);
   return (
     <header
       className={[
@@ -54,7 +56,15 @@ export default function MobileTopBar({ onOpenPalette }: MobileTopBarProps) {
         <ThemeToggle />
 
         <div className="flex items-center justify-center min-h-touch min-w-touch">
-          <UserButton afterSignOutUrl="/" />
+          <UserButton afterSignOutUrl="/">
+            <UserButton.MenuItems>
+              <UserButton.Action
+                label="Account setup"
+                labelIcon={<UserCog size={14} aria-hidden="true" />}
+                onClick={() => openSetup(true)}
+              />
+            </UserButton.MenuItems>
+          </UserButton>
         </div>
       </div>
     </header>

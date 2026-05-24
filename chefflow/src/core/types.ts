@@ -12,6 +12,14 @@ export interface UserPrefs {
   serverVersion?: number;
   dirty?: boolean;
   deletedAt?: number;
+  // Account setup wizard fields (Part 2). All optional — pre-onboarding rows
+  // have neither timestamp; the wizard auto-opens until one of them is set.
+  // Presence of onboardedAt means "completed"; onboardSkippedAt means "user
+  // dismissed without saving". Either suppresses the auto-open gate.
+  displayName?: string;
+  kitchenRole?: string;
+  onboardedAt?: number;
+  onboardSkippedAt?: number;
 }
 
 export type ThermalClass = 'flash' | 'stable' | 'normal';

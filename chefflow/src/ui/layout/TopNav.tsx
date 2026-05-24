@@ -1,8 +1,9 @@
 import { NavLink } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, ListChecks, Command } from 'lucide-react';
+import { BookOpen, CalendarDays, ListChecks, Command, UserCog } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 import SyncStatusChip from '../components/SyncStatusChip';
+import { useAccountSetupStore } from '../../state/accountSetupStore';
 
 const navItems = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
@@ -15,6 +16,7 @@ interface TopNavProps {
 }
 
 export default function TopNav({ onOpenPalette }: TopNavProps) {
+  const openSetup = useAccountSetupStore((s) => s.setOpen);
   return (
     <header
       className={[
@@ -113,7 +115,15 @@ export default function TopNav({ onOpenPalette }: TopNavProps) {
         <ThemeToggle />
 
         <div className="flex items-center justify-center min-h-touch min-w-touch">
-          <UserButton afterSignOutUrl="/" />
+          <UserButton afterSignOutUrl="/">
+            <UserButton.MenuItems>
+              <UserButton.Action
+                label="Account setup"
+                labelIcon={<UserCog size={14} aria-hidden="true" />}
+                onClick={() => openSetup(true)}
+              />
+            </UserButton.MenuItems>
+          </UserButton>
         </div>
       </div>
     </header>
