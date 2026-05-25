@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Heart, Download, ArrowLeft } from 'lucide-react';
+import { Heart, Download, ArrowLeft, Flag } from 'lucide-react';
+import ReportRecipeDialog from '../components/ReportRecipeDialog';
 import {
   getCommunityRecipe,
   getLiked,
@@ -23,6 +24,7 @@ export default function CommunityRecipeView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const requireAuth = useAuthGate();
+  const [reportOpen, setReportOpen] = useState(false);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
   useEffect(() => {
@@ -205,7 +207,25 @@ export default function CommunityRecipeView() {
           <Download className="h-4 w-4" aria-hidden="true" />
           {state.copying ? 'Copying…' : `Copy to my library (${r.copies})`}
         </button>
+
+        <button
+          type="button"
+          onClick={() => requireAuth(() => setReportOpen(true))}
+          data-testid="community-report-button"
+          className="ml-auto inline-flex items-center gap-1.5 px-2 py-1 text-xs text-slate-500 hover:text-red-600 dark:hover:text-red-400"
+          title="Report this recipe"
+        >
+          <Flag className="h-3.5 w-3.5" aria-hidden="true" />
+          Report
+        </button>
       </div>
+
+      {reportOpen && (
+        <ReportRecipeDialog
+          communityRecipeId={r.id}
+          onClose={() => setReportOpen(false)}
+        />
+      )}
 
       <div className="grid gap-6 md:grid-cols-2">
         <section>

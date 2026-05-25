@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Shield, RefreshCw, AlertCircle, X, Activity, Users, PoundSterling, BadgeCheck, MessageSquare, AlertTriangle } from 'lucide-react';
+import { useAuth } from '@clerk/clerk-react';
+import { Shield, RefreshCw, AlertCircle, X, Activity, Users, PoundSterling, BadgeCheck, MessageSquare, AlertTriangle, Flag } from 'lucide-react';
 import { useAdminStore } from '../../state/useAdminStore';
+import {
+  listTakedownReports,
+  resolveTakedownReport,
+  type TakedownReport,
+} from '../../core/community/takedownClient';
 import {
   listMembers,
   getMetrics,
@@ -50,9 +56,11 @@ function AdminDashboardBody() {
   const [contactSubmissions, setContactSubmissions] = useState<ContactSubmissionRow[]>([]);
   const [allergenAudits, setAllergenAudits] = useState<AllergenAuditRow[]>([]);
   const [d1Audits, setD1Audits] = useState<D1AllergenAuditRow[]>([]);
+  const [takedownReports, setTakedownReports] = useState<TakedownReport[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, setLoadingPage] = useState(true);
   const [selected, setSelected] = useState<MemberRow | null>(null);
+  const { getToken } = useAuth();
 
   // Refresh handler — called from the Refresh button click. May setState
   // synchronously (it's an event handler, not an effect).
@@ -60,13 +68,14 @@ function AdminDashboardBody() {
     setLoadError(null);
     setLoadingPage(true);
     try {
-      const [m, msPage, a, cs, aa, d1] = await Promise.all([
+      const [m, msPage, a, cs, aa, d1, td] = await Promise.all([
         getMetrics(),
         listMembers(0, 50),
         getActivity(),
         listContactSubmissions(),
         listAllergenAudits(),
         listD1AllergenAudits(),
+        listTakedownReports({ getToken, status: 'pending', limit: 100 }).catch(() => [] as TakedownReport[]),
       ]);
       setMetrics(m);
       setMembers(msPage.members);
@@ -75,12 +84,13 @@ function AdminDashboardBody() {
       setContactSubmissions(cs.items);
       setAllergenAudits(aa.items);
       setD1Audits(d1.items);
+      setTakedownReports(td);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Failed to load admin data');
     } finally {
       setLoadingPage(false);
     }
-  }, []);
+  }, [getToken]);
 
   // Initial load — written as a promise chain so no setState happens
   // synchronously inside the effect body (lint: react-hooks/set-state-in-effect).
@@ -93,8 +103,9 @@ function AdminDashboardBody() {
       listContactSubmissions(),
       listAllergenAudits(),
       listD1AllergenAudits(),
+      listTakedownReports({ getToken, status: 'pending', limit: 100 }).catch(() => [] as TakedownReport[]),
     ])
-      .then(([m, msPage, a, cs, aa, d1]) => {
+      .then(([m, msPage, a, cs, aa, d1, td]) => {
         if (cancelled) return;
         setMetrics(m);
         setMembers(msPage.members);
@@ -103,6 +114,7 @@ function AdminDashboardBody() {
         setContactSubmissions(cs.items);
         setAllergenAudits(aa.items);
         setD1Audits(d1.items);
+        setTakedownReports(td);
         setLoadingPage(false);
       })
       .catch((err: unknown) => {
@@ -111,7 +123,7 @@ function AdminDashboardBody() {
         setLoadingPage(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [getToken]);
 
   async function loadMore() {
     if (nextOffset === null) return;
@@ -177,6 +189,18 @@ function AdminDashboardBody() {
       </div>
 
       <ContactSubmissionsPanel submissions={contactSubmissions} />
+
+      <TakedownReportsPanel
+        reports={takedownReports}
+        onResolved={(reportId, status) =>
+          setTakedownReports((prev) =>
+            status === 'pending'
+              ? prev
+              : prev.filter((r) => r.id !== reportId),
+          )
+        }
+        getToken={getToken}
+      />
 
       <AllergenAuditsPanel audits={allergenAudits} />
 
@@ -457,6 +481,91 @@ function D1AllergenAuditsPanel({ audits }: { audits: D1AllergenAuditRow[] }) {
                   Ingredients at the time: {a.ingredientsAtTime.join(', ')}
                 </p>
               )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+interface TakedownReportsPanelProps {
+  reports: TakedownReport[];
+  onResolved: (reportId: string, newStatus: 'pending' | 'resolved' | 'dismissed') => void;
+  getToken: () => Promise<string | null>;
+}
+function TakedownReportsPanel({ reports, onResolved, getToken }: TakedownReportsPanelProps) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleAction(reportId: string, action: 'unpublish' | 'dismiss') {
+    setError(null);
+    setBusyId(reportId);
+    try {
+      const out = await resolveTakedownReport({ getToken, reportId, action });
+      onResolved(reportId, out.status);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Resolve failed');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4">
+      <header className="flex items-center gap-2 mb-3">
+        <Flag className="h-4 w-4 text-accent" aria-hidden="true" />
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Takedown reports — pending
+        </h2>
+        <span className="text-xs text-slate-500">({reports.length})</span>
+      </header>
+      {error && (
+        <p role="alert" className="text-xs text-red-600 dark:text-red-400 mb-2">{error}</p>
+      )}
+      {reports.length === 0 ? (
+        <p className="text-sm text-slate-500">No pending reports.</p>
+      ) : (
+        <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+          {reports.map((r) => (
+            <li key={r.id} className="py-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {r.reason_code} · recipe {r.community_recipe_id}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    reported by {r.reporter_user_id}
+                    {r.reporter_email ? ` (${r.reporter_email})` : ''} —{' '}
+                    {new Date(r.reported_at).toLocaleString()}
+                  </p>
+                  {r.message && (
+                    <p className="text-xs text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap break-words">
+                      {r.message}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => void handleAction(r.id, 'unpublish')}
+                    disabled={busyId === r.id}
+                    data-testid={`takedown-unpublish-${r.id}`}
+                    className="text-xs px-2 py-1 rounded-md bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                  >
+                    Unpublish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleAction(r.id, 'dismiss')}
+                    disabled={busyId === r.id}
+                    data-testid={`takedown-dismiss-${r.id}`}
+                    className="text-xs px-2 py-1 rounded-md border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-surface-3 disabled:opacity-60"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
             </li>
           ))}
         </ul>

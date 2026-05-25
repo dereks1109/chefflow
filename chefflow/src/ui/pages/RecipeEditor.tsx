@@ -19,6 +19,8 @@ import {
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
 import { generateDescription } from '../../core/recipes/llm/descriptionGen';
+import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
+import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
@@ -41,6 +43,7 @@ export default function RecipeEditor() {
   const [descBusy, setDescBusy] = useState(false);
   const [descError, setDescError] = useState<string | null>(null);
   const [auditRefreshKey, setAuditRefreshKey] = useState(0);
+  const [attestOpen, setAttestOpen] = useState(false);
   const displayName = useProfileStore((s) => s.displayName);
   const showNameOnCommunity = useProfileStore((s) => s.showNameOnCommunity);
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
@@ -197,15 +200,22 @@ export default function RecipeEditor() {
     navigate(returnRoute());
   }
 
-  async function handlePublish() {
+  // First-publish allergen attestation: open the modal, real publish runs
+  // on the modal's onConfirm. Re-publishes (the auto-republish in
+  // handleSave) skip the modal because the user already attested once
+  // when they first published — the recipe is in usePublishedSet.
+  function handlePublish() {
     setShareError(null);
+    setAttestOpen(true);
+  }
+
+  async function doPublish() {
     setShareBusy(true);
     try {
-      // Gate the display name on the opt-in toggle. When off, the worker
-      // sees an empty name and stamps the recipe with "Anonymous chef".
       const nameToSend = showNameOnCommunity ? displayName : '';
       const { id: newCommunityId } = await publishRecipe(r, nameToSend);
       linkPublished(r.id, newCommunityId);
+      setAttestOpen(false);
     } catch (err) {
       setShareError(err instanceof Error ? err.message : 'Failed to publish');
     } finally {
@@ -246,6 +256,14 @@ export default function RecipeEditor() {
 
   return (
     <section className="p-4 md:p-6">
+      {attestOpen && (
+        <AllergenAttestationModal
+          allergens={getRecipeAllergens(r) as string[]}
+          submitting={shareBusy}
+          onCancel={() => setAttestOpen(false)}
+          onConfirm={() => void doPublish()}
+        />
+      )}
       <header className="flex items-center justify-between mb-4 gap-2">
         <h1 className="text-2xl font-bold">Edit recipe</h1>
         <div className="flex flex-wrap gap-2 items-center">

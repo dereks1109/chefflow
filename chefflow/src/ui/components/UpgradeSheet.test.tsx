@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import UpgradeSheet from './UpgradeSheet';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -77,9 +77,21 @@ describe('UpgradeSheet', () => {
     expect(screen.getByTestId('upgrade-sheet-cta-enterprise-monthly')).toBeInTheDocument();
   });
 
-  it('renders Pro + Enterprise monthly + annual CTAs as enabled', () => {
+  it('renders Pro + Enterprise CTAs as DISABLED until the cooling-off waiver checkbox is ticked', () => {
     useUpgradeSheetStore.setState({ open: true, reason: 'recipe' });
     render(<UpgradeSheet />);
+    // Per Consumer Contracts Regulations 2013, the user must waive the 14-day
+    // cooling-off right before paid checkout unlocks.
+    expect(screen.getByTestId('upgrade-sheet-cta-pro-monthly')).toBeDisabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-pro-annual')).toBeDisabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-enterprise-monthly')).toBeDisabled();
+    expect(screen.getByTestId('upgrade-sheet-cta-enterprise-annual')).toBeDisabled();
+  });
+
+  it('enables CTAs after the cooling-off waiver checkbox is ticked', () => {
+    useUpgradeSheetStore.setState({ open: true, reason: 'recipe' });
+    render(<UpgradeSheet />);
+    fireEvent.click(screen.getByTestId('upgrade-cooling-off-waiver'));
     expect(screen.getByTestId('upgrade-sheet-cta-pro-monthly')).toBeEnabled();
     expect(screen.getByTestId('upgrade-sheet-cta-pro-annual')).toBeEnabled();
     expect(screen.getByTestId('upgrade-sheet-cta-enterprise-monthly')).toBeEnabled();

@@ -46,6 +46,13 @@ export default function UpgradeSheet() {
     return () => document.removeEventListener('keydown', onKey);
   }, [open, close]);
 
+  // Consumer Contracts Regulations 2013 — paid digital services require
+  // the user to expressly waive the 14-day cooling-off right before the
+  // service starts (otherwise we'd owe a refund on any cancellation
+  // within 14 days regardless of usage). Gate all four buy buttons on
+  // this checkbox so the waiver is captured before the checkout redirect.
+  const [coolingOffWaived, setCoolingOffWaived] = useState(false);
+
   async function upgrade(tier: PaidTier, interval: Interval) {
     setRedirecting({ tier, interval });
     setError(null);
@@ -90,6 +97,37 @@ export default function UpgradeSheet() {
           </button>
         </header>
 
+        {/* Consumer Contracts Regulations 2013 — pre-contract disclosure
+            + 14-day cooling-off waiver. The user must tick the box before
+            the four checkout buttons unlock. */}
+        <section className="px-5 pt-4 text-xs text-slate-600 dark:text-slate-400 space-y-2">
+          <p>
+            Subscriptions renew automatically on the same billing cycle.
+            Cancel any time from the Customer Portal (linked after checkout);
+            cancellation takes effect at the end of the current period and
+            you keep access until then. Full pricing &amp; cancellation terms
+            are in our{' '}
+            <a href="/terms#pricing" className="text-accent hover:underline">
+              Terms — Pricing &amp; cancellation
+            </a>.
+          </p>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={coolingOffWaived}
+              onChange={(e) => setCoolingOffWaived(e.target.checked)}
+              data-testid="upgrade-cooling-off-waiver"
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-accent focus:ring-accent"
+            />
+            <span>
+              I agree my subscription begins immediately on payment and I
+              expressly waive my 14-day cooling-off right under the Consumer
+              Contracts Regulations 2013 in order to start using the paid
+              features straight away.
+            </span>
+          </label>
+        </section>
+
         <section className="px-5 py-4 grid gap-3 sm:grid-cols-2 text-sm">
           {/* Pro — private chefs + small bistros. */}
           <article className="rounded-lg border border-accent/40 bg-accent/5 dark:bg-accent/10 px-4 py-3 flex flex-col">
@@ -123,7 +161,7 @@ export default function UpgradeSheet() {
               <button
                 type="button"
                 onClick={() => requireAuth(() => void upgrade('pro', 'month'))}
-                disabled={redirecting !== null}
+                disabled={redirecting !== null || !coolingOffWaived}
                 data-testid="upgrade-sheet-cta-pro-monthly"
                 className="btn-primary disabled:opacity-60 disabled:cursor-wait"
               >
@@ -132,7 +170,7 @@ export default function UpgradeSheet() {
               <button
                 type="button"
                 onClick={() => requireAuth(() => void upgrade('pro', 'year'))}
-                disabled={redirecting !== null}
+                disabled={redirecting !== null || !coolingOffWaived}
                 data-testid="upgrade-sheet-cta-pro-annual"
                 className="btn-secondary disabled:opacity-60 disabled:cursor-wait"
               >
@@ -177,7 +215,7 @@ export default function UpgradeSheet() {
               <button
                 type="button"
                 onClick={() => requireAuth(() => void upgrade('enterprise', 'month'))}
-                disabled={redirecting !== null}
+                disabled={redirecting !== null || !coolingOffWaived}
                 data-testid="upgrade-sheet-cta-enterprise-monthly"
                 className="inline-flex items-center justify-center px-3 h-10 rounded-md text-sm font-medium bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-60 disabled:cursor-wait"
               >
@@ -186,7 +224,7 @@ export default function UpgradeSheet() {
               <button
                 type="button"
                 onClick={() => requireAuth(() => void upgrade('enterprise', 'year'))}
-                disabled={redirecting !== null}
+                disabled={redirecting !== null || !coolingOffWaived}
                 data-testid="upgrade-sheet-cta-enterprise-annual"
                 className="btn-secondary disabled:opacity-60 disabled:cursor-wait"
               >

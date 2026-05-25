@@ -200,14 +200,19 @@ export default function PrivacyPage() {
           <strong>Rectification (Article 16):</strong> ask us to correct inaccurate data.
         </li>
         <li>
-          <strong>Erasure (Article 17):</strong> request deletion of your personal data where we no
-          longer have a legal basis to hold it. Note: your on-device IndexedDB data is under your
-          own control — clear it via your browser's site-data settings.
+          <strong>Erasure (Article 17):</strong> use the "Delete my account" button under
+          Settings → Data and privacy. This is a server-side cascade: every recipe, event, menu,
+          and allergen-audit row tied to your account is removed from our D1 database, every
+          recipe you published to the community is unpublished, the demo-provisioning marker is
+          cleared, and your Clerk account is deleted (which revokes all sessions). It is
+          irreversible. Your on-device IndexedDB cache is also cleared as part of the post-delete
+          reload.
         </li>
         <li>
-          <strong>Portability (Article 20):</strong> receive a machine-readable copy of data you
-          provided to us. Your recipe and event data already lives in your browser's IndexedDB. A
-          JSON export tool is planned for a future release.
+          <strong>Portability (Article 20):</strong> use the "Export my data" button under
+          Settings → Data and privacy. We return a single JSON file containing every D1 row we
+          hold for your account (recipes, events, menus, allergen audits) plus your community
+          publications. The format is documented in our open-source repository.
         </li>
         <li>
           <strong>Restriction (Article 18):</strong> ask us to restrict processing while a dispute

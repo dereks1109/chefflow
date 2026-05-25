@@ -136,12 +136,24 @@ export default function TermsPage() {
           requirements in clause 5 above. We reserve the right to remove published content that
           violates these Terms without notice.
         </li>
+        <li>
+          <strong>Notice-and-takedown:</strong> if you believe a published recipe infringes your
+          copyright, contains misleading allergen information, or otherwise violates these Terms,
+          you can flag it directly from the recipe's public page using the "Report" button (visible
+          to any signed-in user), or you can email <a href="mailto:legal@chefflow.uk">legal@chefflow.uk</a>{' '}
+          with the community recipe ID and a description of the issue. We aim to review and act on
+          all reports within 7 days. Rights-holders may include any evidence they consider relevant
+          (e.g. a link to the original source). We may unpublish content while a report is under
+          review.
+        </li>
+        <li>
+          <strong>Allergen attestation:</strong> when you publish a recipe to the community, ChefFlow
+          asks you to confirm you have verified the detected allergen tags against your supplier
+          labels. ChefFlow's automated allergen detection is best-effort. Final responsibility for
+          allergen accuracy rests with you as the food business operator under the Food Information
+          Regulations 2014.
+        </li>
       </ul>
-      <p>
-        [REVIEW: the community-publishing licence clause should be reviewed by a solicitor with IP
-        experience to ensure it is appropriately scoped and that the "copy into local library" right
-        granted to other users is clearly bounded.]
-      </p>
 
       <h2 id="ip" className="text-xl md:text-2xl font-semibold">7. Intellectual property</h2>
       <p>
@@ -177,34 +189,38 @@ export default function TermsPage() {
         allergen information.
       </p>
 
-      <h2 id="subscription" className="text-xl md:text-2xl font-semibold">9. Pro subscription</h2>
+      <h2 id="pricing" className="text-xl md:text-2xl font-semibold">9. Pricing &amp; cancellation</h2>
       <p>
-        ChefFlow Pro is available at the following prices (inclusive of VAT where applicable):
-        [REVIEW: confirm VAT treatment with an accountant.]
+        ChefFlow offers two paid tiers. All prices are GBP and quoted inclusive of any VAT we are
+        required to collect. The current prices are also shown in the in-app upgrade sheet and on
+        the Stripe checkout page before you pay; the price on the checkout page is authoritative.
       </p>
       <ul>
-        <li>Monthly plan: £12.00 GBP per month.</li>
-        <li>Annual plan: £108.00 GBP per year (equivalent to £9.00/month).</li>
+        <li><strong>Pro:</strong> £12.00 / month or £108.00 / year (equivalent to £9.00/month).</li>
+        <li><strong>Enterprise:</strong> £50.00 / month or £450.00 / year (equivalent to £37.50/month).</li>
       </ul>
       <p>
-        Billing is handled by Stripe. Your subscription renews automatically at the end of each
-        billing period. You can cancel at any time from the Settings page; cancellation takes effect
-        at the end of the current billing period and you retain Pro access until then.
+        Billing is handled by Stripe. Subscriptions renew automatically at the end of each billing
+        period unless you cancel. You can cancel at any time from the Customer Portal (linked from
+        the upgrade sheet and from Settings); cancellation takes effect at the end of the current
+        billing period and you retain access until then. You will receive an email receipt from
+        Stripe on each renewal and a confirmation email on cancellation.
       </p>
       <p>
-        <strong>Cooling-off period:</strong> if you are a UK consumer, you have a right to cancel
-        your first subscription within 14 days of purchase for a full refund under the Consumer
-        Contracts (Information, Cancellation and Additional Charges) Regulations 2013, unless you
-        have requested that we begin providing the service immediately and the service has been fully
-        performed. To exercise this right, contact{' '}
-        <a href="mailto:chefflow.support@[REVIEW domain]">chefflow.support@[REVIEW domain]</a>{' '}
-        within 14 days of your first payment. [REVIEW: a solicitor should confirm the exact wording
-        required to meet the Consumer Contracts Regulations notice requirements, and whether the
-        14-day right applies given the digital-service rules.]
+        <strong>Cooling-off waiver (Consumer Contracts Regulations 2013):</strong> Under the CCR 2013
+        a UK consumer normally has a 14-day right to cancel a distance contract for a full refund.
+        Because the paid features become available immediately on payment, the in-app upgrade sheet
+        asks you to expressly waive this 14-day right before you can complete checkout. By ticking
+        that box you agree the subscription begins immediately and that the cooling-off right does
+        not apply once paid features have been provided. If you did not see that confirmation or
+        believe it was not displayed correctly, please contact{' '}
+        <a href="mailto:billing@chefflow.uk">billing@chefflow.uk</a> within 14 days of your first
+        payment.
       </p>
       <p>
-        After the 14-day cooling-off period has elapsed, subscription fees for the current billing
-        period are non-refundable unless required by law.
+        After the cooling-off waiver, subscription fees for the current billing period are
+        non-refundable except where required by law (for example, a service outage that materially
+        prevented use of the paid features, judged in good faith on a case-by-case basis).
       </p>
 
       <h2 id="free-tier" className="text-xl md:text-2xl font-semibold">10. Free tier</h2>
@@ -231,10 +247,12 @@ export default function TermsPage() {
 
       <h2 id="termination" className="text-xl md:text-2xl font-semibold">12. Termination</h2>
       <p>
-        <strong>By you:</strong> you may delete your account at any time from the Settings page.
-        Deletion removes your Clerk authentication credentials. Your on-device recipe and event data
-        (IndexedDB) remains on your device until you clear your browser's site data — we have no
-        ability to delete it remotely.
+        <strong>By you:</strong> you may delete your account at any time from
+        Settings → Data and privacy → "Delete my account". This triggers a server-side cascade
+        that removes every recipe, event, menu, and allergen-audit row tied to your account from
+        our database, unpublishes any recipes you shared to the community library, clears the
+        demo-provisioning marker, and deletes your Clerk authentication credentials. The post-
+        delete reload also clears the on-device IndexedDB cache. The operation is irreversible.
       </p>
       <p>
         <strong>By us:</strong> we may suspend or terminate your account if you breach these Terms,

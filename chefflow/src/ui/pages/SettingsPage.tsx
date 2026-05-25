@@ -15,6 +15,7 @@ import {
 } from '../../core/tier/quotaClient';
 import { downscaleToDataUrl } from '../../core/util/image';
 import { useTheme } from '../theme/useTheme';
+import AccountDataPanel from '../components/AccountDataPanel';
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
@@ -462,6 +463,8 @@ export default function SettingsPage() {
           </button>
         </section>
       )}
+
+      {(isSignedIn || isE2E) && <AccountDataPanel />}
 
       <p className="text-xs text-slate-500">
         Need help? <Link to="/disclaimer" className="text-accent hover:underline">Disclaimer</Link>

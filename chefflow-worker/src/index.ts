@@ -52,6 +52,17 @@ import {
 } from './sync';
 import { provisionDemosForUser } from './demos';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
+import {
+  submitReport as takedownSubmitReport,
+  listReports as takedownListReports,
+  resolveReport as takedownResolveReport,
+  TakedownValidationError,
+  type SubmitReportInput as TakedownSubmitInput,
+  type ReportStatus as TakedownReportStatus,
+  type ResolutionAction as TakedownResolutionAction,
+} from './takedown';
+import { exportAccount } from './accountExport';
+import { deleteAccount, AccountDeleteError } from './accountDelete';
 
 export interface Env {
   AI: Ai;
@@ -229,6 +240,109 @@ export async function handleRequest(
         return json({ error: err.message }, err.status >= 400 && err.status < 600 ? err.status : 500);
       }
       const msg = err instanceof Error ? err.message : 'Onboarding completion failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /api/community/report — any signed-in user files a notice-and-
+  // takedown report against a published community recipe. Stored in D1
+  // takedown_reports for admin review. No PII beyond the reporter's
+  // Clerk userId + optional contact email is persisted.
+  if (req.method === 'POST' && url.pathname === '/api/community/report') {
+    const body = (await readJson(req)) as TakedownSubmitInput | null;
+    if (!body) return json({ error: 'invalid body' }, 400);
+    try {
+      const result = await takedownSubmitReport(env.DB, userId, body);
+      return json(result, 200);
+    } catch (err) {
+      if (err instanceof TakedownValidationError) {
+        return json({ error: err.message }, err.status);
+      }
+      const msg = err instanceof Error ? err.message : 'Report submission failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // GET /api/admin/takedown-reports?status=pending — admin queue. Same
+  // gate pattern as the other /api/admin routes via requireAdmin().
+  if (req.method === 'GET' && url.pathname === '/api/admin/takedown-reports') {
+    try {
+      await requireAdmin(userId, env.CLERK_SECRET_KEY, fetchImpl);
+    } catch (err) {
+      if (err instanceof AdminForbiddenError) return json({ error: err.message }, 403);
+      throw err;
+    }
+    const statusParam = url.searchParams.get('status');
+    const status: TakedownReportStatus | undefined =
+      statusParam === 'pending' || statusParam === 'resolved' || statusParam === 'dismissed'
+        ? statusParam
+        : undefined;
+    const limit = Number.parseInt(url.searchParams.get('limit') ?? '50', 10);
+    const reports = await takedownListReports(env.DB, { status, limit });
+    return json({ reports }, 200);
+  }
+
+  // POST /api/admin/takedown-reports/:id/resolve — admin actions a report.
+  // Body: { action: 'unpublish' | 'dismiss', note?: string }
+  {
+    const match = /^\/api\/admin\/takedown-reports\/([^/]+)\/resolve$/.exec(url.pathname);
+    if (req.method === 'POST' && match) {
+      try {
+        await requireAdmin(userId, env.CLERK_SECRET_KEY, fetchImpl);
+      } catch (err) {
+        if (err instanceof AdminForbiddenError) return json({ error: err.message }, 403);
+        throw err;
+      }
+      const body = (await readJson(req)) as { action?: TakedownResolutionAction; note?: string } | null;
+      if (!body || (body.action !== 'unpublish' && body.action !== 'dismiss')) {
+        return json({ error: 'action must be unpublish or dismiss' }, 400);
+      }
+      try {
+        const out = await takedownResolveReport(
+          env.DB,
+          env.RATE_LIMIT,
+          userId,
+          match[1],
+          body.action,
+          body.note ?? null,
+        );
+        return json(out, 200);
+      } catch (err) {
+        if (err instanceof TakedownValidationError) {
+          return json({ error: err.message }, err.status);
+        }
+        const msg = err instanceof Error ? err.message : 'Resolve failed';
+        return json({ error: msg }, 500);
+      }
+    }
+  }
+
+  // GET /api/account/export — GDPR Article 20 portability. Returns one JSON
+  // blob with every D1 row the caller owns plus their community recipes.
+  if (req.method === 'GET' && url.pathname === '/api/account/export') {
+    try {
+      const payload = await exportAccount(env.DB, env.RATE_LIMIT, userId);
+      return json(payload, 200, {
+        'Content-Disposition': `attachment; filename="chefflow-export-${userId}-${new Date().toISOString().slice(0, 10)}.json"`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Export failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // DELETE /api/account — GDPR Article 17 erasure. Cascades through D1,
+  // unpublishes community recipes, clears the demos KV marker, then deletes
+  // the Clerk user (which revokes all sessions). Irreversible.
+  if (req.method === 'DELETE' && url.pathname === '/api/account') {
+    try {
+      const out = await deleteAccount(env.DB, env.RATE_LIMIT, userId, env.CLERK_SECRET_KEY, fetchImpl);
+      return json(out, 200);
+    } catch (err) {
+      if (err instanceof AccountDeleteError) {
+        return json({ error: err.message }, err.status >= 400 && err.status < 600 ? err.status : 500);
+      }
+      const msg = err instanceof Error ? err.message : 'Account deletion failed';
       return json({ error: msg }, 500);
     }
   }
