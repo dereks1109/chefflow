@@ -22,6 +22,7 @@ import TierSync from './ui/components/TierSync';
 import AuthGateRunner from './ui/components/AuthGateRunner';
 import SyncRunner from './ui/components/SyncRunner';
 import ReloadOnFirstSignIn from './ui/components/ReloadOnFirstSignIn';
+import OnboardingGate from './ui/components/OnboardingGate';
 import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
@@ -46,28 +47,30 @@ function PublicApp() {
       <AuthGateRunner />
       <SyncRunner />
       <ReloadOnFirstSignIn />
-      <Routes>
-        <Route element={<AppLayout />}>
-          <Route path="/" element={<Navigate to="/recipes" replace />} />
-          <Route path="/recipes" element={<RecipesLibrary />} />
-          <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
-          <Route path="/events" element={<EventsLibrary />} />
-          <Route path="/events/:id" element={<EventView />} />
-          <Route path="/events/:id/edit" element={<EventEditor />} />
-          <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
-          <Route path="/workflows" element={<WorkflowsLibrary />} />
-          <Route path="/workflows/:eventId" element={<Workflow />} />
-          <Route path="/community" element={<CommunityLibrary />} />
-          <Route path="/community/:id" element={<CommunityRecipeView />} />
-          <Route path="/chef/:clerkId" element={<ChefProfile />} />
-          <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="*" element={<div className="p-6">Not found.</div>} />
-        </Route>
-      </Routes>
+      <OnboardingGate>
+        <Routes>
+          <Route element={<AppLayout />}>
+            <Route path="/" element={<Navigate to="/recipes" replace />} />
+            <Route path="/recipes" element={<RecipesLibrary />} />
+            <Route path="/recipes/:id/edit" element={<RecipeEditor />} />
+            <Route path="/events" element={<EventsLibrary />} />
+            <Route path="/events/:id" element={<EventView />} />
+            <Route path="/events/:id/edit" element={<EventEditor />} />
+            <Route path="/events/:id/cook" element={<KitchenPlaceholder />} />
+            <Route path="/workflows" element={<WorkflowsLibrary />} />
+            <Route path="/workflows/:eventId" element={<Workflow />} />
+            <Route path="/community" element={<CommunityLibrary />} />
+            <Route path="/community/:id" element={<CommunityRecipeView />} />
+            <Route path="/chef/:clerkId" element={<ChefProfile />} />
+            <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="*" element={<div className="p-6">Not found.</div>} />
+          </Route>
+        </Routes>
+      </OnboardingGate>
     </>
   );
 }

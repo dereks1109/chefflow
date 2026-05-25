@@ -51,6 +51,7 @@ import {
   SyncValidationError,
 } from './sync';
 import { provisionDemosForUser } from './demos';
+import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 
 export interface Env {
   AI: Ai;
@@ -203,6 +204,31 @@ export async function handleRequest(
       return json(result, 200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Demo provision failed';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /api/onboarding/complete — marks the user's account-setup sheet as
+  // finished and (optionally) persists the three profile fields the sheet
+  // collects. Idempotent: re-calling just re-sets the flag. The frontend
+  // gate reads useUser().publicMetadata.onboardingComplete to decide
+  // whether to render the sheet, so this route is what makes the gate
+  // cross-device durable.
+  if (req.method === 'POST' && url.pathname === '/api/onboarding/complete') {
+    const body = (await readJson(req)) as OnboardingProfile | null;
+    try {
+      const result = await completeOnboarding(
+        userId,
+        env.CLERK_SECRET_KEY,
+        body ?? {},
+        fetchImpl,
+      );
+      return json(result, 200);
+    } catch (err) {
+      if (err instanceof OnboardingError) {
+        return json({ error: err.message }, err.status >= 400 && err.status < 600 ? err.status : 500);
+      }
+      const msg = err instanceof Error ? err.message : 'Onboarding completion failed';
       return json({ error: msg }, 500);
     }
   }
