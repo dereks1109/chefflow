@@ -9,6 +9,27 @@ binding = "AI"
 binding = "RATE_LIMIT"
 id = "6300f5a914fa4ea885b73ae1860d3a1e"
 
+# Per-user sync database (recipes / events / menus / allergen audits).
+# Schema lives in migrations/. Apply via `wrangler d1 migrations apply chefflow-sync --remote`.
+[[d1_databases]]
+binding = "DB"
+database_name = "chefflow-sync"
+database_id = "8f70e28a-3304-4f81-b83c-4bbc5fb537af"
+migrations_dir = "migrations"
+
 [vars]
 CLERK_ISSUER = "https://engaging-bat-5.clerk.accounts.dev"
+# Legacy LLM daily cap, superseded by per-tier maxLlmCallsPerDay in src/limits.ts.
 DAILY_LIMIT = "30"
+
+# ---------------------------------------------------------------------------
+# Secrets — set via `wrangler secret put <NAME>`. NEVER commit values here.
+# Required for PR 4 (Stripe billing). Without them, /billing/* + /webhook/stripe
+# routes will fail at runtime; the rest of the worker keeps working.
+#
+#   wrangler secret put CLERK_SECRET_KEY              # sk_live_… / sk_test_…
+#   wrangler secret put STRIPE_SECRET_KEY             # sk_live_… / sk_test_…
+#   wrangler secret put STRIPE_WEBHOOK_SECRET         # whsec_… from `stripe listen`
+#   wrangler secret put STRIPE_PRICE_ID_PRO_MONTHLY   # price_… (£12/mo)
+#   wrangler secret put STRIPE_PRICE_ID_PRO_ANNUAL    # price_… (£108/yr)
+# ---------------------------------------------------------------------------

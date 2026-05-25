@@ -1,29 +1,41 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   AlertTriangle,
   Calendar,
   ChefHat,
   Check,
-  Clock,
   Compass,
+  ExternalLink,
   Key,
+  MapPin,
+  Printer,
   RefreshCw,
   Sparkles,
   StickyNote,
   Users,
+  Wallet,
 } from 'lucide-react';
 import NestedDragDropBuilder, {
   type DndMilestone,
 } from '../components/NestedDragDropBuilder';
+import EventContactRow from '../components/EventContactRow';
 import { swatchClassFor } from '../components/ColorPicker';
+import { formatGBP } from '../../core/util/money';
 import LlmSettingsSheet from '../components/LlmSettingsSheet';
-import { getEvent, saveEvent } from '../../db/eventsRepo';
-import { listRecipes } from '../../db/recipesRepo';
+import { saveEvent } from '../../db/eventsRepo';
+import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import { formatDateTime } from '../../core/util/datetime';
-import { scheduleEventLLM, GroqClientError, LlmValidationError } from '../../core/scheduler/llm/llmScheduler';
-import { hashDishes } from '../../core/scheduler/hash';
+import {
+  GroqClientError,
+  LlmValidationError,
+  scheduleWithFallback,
+  StrategyError,
+  hashDishes,
+} from '../../core/scheduler';
+import { aggregateIngredients } from '../../core/recipes/aggregateIngredients';
+import { useAuthGate } from '../../state/useAuthGate';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import type {
   ColorTag,
@@ -33,16 +45,6 @@ import type {
   ScheduledStep,
   SchedulePhase,
 } from '../../core/types';
-
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'not-found' }
-  | {
-      kind: 'ready';
-      event: KitchenEvent;
-      recipes: Map<string, Recipe>;
-      loadedFromSnapshot: boolean;
-    };
 
 type WorkflowStatus =
   | { kind: 'idle' }            // initial — before we know what to do
@@ -76,9 +78,17 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Format a numeric amount with its unit, trimming trailing zeros for
+ *  display (3.00 → 3, 1.5 → 1.5). Used by the Order list milestone. */
+function formatLineAmount(amount: number, unit: string): string {
+  const trimmed = Number.isInteger(amount) ? String(amount) : String(amount).replace(/\.?0+$/, '');
+  return `${trimmed} ${unit}`.trim();
+}
+
 export function scheduledStepsToMilestones(
   steps: ScheduledStep[],
   dishes: readonly Dish[] = [],
+  orderList?: { lines: { amount: number; unit: string; name: string; dishNames: string[] }[]; warnings: { message: string }[] },
 ): DndMilestone[] {
   const dishById = new Map(dishes.map((d) => [d.id, d]));
   const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
@@ -88,6 +98,35 @@ export function scheduledStepsToMilestones(
     byPhase.get(step.phase)!.push(step);
   }
   const milestones: DndMilestone[] = [];
+
+  // Prepend a synthetic "Order list" milestone aggregating ingredients
+  // across every dish in the event. Steps inside don't carry timing /
+  // dependencies — they're a read-only shopping list. Each step's
+  // meta.dishTags lists the dishes the ingredient is used in.
+  if (orderList && (orderList.lines.length > 0 || orderList.warnings.length > 0)) {
+    const itemCount = orderList.lines.length;
+    const orderSteps = orderList.lines.map((line, idx) => ({
+      id: `order-${idx}`,
+      content: `${formatLineAmount(line.amount, line.unit)} ${line.name}`,
+      meta: {
+        dishTags: line.dishNames,
+      },
+    }));
+    // Surface aggregation warnings as muted entries at the end of the list.
+    for (const w of orderList.warnings) {
+      orderSteps.push({
+        id: `order-warn-${orderSteps.length}`,
+        content: `⚠ ${w.message}`,
+        meta: { dishTags: [] },
+      });
+    }
+    milestones.push({
+      id: 'phase-order-list',
+      title: `Order list — ${itemCount} item${itemCount === 1 ? '' : 's'}`,
+      steps: orderSteps,
+    });
+  }
+
   for (const phase of PHASE_ORDER) {
     const stepsForPhase = byPhase.get(phase) ?? [];
     if (stepsForPhase.length === 0) continue;
@@ -122,6 +161,10 @@ export function milestonesToScheduledSteps(
 ): ScheduledStep[] {
   const ordered: ScheduledStep[] = [];
   for (const milestone of milestones) {
+    // The synthetic order-list milestone is UI-only; its "steps" are
+    // aggregated ingredients, not ScheduledSteps. Skip cleanly so the
+    // saved workflow snapshot stays a pure ScheduledStep[].
+    if (milestone.id === 'phase-order-list') continue;
     const inferredPhase = MILESTONE_ID_TO_PHASE[milestone.id];
     for (const dndStep of milestone.steps) {
       const original = byOriginalId.get(dndStep.id);
@@ -170,7 +213,14 @@ function buildChefGroups(dishes: readonly Dish[]): ChefGroup[] {
 
 export default function Workflow() {
   const { eventId = '' } = useParams<{ eventId: string }>();
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const navigate = useNavigate();
+  const requireAuth = useAuthGate();
+
+  // Live subscriptions — re-render automatically when Dexie writes anywhere
+  // touch the watched rows. See src/db/hooks/useEvent.ts.
+  const eventQuery = useEvent(eventId);
+  const recipesQuery = useRecipes();
+
   const [workflowStatus, setWorkflowStatus] = useState<WorkflowStatus>({ kind: 'idle' });
   const [scheduled, setScheduled] = useState<ScheduledStep[]>([]);
   const [dirty, setDirty] = useState(false);
@@ -178,8 +228,20 @@ export default function Workflow() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Forces the DnD builder to remount on Regenerate.
   const [generation, setGeneration] = useState(0);
+  // True once the page has consumed the saved snapshot for the current event.
+  // Reset by Regenerate (which clears event.workflow in Dexie). Drives the
+  // "stale snapshot" banner and the Save button's enabled state.
+  const [loadedFromSnapshot, setLoadedFromSnapshot] = useState(false);
   // AbortController for in-flight LLM calls (so Regenerate can cancel).
   const inflight = useRef<AbortController | null>(null);
+  // True when the currently-displayed timeline came from the local
+  // deterministic scheduler (no API key, or LLM threw). Drives an inline
+  // notice + a hint to click Regenerate once the LLM is reachable.
+  const [isFallback, setIsFallback] = useState(false);
+  // Tracks the event-version we last synced our local UI state to. The
+  // initial-load effect only acts when this changes — so live-query updates
+  // we triggered ourselves (Save / Regenerate) don't cause a re-init loop.
+  const syncedVersionRef = useRef<string | null>(null);
 
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
@@ -193,76 +255,92 @@ export default function Workflow() {
   const apiKey = isProxyMode ? 'proxy' : (storedApiKey || envApiKey).trim();
   const isReady = isProxyMode || apiKey.length > 0;
 
-  // -------------------------------------------------------------------------
-  // Initial load: pull event + recipes, decide whether to use the saved
-  // snapshot or call the LLM.
-  // -------------------------------------------------------------------------
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([getEvent(eventId), listRecipes()]).then(([event, recipes]) => {
-      if (cancelled) return;
-      if (!event) {
-        setState({ kind: 'not-found' });
-        return;
-      }
-      const recipesMap = new Map(recipes.map((r) => [r.id, r]));
-      setChefFilter(null);
-
-      if (event.workflow && event.workflow.length > 0) {
-        // Saved snapshot — skip the LLM entirely.
-        setScheduled(event.workflow);
-        setDirty(false);
-        setWorkflowStatus({ kind: 'ready' });
-        setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: true });
-        return;
-      }
-
-      // No snapshot — need to generate. Gate on API key.
-      setState({ kind: 'ready', event, recipes: recipesMap, loadedFromSnapshot: false });
-      if (!isReady) {
-        setWorkflowStatus({ kind: 'needs-key' });
-        return;
-      }
-      void runLlm(event, recipesMap);
-    });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
+  // Derive a stable recipes-by-id map from the live query result. Memoized
+  // on the array reference so the LLM caller sees the same Map identity for
+  // unchanged recipe state.
+  const recipesMap = useMemo(
+    () => new Map(recipesQuery.recipes.map((r) => [r.id, r])),
+    [recipesQuery.recipes],
+  );
 
   // -------------------------------------------------------------------------
   // runLlm — call the LLM, set scheduled state, surface errors.
+  // Defined before the sync-effect that calls it, but doesn't need to be a
+  // hook itself — it reads `apiKey` / `model` via closure each call.
   // -------------------------------------------------------------------------
-  async function runLlm(event: KitchenEvent, recipes: Map<string, Recipe>) {
+  async function runSchedule(eventToSchedule: KitchenEvent, recipes: Map<string, Recipe>) {
     inflight.current?.abort();
     const controller = new AbortController();
     inflight.current = controller;
 
     setWorkflowStatus({ kind: 'generating' });
     try {
-      const { steps } = await scheduleEventLLM({
-        event,
+      const result = await scheduleWithFallback({
+        event: eventToSchedule,
         recipes,
         apiKey,
         model,
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      setScheduled(steps);
+      setScheduled(result.steps);
+      setIsFallback(result.source === 'local');
       setDirty(false);
       setWorkflowStatus({ kind: 'ready' });
     } catch (err) {
       if (controller.signal.aborted) return;
-      setWorkflowStatus({ kind: 'error', message: friendlyError(err) });
+      // Both LLM and local scheduler failed — strategy raised StrategyError.
+      // Show the LLM error (more user-actionable) when present; otherwise
+      // the local one.
+      const stratErr = err instanceof StrategyError ? (err.llmError ?? err.localError) : err;
+      setWorkflowStatus({ kind: 'error', message: friendlyError(stratErr) });
     }
   }
+
+  // -------------------------------------------------------------------------
+  // Sync effect — when the underlying event becomes ready (or its
+  // snapshot-presence flips), reconcile local UI state. The version key
+  // includes workflow presence + id so reruns of the LLM after a Regenerate
+  // are detected, but routine cosmetic writes (e.g. updatedAt-only) that
+  // don't change workflow presence don't cause a re-init.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (eventQuery.status !== 'ready' || recipesQuery.status !== 'ready') return;
+    const live = eventQuery.event;
+    const hasSnapshot = !!live.workflow && live.workflow.length > 0;
+    const version = `${live.id}::${hasSnapshot ? 'snapshot' : 'no-snapshot'}`;
+    if (syncedVersionRef.current === version) return;
+    syncedVersionRef.current = version;
+
+    setChefFilter(null);
+
+    if (hasSnapshot) {
+      setScheduled(live.workflow!);
+      setDirty(false);
+      setLoadedFromSnapshot(true);
+      setWorkflowStatus({ kind: 'ready' });
+      return;
+    }
+
+    setLoadedFromSnapshot(false);
+    // Single seam — strategy decides LLM vs local. Empty apiKey falls
+    // through to local automatically (no special-casing here).
+    void runSchedule(live, recipesMap);
+  // runLlm/recipesMap/isReady are intentionally not in deps — we only react
+  // to event-version changes. Capturing them would cause re-runs on
+  // unrelated re-renders (e.g. setSettingsOpen).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventQuery, recipesQuery.status]);
 
   const scheduledById = useMemo(
     () => new Map(scheduled.map((s) => [s.id, s])),
     [scheduled],
   );
 
-  if (state.kind === 'loading') return <div className="p-6 text-slate-500">Loading…</div>;
-  if (state.kind === 'not-found') {
+  if (eventQuery.status === 'loading' || recipesQuery.status === 'loading') {
+    return <div className="p-6 text-slate-500">Loading…</div>;
+  }
+  if (eventQuery.status === 'not-found' || eventQuery.status === 'error') {
     return (
       <div className="p-6">
         <h1 className="text-xl font-bold">Event not found.</h1>
@@ -273,7 +351,8 @@ export default function Workflow() {
     );
   }
 
-  const { event, recipes, loadedFromSnapshot } = state;
+  // From here on `event` is non-null (narrowed by the status check above).
+  const event: KitchenEvent = eventQuery.event;
   const hasDishes = event.dishes.length > 0;
   const serveAt = event.serveAt ? new Date(event.serveAt) : new Date();
   const currentDishesHash = hashDishes(event.dishes);
@@ -287,7 +366,15 @@ export default function Workflow() {
   const visibleSteps = chefFilter
     ? scheduled.filter((s) => dishById.get(s.dishId)?.colorTag === chefFilter)
     : scheduled;
-  const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes);
+  // Order list — show event-wide in the All view, AND a per-chef filtered
+  // list when a chef colour is selected (their shopping list, not the
+  // entire event's). Filter dishes by colorTag before aggregating; the
+  // function is pure so we just feed it a slimmer event.
+  const orderListEvent: KitchenEvent = chefFilter
+    ? { ...event, dishes: event.dishes.filter((d) => d.colorTag === chefFilter) }
+    : event;
+  const orderList = aggregateIngredients({ event: orderListEvent, recipes: recipesMap });
+  const milestones = scheduledStepsToMilestones(visibleSteps, event.dishes, orderList);
 
   function handleBuilderChange(nextMilestones: DndMilestone[]) {
     const next = milestonesToScheduledSteps(nextMilestones, scheduledById, serveAt);
@@ -305,7 +392,14 @@ export default function Workflow() {
     };
     await saveEvent(updated);
     setDirty(false);
-    setState({ kind: 'ready', event: updated, recipes, loadedFromSnapshot: true });
+    // The next live-query tick will flip hasSnapshot true; pre-set the
+    // synced version so we don't re-adopt the snapshot we just wrote
+    // (which would no-op anyway, but also avoid a transient flicker).
+    syncedVersionRef.current = `${updated.id}::snapshot`;
+    setLoadedFromSnapshot(true);
+    // Return to the event page — its new "View workflow" CTA now reflects
+    // this saved snapshot so the chef can re-enter at will.
+    navigate(`/events/${updated.id}`);
   }
 
   async function handleRegenerate() {
@@ -326,31 +420,71 @@ export default function Workflow() {
     await saveEvent(cleared);
     setDirty(false);
     setChefFilter(null);
-    setState({ kind: 'ready', event: cleared, recipes, loadedFromSnapshot: false });
+    setLoadedFromSnapshot(false);
     setGeneration((g) => g + 1);
-    await runLlm(cleared, recipes);
+    // Pre-mark so the sync-effect's next pass (triggered by the live-query
+    // refresh) skips its branch — we run the LLM here directly.
+    syncedVersionRef.current = `${cleared.id}::no-snapshot`;
+    await runSchedule(cleared, recipesMap);
   }
 
-  const filteredChef = chefFilter ? chefGroups.find((g) => g.color === chefFilter) : null;
   const showWorkflowBody = workflowStatus.kind === 'ready' && scheduled.length > 0;
 
   return (
-    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <div className="flex items-center justify-between gap-2">
-        <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Workflows
-        </Link>
+    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 print:p-0 print:space-y-2 print:text-black print:[&_*]:!text-black">
+      <div className="flex items-center justify-between gap-2 flex-wrap print:hidden">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link to="/workflows" className="btn-secondary text-sm inline-flex items-center gap-1 w-fit">
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Workflows
+          </Link>
+          <Link
+            to={`/events/${event.id}`}
+            className="btn-secondary text-sm inline-flex items-center gap-1 w-fit"
+            title={`Back to ${event.title || 'this event'}`}
+          >
+            <Calendar className="h-4 w-4" aria-hidden="true" />
+            <span className="truncate max-w-[12rem]">{event.title || 'Event'}</span>
+          </Link>
+        </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-6 bg-white dark:bg-kitchen-ink">
-        <h1 className="text-3xl font-bold">{event.title || 'Untitled event'}</h1>
-        <div className="mt-3 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+      <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink text-sm">
+        <h1 className="text-2xl font-bold">{event.title || 'Untitled event'}</h1>
+        <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
           <Calendar className="h-4 w-4" aria-hidden="true" />
           <span>{formatDateTime(event.serveAt)}</span>
         </div>
+        {event.location && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <MapPin className="h-4 w-4" aria-hidden="true" />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-accent hover:underline"
+              title="Open in Google Maps"
+            >
+              {event.location}
+              <ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" />
+            </a>
+          </div>
+        )}
+        <EventContactRow name={event.contactName} email={event.contactEmail} phone={event.contactPhone} />
+        {event.numberOfGuests !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            <span>{event.numberOfGuests} guest{event.numberOfGuests === 1 ? '' : 's'}</span>
+          </div>
+        )}
+        {event.budget !== undefined && (
+          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
+            <Wallet className="h-4 w-4" aria-hidden="true" />
+            <span>Budget {formatGBP(event.budget)}</span>
+          </div>
+        )}
         {event.notes && (
-          <div className="mt-4 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
             <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
             <p className="whitespace-pre-wrap">{event.notes}</p>
           </div>
@@ -358,7 +492,7 @@ export default function Workflow() {
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-3 gap-2">
+        <div className="flex items-center justify-between mb-3 gap-2 print:hidden">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-2">
             <Compass className="h-3.5 w-3.5" aria-hidden="true" />
             Workflow
@@ -366,7 +500,7 @@ export default function Workflow() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => void handleRegenerate()}
+              onClick={() => requireAuth(() => void handleRegenerate())}
               disabled={workflowStatus.kind === 'generating'}
               className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
               title="Discard saved snapshot and re-run the LLM"
@@ -427,7 +561,7 @@ export default function Workflow() {
               <p className="mt-1 text-xs whitespace-pre-wrap">{workflowStatus.message}</p>
               <button
                 type="button"
-                onClick={() => void handleRegenerate()}
+                onClick={() => requireAuth(() => void handleRegenerate())}
                 className="btn-secondary text-xs mt-2 inline-flex items-center gap-1"
               >
                 <RefreshCw className="h-3 w-3" aria-hidden="true" />
@@ -437,10 +571,37 @@ export default function Workflow() {
           </div>
         )}
 
+        {isFallback && workflowStatus.kind === 'ready' && (
+          <div
+            role="status"
+            className="mb-3 flex items-start gap-2 rounded-md border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-3 text-sm text-slate-700 dark:text-slate-300 print:hidden"
+          >
+            <Compass className="h-4 w-4 mt-0.5 shrink-0 text-slate-500" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-medium text-slate-800 dark:text-slate-200">Fallback timeline</p>
+              <p className="mt-1 text-xs">
+                {isReady
+                  ? <>The LLM scheduler was unavailable — this timeline is built by the local deterministic scheduler. Click <strong>Regenerate</strong> to try the LLM again.</>
+                  : <>No Groq API key — this timeline is built by the local deterministic scheduler. Click <strong>Connect Groq</strong> below for the LLM-scheduled version.</>}
+              </p>
+              {!isReady && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="btn-secondary text-xs mt-2 inline-flex items-center gap-1"
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  Connect Groq
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {isStale && workflowStatus.kind === 'ready' && (
           <div
             role="status"
-            className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200"
+            className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200 print:hidden"
           >
             <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
             <p>
@@ -462,9 +623,25 @@ export default function Workflow() {
           </p>
         )}
 
+        {/* ----- Print button — visible whenever the workflow is ready, prints
+              the current chef-filter view (All or a single colour). ----- */}
+        {showWorkflowBody && (
+          <div className="mb-3 print:hidden">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              data-testid="workflow-print-button"
+              className="btn-secondary text-sm inline-flex items-center gap-1.5"
+            >
+              <Printer className="h-4 w-4" aria-hidden="true" />
+              Print checklist
+            </button>
+          </div>
+        )}
+
         {/* ----- Chef filter bar ----- */}
         {showWorkflowBody && hasDishes && chefGroups.length > 0 && (
-          <div className="mb-3">
+          <div className="mb-3 print:hidden">
             <p className="text-xs font-medium text-slate-500 mb-2 inline-flex items-center gap-1">
               <ChefHat className="h-3 w-3" aria-hidden="true" />
               Filter by chef
@@ -504,21 +681,39 @@ export default function Workflow() {
           </div>
         )}
 
-        {/* ----- Workflow body ----- */}
-        {showWorkflowBody && (
-          chefFilter && filteredChef ? (
-            <PerChefReadOnlyList steps={visibleSteps} chefGroup={filteredChef} />
-          ) : (
-            <NestedDragDropBuilder
-              key={`${event.id}-${generation}`}
-              initialMilestones={milestones}
-              onChange={handleBuilderChange}
-              allowAddMilestone={false}
-              allowAddStep={false}
-              allowColorPicker={false}
-              allowStepDrag={false}
-            />
-          )
+        {/* ----- Workflow body — interactive (screen-only) ----- */}
+        <div className="print:hidden">
+          {showWorkflowBody && (
+            milestones.length === 0 && chefFilter ? (
+              <p className="text-sm text-slate-500 italic">
+                No steps for this chef. (No dishes match this color, or no recipes are linked.)
+              </p>
+            ) : (
+              <NestedDragDropBuilder
+                key={`${event.id}-${generation}-${chefFilter ?? 'all'}`}
+                initialMilestones={milestones}
+                onChange={handleBuilderChange}
+                allowAddMilestone={false}
+                allowAddStep={false}
+                allowColorPicker={false}
+                allowStepDrag={false}
+                allowMilestoneDrag={false}
+                allowStepEdit={false}
+              />
+            )
+          )}
+        </div>
+
+        {/* ----- Print-only checklist — flat list with ☐ checkboxes per step.
+              Hidden on screen via `hidden`; revealed in print via Tailwind's
+              `print:block`. Shows whatever the current chef filter selected
+              (All view = everyone; per-chef = just that colour). ----- */}
+        {showWorkflowBody && milestones.length > 0 && (
+          <PrintChecklist
+            milestones={milestones}
+            chefLabel={chefFilter ? capitalize(chefFilter) : null}
+            eventTitle={event.title || 'Untitled event'}
+          />
         )}
       </div>
 
@@ -528,7 +723,7 @@ export default function Workflow() {
           setSettingsOpen(false);
           // If user just provided a key while we were stuck on needs-key, kick off the LLM.
           if (workflowStatus.kind === 'needs-key' && useLlmSettingsStore.getState().isReady()) {
-            void runLlm(event, recipes);
+            void runSchedule(event, recipesMap);
           }
         }}
       />
@@ -536,58 +731,61 @@ export default function Workflow() {
   );
 }
 
+
 // ---------------------------------------------------------------------------
-// PerChefReadOnlyList — same as before, untouched.
+// PrintChecklist — hidden on screen (`hidden`), revealed only when the
+// page is printed (`print:block`). Renders the same milestones the
+// NestedDragDropBuilder shows on screen, but as a flat checklist with
+// ☐ squares for tick-off. Respects the current chef-filter (the
+// `milestones` array is already filtered by the caller).
 // ---------------------------------------------------------------------------
-function PerChefReadOnlyList({
-  steps,
-  chefGroup,
+function PrintChecklist({
+  milestones,
+  chefLabel,
+  eventTitle,
 }: {
-  steps: ScheduledStep[];
-  chefGroup: ChefGroup;
+  milestones: DndMilestone[];
+  chefLabel: string | null;
+  eventTitle: string;
 }) {
-  if (steps.length === 0) {
-    return (
-      <p className="text-sm text-slate-500 italic">
-        No steps for this chef. (No dishes match this color, or no recipes are linked.)
-      </p>
-    );
-  }
-  const sorted = steps
-    .slice()
-    .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink overflow-hidden">
-      <header className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
-        <span className={`h-4 w-4 rounded-full ${swatchClassFor(chefGroup.color)}`} />
-        <h3 className="font-semibold">{capitalize(chefGroup.color)} tasks</h3>
-        <span className="ml-auto text-xs text-slate-500">
-          {sorted.length} step{sorted.length === 1 ? '' : 's'}
-        </span>
-      </header>
-      <ol className="divide-y divide-slate-100 dark:divide-slate-800">
-        {sorted.map((s) => (
-          <li key={s.id} className="flex gap-3 px-4 py-3">
-            <span className="w-12 shrink-0 text-xs font-mono text-slate-500 pt-0.5">
-              {formatClockTime(s.startAt)}
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm">{s.text}</p>
-              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1">
-                  <Users className="h-3 w-3" aria-hidden="true" />
-                  {s.dishLabel}
+    <section
+      data-testid="workflow-print-checklist"
+      className="hidden print:block mt-4"
+      aria-hidden="true"
+    >
+      <h2 className="text-lg font-bold border-b border-slate-300 pb-2 mb-4">
+        Workflow checklist — {eventTitle}
+        {chefLabel ? ` (${chefLabel} chef)` : ''}
+      </h2>
+      {milestones.map((m) => (
+        <div key={m.id} className="mb-4 break-inside-avoid">
+          <h3 className="text-sm font-semibold uppercase tracking-wide mb-1">{m.title}</h3>
+          <ul className="text-sm leading-snug">
+            {m.steps.map((s) => (
+              <li key={s.id} className="flex gap-2 py-0.5">
+                <span
+                  className="inline-block h-3.5 w-3.5 border border-slate-700 rounded-sm shrink-0 mt-0.5"
+                  aria-hidden="true"
+                />
+                <span className="flex-1">
+                  {s.meta?.time && <span className="font-mono mr-2">{s.meta.time}</span>}
+                  {s.content}
+                  {s.meta?.dish && (
+                    <span className="ml-2 text-xs text-slate-500">— {s.meta.dish}</span>
+                  )}
+                  {s.meta?.dishTags && s.meta.dishTags.length > 0 && (
+                    <span className="ml-2 text-xs text-slate-500">
+                      — {s.meta.dishTags.join(', ')}
+                    </span>
+                  )}
                 </span>
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3 w-3" aria-hidden="true" />
-                  {Math.round(s.durationSec / 60)} min
-                </span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 

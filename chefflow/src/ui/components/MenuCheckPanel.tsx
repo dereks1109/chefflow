@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { AlertTriangle, CheckCircle2, ShieldAlert, Sparkles, Utensils } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, PoundSterling, ShieldAlert, Sparkles, Utensils } from 'lucide-react';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { checkMenu } from '../../core/events/llm/menuCheck';
 import { getRecipe } from '../../db/recipesRepo';
 import { saveEvent } from '../../db/eventsRepo';
-import type { KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
+import type { KitchenEvent, MenuAnalysis, MenuSuggestionCategory, Recipe } from '../../core/types';
 
 interface Props {
   event: KitchenEvent;
@@ -144,15 +144,55 @@ function VerdictView({ analysis }: { analysis: MenuAnalysis }) {
 
       {analysis.suggestions.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-slate-500 mb-1">Suggestions</p>
-          <ul className="list-disc list-inside text-sm text-slate-700 dark:text-slate-300 space-y-0.5">
-            {analysis.suggestions.map((s, i) => <li key={i}>{s}</li>)}
+          <p className="text-xs font-medium text-slate-500 mb-1">Suggestions (5)</p>
+          <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+            {analysis.suggestions.map((s, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <SuggestionBadge category={s.category} />
+                <span className="flex-1">{s.text}</span>
+              </li>
+            ))}
           </ul>
         </div>
       )}
     </div>
   );
 }
+
+function SuggestionBadge({ category }: { category: MenuSuggestionCategory }) {
+  const cfg = SUGGESTION_BADGE_CONFIG[category];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide shrink-0 ${cfg.classes}`}
+      aria-label={`${cfg.label} suggestion`}
+    >
+      <cfg.Icon className="h-3 w-3" aria-hidden="true" />
+      {cfg.label}
+    </span>
+  );
+}
+
+const SUGGESTION_BADGE_CONFIG: Record<MenuSuggestionCategory, {
+  label: string;
+  classes: string;
+  Icon: typeof CheckCircle2;
+}> = {
+  allergy: {
+    label: 'Allergy',
+    classes: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    Icon: ShieldAlert,
+  },
+  budget: {
+    label: 'Budget',
+    classes: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    Icon: PoundSterling,
+  },
+  other: {
+    label: 'Other',
+    classes: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    Icon: Sparkles,
+  },
+};
 
 const VERDICT_CONFIG: Record<MenuAnalysis['verdict'], {
   headline: string;

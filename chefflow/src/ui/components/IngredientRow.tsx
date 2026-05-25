@@ -1,25 +1,87 @@
+import { useEffect, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
-import type { AllergenTag, Ingredient } from '../../core/types';
+import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
+import { getRecipe } from '../../db/recipesRepo';
+import RecipeAutocomplete from './RecipeAutocomplete';
 
 interface Props {
   index: number;
   value: Ingredient;
   onChange: (next: Ingredient) => void;
   onRemove: () => void;
+  /** Current recipe id (excluded from RecipeAutocomplete to prevent self-reference). */
+  currentRecipeId?: string;
   /** Effective allergens carried by this ingredient (user override OR auto-detection). */
   allergenMatches?: AllergenTag[];
+  /** True when the recipe-level AI analysis flagged this ingredient as
+   *  uncertain — renders an amber chip alongside the allergen UI so the
+   *  chef knows to verify before serving. */
+  uncertain?: boolean;
 }
 
 const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb'];
 const VOLUME_UNITS = ['ml', 'L', 'tsp', 'tbsp', 'cup', 'fl oz', 'pt', 'qt', 'gal'];
 
-export default function IngredientRow({ index, value, onChange, onRemove, allergenMatches }: Props) {
+export default function IngredientRow({ index, value, onChange, onRemove, currentRecipeId, allergenMatches, uncertain }: Props) {
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  // Inherited tags from the linked sub-recipe (when this is a `#` ingredient).
+  // Empty list when this isn't a sub-recipe link, or the sub-recipe has no
+  // analysis yet. Read-only — chefs edit the sub-recipe to change them.
+  const [inheritedAllergens, setInheritedAllergens] = useState<AllergenTag[]>([]);
+  const [inheritedKeyTags, setInheritedKeyTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!value.componentRecipeId) {
+      setInheritedAllergens([]);
+      setInheritedKeyTags([]);
+      return;
+    }
+    void getRecipe(value.componentRecipeId).then((sub) => {
+      if (cancelled || !sub) return;
+      setInheritedAllergens(sub.analysis?.allergens ?? []);
+      setInheritedKeyTags(sub.analysis?.keyIngredientTags ?? []);
+    });
+    return () => { cancelled = true; };
+  }, [value.componentRecipeId]);
+
+  // The autocomplete is open whenever the name starts with `#` AND the user
+  // hasn't already picked a recipe (componentRecipeId set). After pick, the
+  // user can re-trigger it by clearing the name back to an `@`-prefixed string.
+  const hasLinkPrefix = value.name.startsWith('@');
+  const hasPickedRecipe = Boolean(value.componentRecipeId);
+  const showAutocomplete = autocompleteOpen && hasLinkPrefix && !hasPickedRecipe;
+  const autocompleteQuery = hasLinkPrefix ? value.name.slice(1) : '';
+
   function update<K extends keyof Ingredient>(key: K, v: Ingredient[K]) {
     const next = { ...value, [key]: v };
     next.raw = `{${next.amount}|${next.unit}|${next.name}}`;
     onChange(next);
+  }
+
+  function onNameChange(nextName: string) {
+    const startsWithAt = nextName.startsWith('@');
+    // If user clears the leading `@`, also drop the componentRecipeId link.
+    const next: Ingredient = startsWithAt
+      ? { ...value, name: nextName }
+      : { ...value, name: nextName, componentRecipeId: undefined };
+    next.raw = `{${next.amount}|${next.unit}|${next.name}}`;
+    onChange(next);
+    if (startsWithAt && !value.componentRecipeId) setAutocompleteOpen(true);
+  }
+
+  function selectComponentRecipe(recipe: Recipe) {
+    const nextName = `@${recipe.title}`;
+    const next: Ingredient = {
+      ...value,
+      name: nextName,
+      componentRecipeId: recipe.id,
+      raw: `{${value.amount}|${value.unit}|${nextName}}`,
+    };
+    onChange(next);
+    setAutocompleteOpen(false);
   }
 
   const flags = allergenMatches ?? [];
@@ -58,16 +120,29 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
       ].join(' ')}
     >
       <div className="flex items-start gap-2">
-        <span className="text-sm font-semibold w-6 pt-2">{index + 1}.</span>
+        <span className="text-sm font-semibold w-6 pt-1.5">{index + 1}.</span>
         <div className="flex-1 flex flex-col gap-2 min-w-0">
-          <input
-            type="text"
-            value={value.name}
-            onChange={(e) => update('name', e.target.value)}
-            className="input"
-            aria-label="Ingredient name"
-            placeholder="Ingredient"
-          />
+          <div className="relative">
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={value.name}
+                onChange={(e) => onNameChange(e.target.value)}
+                onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
+                className="input flex-1 min-w-0 text-sm py-1"
+                aria-label="Ingredient name"
+                placeholder="Ingredient  (type @ to link another recipe)"
+              />
+            </div>
+            {showAutocomplete && (
+              <RecipeAutocomplete
+                query={autocompleteQuery}
+                excludeRecipeId={currentRecipeId}
+                onSelect={selectComponentRecipe}
+                onClose={() => setAutocompleteOpen(false)}
+              />
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
             {flags.map((tag) => (
               <span
@@ -88,6 +163,34 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
                 </button>
               </span>
             ))}
+            {/* Tags inherited from the linked sub-recipe (when `value` is a
+                #-ingredient). Same pill markup as the editable allergen flags
+                above, but READ-ONLY — no remove button, since chefs edit the
+                source sub-recipe to change them. Key-ingredient tags use the
+                neutral black-bordered pill from RecipeCard. */}
+            {inheritedAllergens.map((tag) => (
+              <span
+                key={`inh-a-${tag}`}
+                className="inline-flex items-center gap-1 rounded-full border border-red-600
+                           text-red-700 dark:text-red-300 dark:border-red-500 px-2 py-0.5 text-xs"
+                title={`Inherited from sub-recipe: ${ALLERGEN_LABEL[tag]}`}
+                data-testid={`ingredient-inherited-allergen-${tag}`}
+              >
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                {ALLERGEN_LABEL[tag]}
+              </span>
+            ))}
+            {inheritedKeyTags.map((t) => (
+              <span
+                key={`inh-t-${t}`}
+                className="inline-flex items-center rounded-full border border-slate-900 dark:border-slate-200
+                           text-slate-900 dark:text-slate-200 px-2 py-0.5 text-xs"
+                title="Inherited from sub-recipe"
+                data-testid={`ingredient-inherited-key-${t}`}
+              >
+                {t}
+              </span>
+            ))}
             {availableToAdd.length > 0 && (
               <select
                 value=""
@@ -96,7 +199,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
                   if (v) addFlag(v);
                 }}
                 className="text-xs rounded border border-slate-300 dark:border-slate-700
-                           bg-transparent text-slate-600 dark:text-slate-400 px-1 py-0.5"
+                           bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
                 aria-label="Flag an allergen on this ingredient"
               >
                 <option value="">{hasAllergens ? '+ add allergen' : '+ flag allergen'}</option>
@@ -105,6 +208,17 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
                 ))}
               </select>
             )}
+            {uncertain && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-amber-500
+                           text-amber-700 dark:text-amber-300 dark:border-amber-600 px-2 py-0.5 text-xs"
+                title="AI cannot recognise this ingredient, please chef further check the ingredient"
+                data-testid={`ingredient-uncertain-${index}`}
+              >
+                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+                AI unsure — please verify
+              </span>
+            )}
           </div>
           <div className="flex gap-2">
             <input
@@ -112,13 +226,13 @@ export default function IngredientRow({ index, value, onChange, onRemove, allerg
               step="any"
               value={value.amount}
               onChange={(e) => update('amount', Number(e.target.value))}
-              className="input flex-1"
+              className="input flex-1 text-sm py-1"
               aria-label="Amount"
             />
             <select
               value={value.unit}
               onChange={(e) => update('unit', e.target.value)}
-              className="input flex-1"
+              className="input flex-1 text-sm py-1"
               aria-label="Unit"
             >
               <optgroup label="Weight">

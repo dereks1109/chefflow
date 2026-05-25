@@ -363,6 +363,7 @@ export default function GenerateEventSheet({ open, onClose, onCreated, initialRe
                   rows={8}
                   className="input mt-1"
                   aria-label="Event description"
+                  data-testid="event-description-textarea"
                 />
                 <span className="block mt-1 text-xs text-slate-500">
                   Title, date/time, location, dishes, and dietary notes will be extracted into editable fields.
@@ -421,6 +422,7 @@ export default function GenerateEventSheet({ open, onClose, onCreated, initialRe
                   type="button"
                   onClick={() => void handleFinalise()}
                   disabled={!reviewReady || finalising}
+                  data-testid="create-event-button"
                   className="btn-primary text-sm inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Check className={`h-3.5 w-3.5 ${finalising ? 'animate-pulse' : ''}`} aria-hidden="true" />
@@ -436,6 +438,7 @@ export default function GenerateEventSheet({ open, onClose, onCreated, initialRe
                   type="button"
                   onClick={() => void handleSubmit()}
                   disabled={submitting || finalising}
+                  data-testid="generate-event-button"
                   className="btn-primary text-sm inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {tab === 'manual' ? (
@@ -518,6 +521,9 @@ function ReviewView({
           return (
             <li
               key={d.id}
+              data-testid="review-dish-row"
+              data-dish-id={d.id}
+              data-needs-attention={needsAttention ? 'true' : 'false'}
               className={[
                 'rounded-md border p-3 space-y-2',
                 needsAttention
@@ -553,6 +559,7 @@ function ReviewView({
                     <button
                       type="button"
                       onClick={() => onCreateNew(d.id)}
+                      data-testid={`review-create-new-${d.id}`}
                       className="text-xs flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
                     >
                       <Plus className="h-3 w-3" aria-hidden="true" />
@@ -561,6 +568,7 @@ function ReviewView({
                     <button
                       type="button"
                       onClick={() => onChoose(d.id, 'ready')}
+                      data-testid={`review-ready-${d.id}`}
                       className={`text-xs flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 ${
                         choice === 'ready'
                           ? 'border-accent bg-accent/10 text-accent'
@@ -573,6 +581,7 @@ function ReviewView({
                     <button
                       type="button"
                       onClick={() => onTogglePicker(d.id)}
+                      data-testid={`review-search-${d.id}`}
                       className={`text-xs flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 ${
                         isPickerOpen
                           ? 'border-accent bg-accent/10 text-accent'

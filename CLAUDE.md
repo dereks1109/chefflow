@@ -1,115 +1,62 @@
-# CLAUDE.md - ChefFlow Project Specifications
+# CLAUDE.md — 12-rule template
 
-## 📖 Project Overview
-CLAUDE (ChefFlow) is a mobile-first web application designed for professional chefs to manage kitchen operations. It transforms static recipes 
-## 🛠 Technology Stack
-- **Frontend**: React (Next.js / Vite) with Tailwind CSS.
-- **State Management**: Zustand (for global unit and portion states).
-- **Markdown Engine**: `react-markdown` with custom components for timers and ingredients.
-- **Unit Logic**: `convert-units` or `mathjs` for physical quantity calculations.
-- **Persistence**: IndexedDB (via Dexie.js) for offline kitchen use.
+These rules apply to every task in this project unless explicitly overridden.
+Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
 
-## 🎨 UI/UX Principles
-- **High Contrast**: Optimized for harsh kitchen lighting. Dark mode uses a neutral dark grey scale (base `#171717`), not pure black — the surface tokens `surface-0`/`1`/`2`/`3` in `chefflow/tailwind.config.ts` are the source of truth.
-- **Kitchen-Ready**: Large touch targets (min 44x44px) and Web Wake Lock API to keep the screen on.
-- **Mobile-First**: Primary focus on single-hand operation during active cooking.
+## Rule 1 — Think Before Coding
+State assumptions explicitly. If uncertain, ask rather than guess.
+Present multiple interpretations when ambiguity exists.
+Push back when a simpler approach exists.
+Stop when confused. Name what's unclear.
 
-## ⚖️ Unit System
-### 1. Global Unit System Toggle
-- **Options**: `Metric` (g, kg, L), `Imperial` (oz, lb, gal), or `Auto` (Original Recipe).
-- **Real-time Conversion**: Switching systems triggers immediate conversion of all measurements (e.g., 1kg ↔ 2.2lb).
-- **Normalization**: 
-  - Weight: Auto-upgrade `1000g` to `1kg`.
-  - Volume: Auto-upgrade `1000ml` to `1L`.
+## Rule 2 — Simplicity First
+Minimum code that solves the problem. Nothing speculative.
+No features beyond what was asked. No abstractions for single-use code.
+Test: would a senior engineer say this is overcomplicated? If yes, simplify.
 
-### 2. Dynamic Portion Scaling
-- **Linear Scaling**: Users can adjust the "Yield/Portion" count (e.g., 4pax to 50pax).
-- **Scaling Syntax**: Ingredients must be tagged as `{amount|unit|name}` for the parser to identify and multiply values.
-- **Lock Feature**: Allow chefs to "Lock" specific ingredients (like salt or spices) to prevent over-scaling.
+## Rule 3 — Surgical Changes
+Touch only what you must. Clean up only your own mess.
+Don't "improve" adjacent code, comments, or formatting.
+Don't refactor what isn't broken. Match existing style.
 
-### 3. Conversion Library
-- **Weight**: g, kg, oz, lb.
-- **Volume**: ml, L, tsp, tbsp, cup, fl oz, pt, qt, gal.
-- **Temperature**: Automatic conversion between Celsius (°C) and Fahrenheit (°F) for both ingredient and cooking temperatures.
+## Rule 4 — Goal-Driven Execution
+Define success criteria. Loop until verified.
+Don't follow steps. Define success and iterate.
+Strong success criteria let you loop independently.
 
-## 📝 Markdown & Data Structure
-Recipes are stored in Markdown with a structured header (Front Matter):
-```markdown
----
-recipe_id: "beef-stew-001"
-original_yield: 4
-prep_time: 30m
-cook_time: 2h
----
-# Red Wine Beef Stew
-## Ingredients
-- [ ] {800|g|Beef Chuck}
-- [ ] {2|tbsp|Tomato Paste}
-## Workflow
-1. <Timer duration="600s">Sear the beef</Timer> until browned.
-2. Deglaze the pan with wine.
-```
+## Rule 5 — Use the model only for judgment calls
+Use me for: classification, drafting, summarization, extraction.
+Do NOT use me for: routing, retries, deterministic transforms.
+If code can answer, code answers.
 
-## ⌨️ Development Commands
-- `npm run dev`: Start development server.
-- `npm run build`: Build for production (PWA).
-- `npm run lint`: Run ESLint checks.
+## Rule 6 — Token budgets are not advisory
+Per-task: 4,000 tokens. Per-session: 30,000 tokens.
+If approaching budget, summarize and start fresh.
+Surface the breach. Do not silently overrun.
 
-## 🕵️ Coding Standards
-- **Precision**: Use `Decimal.js` for financial/critical unit math to avoid floating-point errors.
-- **Parser**: Keep conversion logic in a dedicated unit engine module separate from UI components.
-- **Accessibility**: Ensure all timers have audible alerts (Web Audio API) for noisy environments.
+## Rule 7 — Surface conflicts, don't average them
+If two patterns contradict, pick one (more recent / more tested).
+Explain why. Flag the other for cleanup.
+Don't blend conflicting patterns.
 
-## 🎯 Current Focus
-1. Implement the **Unit Conversion Engine** with Metric/Imperial toggles.
-2. Develop the **Portion Scaler** that updates the ingredient list dynamically.
-3. Build the **Workflow Scheduler** that merges multiple recipe workflows into a coordinated kitchen schedule.
+## Rule 8 — Read before you write
+Before adding code, read exports, immediate callers, shared utilities.
+"Looks orthogonal" is dangerous. If unsure why code is structured a way, ask.
 
----
+## Rule 9 — Tests verify intent, not just behavior
+Tests must encode WHY behavior matters, not just WHAT it does.
+A test that can't fail when business logic changes is wrong.
 
-## 🤖 Agent Protocol — State Persistence
+## Rule 10 — Checkpoint after every significant step
+Summarize what was done, what's verified, what's left.
+Don't continue from a state you can't describe back.
+If you lose track, stop and restate.
 
-This project runs in autonomous mode with strict state-persistence. Two files cooperate, with no overlap:
+## Rule 11 — Match the codebase's conventions, even if you disagree
+Conformance > taste inside the codebase.
+If you genuinely think a convention is harmful, surface it. Don't fork silently.
 
-| File | Purpose | Owner | Lifetime |
-|---|---|---|---|
-| [ToDoList.md](ToDoList.md) | Manually-curated backlog of deferred work, future ideas, security follow-ups, recently-done log. | User-curated, agent assists. | Durable; lives in git. |
-| [TODO_PERSISTENCE.md](TODO_PERSISTENCE.md) | Live snapshot of *current-session* unfinished work. Auto-generated, auto-cleaned. | Agent-owned. | Ephemeral; must stay lean. |
-
-### Rule 1 — Session Cap Auto-Save (best-effort)
-
-When the context window approaches its cap, dump every in-flight task into `TODO_PERSISTENCE.md` *before* the conversation has to be compacted. Each entry MUST include the **exact file paths involved**, formatted like:
-
-```markdown
-- [ ] Fix drag lag while reordering long step lists — `chefflow/src/ui/components/NestedDragDropBuilder.tsx`
-- [ ] Persist workflow state to Dexie — `chefflow/src/ui/pages/Workflow.tsx`, `chefflow/src/db/eventsRepo.ts`
-```
-
-**Honesty about the limitation:** the agent does not have a direct token-usage readout it can poll from instructions alone. Dumping triggers are best-effort heuristics + explicit signals:
-
-1. **Always** dump when the user says "save state", "session ending", "stop here", "we're done for now", or similar.
-2. **Proactively** dump after a long burst of work (~30+ exchanges) or any time a meaningful piece of work would be lost on session reset.
-3. **If you want a mechanical trigger** at a specific context fill level, configure a `PreCompact` hook in `~/.claude/settings.json` — ask the agent to wire one up.
-
-### Rule 2 — Session Refresh Recovery
-
-At the start of any new session, the agent's first read MUST be `TODO_PERSISTENCE.md`. If it is non-empty:
-
-1. Print exactly: `🔄 Context Restored. Resuming work on <file path> for <task>.` — one line per pending task.
-2. Read the relevant file(s) and pull up the code snippet so work can continue without re-explanation.
-
-If `TODO_PERSISTENCE.md` is empty, proceed with the user's first prompt normally.
-
-### Rule 3 — Real-time File Clean-up
-
-The instant a task is confirmed working by the user ("works", "looks good", "ship it", etc.), immediately edit `TODO_PERSISTENCE.md` to **remove** that line and its file paths in full. The file must never accumulate done items. Confirmed work belongs in `ToDoList.md`'s "✅ Recently done" section or just `git log`, not here.
-
-### Tone
-
-Keep `TODO_PERSISTENCE.md` structured and tight. No prose, no rationale — just `- [ ] Task — path/to/file.ts` entries grouped under the three section headers (`In-flight tasks`, `Refactors pending`, `Bug states`).
-
-## State & Task Persistence Protocol (Strict)
-1. **Session Cap Auto-Save**: Monitor your context usage. When approaching the 95% limit, immediately pause and dump all unfinished feature implementations, pending bugs, and next-step to-dos into `TODO_PERSISTENCE.md` in markdown task format.
-2. **File Path Logging**: For each pending task in `TODO_PERSISTENCE.md`, you MUST explicitly log the exact file paths involved (e.g., `- [ ] Fix drag lag in src/components/RecipeBuilder.tsx`).
-3. **Session Refresh Recovery**: Upon initialization of any new session or chat refresh, your absolute first action must be to read `TODO_PERSISTENCE.md` to restore the previous engineering context and report it to the user.
-4. **Real-time Clean-up**: Every time a specific engineering sub-task is completed, you must immediately remove that entry from `TODO_PERSISTENCE.md` to save context window space.
+## Rule 12 — Fail loud
+"Completed" is wrong if anything was skipped silently.
+"Tests pass" is wrong if any were skipped.
+Default to surfacing uncertainty, not hiding it.

@@ -34,6 +34,23 @@ export function formatDateTime(iso: string | undefined): string {
   });
 }
 
+/**
+ * Time-only formatter (e.g. "18:30"). Used in tight timeline rows where
+ * the date is already implied by the event context. Returns "—" on missing
+ * or invalid input rather than the long "Not scheduled" / "Invalid date"
+ * strings so the row stays compact.
+ */
+export function formatTime(iso: string | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(LOCALE, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 export function formatTimeRange(startIso: string, endIso: string): string {
   const start = new Date(startIso);
   const end = new Date(endIso);

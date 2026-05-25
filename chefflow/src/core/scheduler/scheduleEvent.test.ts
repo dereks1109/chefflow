@@ -195,3 +195,81 @@ describe('scheduleEvent — dependency awareness', () => {
     expect(result.map((s) => s.recipeStepId)).toEqual(['b', 'a', 'c']);
   });
 });
+
+describe('scheduleEvent — portion scaling', () => {
+  it('stretches active step durations when dish portions exceed recipe originalYield', () => {
+    // Ribeye recipe authored for 2 portions; ask the scheduler to plan 20.
+    // Each active step's durationSec should be ~10× longer; passive steps
+    // (kind: passive) stay unchanged.
+    const recipes = new Map([[RIBEYE_RECIPE.id, RIBEYE_RECIPE]]);
+
+    const small: Dish = { id: 'd_small', name: 'Ribeye small', recipeId: RIBEYE_RECIPE.id, portions: 2, startAt: '2026-05-14T17:00:00.000Z' };
+    const large: Dish = { id: 'd_large', name: 'Ribeye large', recipeId: RIBEYE_RECIPE.id, portions: 20, startAt: '2026-05-14T17:00:00.000Z' };
+
+    const smallResult = scheduleEvent({ event: { ...DEMO_EVENT, dishes: [small] }, recipes });
+    const largeResult = scheduleEvent({ event: { ...DEMO_EVENT, dishes: [large] }, recipes });
+
+    const smallTotal = smallResult.reduce((sum, s) => sum + s.durationSec, 0);
+    const largeTotal = largeResult.reduce((sum, s) => sum + s.durationSec, 0);
+    // 10× scaling on active steps, passive ('rest') stays put → between 5× and 10×.
+    expect(largeTotal).toBeGreaterThan(smallTotal * 5);
+
+    // Both end at serveAt — but the LARGE one starts earlier.
+    const smallStart = new Date(smallResult[0].startAt).getTime();
+    const largeStart = new Date(largeResult[0].startAt).getTime();
+    expect(largeStart).toBeLessThan(smallStart);
+  });
+});
+
+describe('scheduleEvent — sub-recipe expansion', () => {
+  it("merges a referenced sub-recipe's steps before the parent's steps", () => {
+    const sauce: Recipe = {
+      id: 'r_sauce',
+      title: 'Pepper Sauce',
+      originalYield: 4,
+      ingredients: [],
+      steps: [
+        { id: 'sauce1', text: 'Sweat shallot', kind: 'active', thermalClass: 'normal', allergenClass: 'allergen-free', dependsOn: [], phase: 'prep', durationSec: 120 },
+        { id: 'sauce2', text: 'Reduce', kind: 'passive', thermalClass: 'normal', allergenClass: 'allergen-free', dependsOn: ['sauce1'], phase: 'cook', durationSec: 300 },
+      ],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const parent: Recipe = {
+      id: 'r_steak',
+      title: 'Steak',
+      originalYield: 2,
+      ingredients: [
+        { id: 'ing_sauce', raw: '{80|ml|Pepper Sauce}', amount: 80, unit: 'ml', name: 'Pepper Sauce', isLocked: false, componentRecipeId: 'r_sauce' },
+      ],
+      steps: [
+        { id: 'sear', text: 'Sear steak', kind: 'active', thermalClass: 'normal', allergenClass: 'allergen-free', dependsOn: [], phase: 'cook', durationSec: 180 },
+      ],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const recipes = new Map<string, Recipe>([
+      ['r_steak', parent],
+      ['r_sauce', sauce],
+    ]);
+    const dish: Dish = { id: 'd_steak', name: 'Steak', recipeId: 'r_steak', portions: 1, startAt: '2026-05-14T17:00:00.000Z' };
+    const event: KitchenEvent = { ...DEMO_EVENT, dishes: [dish] };
+    const result = scheduleEvent({ event, recipes });
+
+    // Two sauce steps + one parent step.
+    expect(result).toHaveLength(3);
+    const ids = result.map((s) => s.recipeStepId);
+    expect(ids).toContain('r_sauce::sauce1');
+    expect(ids).toContain('r_sauce::sauce2');
+    expect(ids).toContain('sear');
+    // Sub-recipe internal dep is preserved: sauce1 starts before sauce2.
+    const sauce1Idx = ids.indexOf('r_sauce::sauce1');
+    const sauce2Idx = ids.indexOf('r_sauce::sauce2');
+    expect(sauce1Idx).toBeLessThan(sauce2Idx);
+    // The final step ends at serveAt (steps reverse-anchor to deadline).
+    expect(result[result.length - 1].endAt).toBe(DEMO_EVENT.serveAt);
+    // dependsOnStepIds round-trip with the dish-prefix that scheduleDish adds.
+    const sauce2Step = result.find((s) => s.recipeStepId === 'r_sauce::sauce2')!;
+    expect(sauce2Step.dependsOnStepIds).toEqual(['d_steak:r_sauce::sauce1']);
+  });
+});

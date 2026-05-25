@@ -86,8 +86,8 @@ describe('Workflow page', () => {
     // both straight from the recipe text. The old placeholder used phrases
     // like "Phase 4 — Final toss & plate" instead.
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/Rest steaks 5 minutes/)).toBeInTheDocument();
-      expect(screen.getByDisplayValue(/Toss leaves, tomatoes, and cucumber/)).toBeInTheDocument();
+      expect(screen.getByText(/Rest steaks 5 minutes/)).toBeInTheDocument();
+      expect(screen.getByText(/Toss leaves, tomatoes, and cucumber/)).toBeInTheDocument();
     });
   });
 
@@ -195,7 +195,7 @@ describe('Workflow page — chef filter', () => {
     });
   });
 
-  it('filtering to a color shows only that chef\'s steps in a read-only list', async () => {
+  it("filtering to a color shows only that chef's steps in the unified phase-grouped view", async () => {
     await db.events.put({
       ...DEMO_EVENT,
       dishes: [
@@ -209,14 +209,38 @@ describe('Workflow page — chef filter', () => {
     await waitFor(() => screen.getByRole('tab', { name: /Green/ }));
     await userEvent.click(screen.getByRole('tab', { name: /Green/ }));
 
-    // Filtered view shows the Green tasks heading + all ribeye step text…
+    // Filtered view renders Ribeye step text (Green) and hides Salad text (Blue).
     await waitFor(() => {
-      expect(screen.getByText(/Green tasks/i)).toBeInTheDocument();
+      // The interactive list AND the hidden print-checklist both contain
+      // this text — `getAllByText` accepts both; presence is what matters.
+      expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
     });
-    expect(screen.getByText(/Pat steaks dry/)).toBeInTheDocument();
-    // …and NONE of the salad step text (Blue's).
     expect(screen.queryByText(/Wash salad leaves/)).toBeNull();
   });
+});
+
+describe('Workflow page — local-scheduler fallback', () => {
+  it('falls back to the local scheduler when the LLM call rejects', async () => {
+    await db.events.put(DEMO_EVENT);
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    // Override the global fetch stub set in beforeEach with a 500 so
+    // scheduleEventLLM throws — runLlm should then call scheduleEvent.
+    vi.unstubAllGlobals();
+    vi.stubGlobal('fetch', vi.fn(() =>
+      Promise.resolve(new Response('Internal error', { status: 500 })),
+    ));
+
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    // Local scheduler produces step text verbatim from RIBEYE_RECIPE / SALAD_RECIPE,
+    // so the same "Rest" / "Toss" probes used elsewhere prove the fallback ran.
+    await waitFor(() => {
+      expect(screen.getByText(/Rest steaks 5 minutes/)).toBeInTheDocument();
+      expect(screen.getByText(/Toss leaves, tomatoes, and cucumber/)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Fallback timeline/i)).toBeInTheDocument();
+  });
+
 });
 
 describe('Workflow page — persistence', () => {
@@ -250,7 +274,7 @@ describe('Workflow page — persistence', () => {
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/CUSTOM SAVED STEP/)).toBeInTheDocument();
+      expect(screen.getByText(/CUSTOM SAVED STEP/)).toBeInTheDocument();
     });
   });
 
@@ -316,7 +340,7 @@ describe('Workflow page — persistence', () => {
     renderWorkflowAt(DEMO_EVENT.id);
 
     await waitFor(() => {
-      expect(screen.getByDisplayValue(/OLD SAVED STEP/)).toBeInTheDocument();
+      expect(screen.getByText(/OLD SAVED STEP/)).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByRole('button', { name: /regenerate/i }));
@@ -330,7 +354,9 @@ describe('Workflow page — persistence', () => {
     // After regeneration, the algorithm output should mount (real recipe text).
     await waitFor(
       () => {
-        expect(screen.getByDisplayValue(/Pat steaks dry/)).toBeInTheDocument();
+        // The interactive list AND the hidden print-checklist both contain
+      // this text — `getAllByText` accepts both; presence is what matters.
+      expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
       },
       { timeout: 3000 },
     );

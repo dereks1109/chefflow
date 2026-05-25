@@ -50,6 +50,11 @@ function normalizeScaled(amount: number, unit: string, system: UnitSystem): Meas
 
 function scaleIngredient(i: Ingredient, ratio: number, system: UnitSystem): Ingredient {
   if (i.isLocked) return i;
+  // Sub-recipe references carry a literal quantity that the user set on the
+  // parent recipe (e.g. "80 ml of the sauce"). Scaling the parent should
+  // NOT silently change that — the user can re-edit the value if they want
+  // more sauce. This matches the user's choice in the plan.
+  if (i.componentRecipeId) return i;
   const scaledAmount = new Decimal(i.amount).mul(ratio).toNumber();
   const targetUnit = chooseTargetUnit(i.unit, system);
   const converted = convertUnit(scaledAmount, i.unit, targetUnit);

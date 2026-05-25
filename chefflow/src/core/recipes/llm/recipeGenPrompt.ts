@@ -132,7 +132,8 @@ JSON SCHEMA:
   "caloriesPerPortion": <integer kcal — optional>,
   "caloriesTotal": <integer kcal — optional>,
   "keyIngredientTags": [<string array — 2 to 6 lowercase headline-ingredient tags>],
-  "allergens": [<closed-set tag array — see ALLERGEN TAGS below>]
+  "allergens": [<closed-set tag array — see ALLERGEN TAGS below>],
+  "uncertainIngredients": [<lowercase ingredient-name array — ingredients you cannot confidently classify; safer to flag than to silently skip>]
 }
 
 CALORIE RULE:
@@ -152,6 +153,13 @@ ALLERGEN RULE:
 - Return ONLY tag keys from the list above.
 - If a recipe contains no declarable allergens, return [].
 - Tag conservatively: if an ingredient typically contains an allergen, include it.
+
+UNCERTAIN RULE:
+- If you cannot confidently say whether a specific ingredient contains any UK-14 allergen — common cases: brand-specific products ("house chilli paste", "Acme XO sauce"), fusion/regional staples you have not seen before, vague descriptors ("seasonal greens"), or anything obscure — list that ingredient's EXACT lowercase name in "uncertainIngredients".
+- Do NOT also add it to "allergens" — uncertain ingredients are the chef's responsibility to verify.
+- "uncertainIngredients" is for AI uncertainty ONLY, never for ingredients that you are confident about.
+- Use the ingredient name verbatim from the recipe (lowercase). Do NOT paraphrase. Example: if the recipe lists "House Chilli Paste", emit "house chilli paste".
+- If you are confident about every ingredient, return [] (or omit the field).
 
 Return ONLY the JSON object.`;
 }

@@ -1,4 +1,5 @@
 import type { MultimodalPart } from '../scheduler/llm/groqClient';
+import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 
 export type ProxyEndpoint = 'generate' | 'analyze' | 'photo' | 'workflow';
 
@@ -37,7 +38,7 @@ export async function proxyComplete(input: ProxyCompletionInput): Promise<string
   if (!token) throw new ProxyClientError('Not signed in', 401);
 
   const fetchImpl = input.fetchImpl ?? globalThis.fetch;
-  const origin = (input.origin ?? '').replace(/\/+$/, '');
+  const origin = (input.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
   const url = `${origin}/api/llm/${input.endpoint}`;
 
   const body: Record<string, unknown> = { systemPrompt: input.systemPrompt };

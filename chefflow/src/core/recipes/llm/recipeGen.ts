@@ -19,6 +19,7 @@
 import type { Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../types';
 import { randomId } from '../../util/id';
 import { complete } from '../../llm/llmClient';
+import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import { GroqClientError } from '../../scheduler/llm/groqClient';
 import {
   buildRecipeGenSystemPrompt,
@@ -118,11 +119,24 @@ export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAn
     throw new LlmRecipeValidationError(`LLM did not return valid JSON: ${message}`, 'root');
   }
   const llmAnalysis = parseLlmAnalysis(parsed);
+  // Filter uncertainIngredients to names that actually exist in the recipe
+  // — defensive against LLM hallucination (e.g. it invents a name that
+  // looks like the user's ingredient but isn't a real match). Comparison is
+  // lowercase + trimmed to handle minor casing differences from the model.
+  const recipeNameSet = new Set(
+    input.recipe.ingredients
+      .map((i) => i.name?.trim().toLowerCase())
+      .filter((n): n is string => Boolean(n)),
+  );
+  const uncertainIngredients = (llmAnalysis.uncertainIngredients ?? []).filter((n) =>
+    recipeNameSet.has(n),
+  );
   return {
     caloriesPerPortion: llmAnalysis.caloriesPerPortion,
     caloriesTotal: llmAnalysis.caloriesTotal,
     keyIngredientTags: llmAnalysis.keyIngredientTags,
     allergens: llmAnalysis.allergens,
+    ...(uncertainIngredients.length > 0 ? { uncertainIngredients } : {}),
     analyzedAt: Date.now(),
     source: 'llm-text',
   };
@@ -168,28 +182,6 @@ function parseJsonAndValidate(rawJson: string): LlmRecipe {
     throw new LlmRecipeValidationError(`LLM did not return valid JSON: ${message}`, 'root');
   }
   return parseLlmRecipe(parsed);
-}
-
-// Vision models (and chatty text models when JSON mode is off) sometimes
-// preface the JSON with prose ("Sure, here is the recipe:") or wrap it in
-// markdown fences. Both cases break JSON.parse. Strip fences first, then
-// extract the outermost {...} substring as a last resort.
-function stripMarkdownFences(s: string): string {
-  let trimmed = s.trim();
-  if (trimmed.startsWith('```')) {
-    trimmed = trimmed
-      .replace(/^```(?:json)?\s*/i, '')
-      .replace(/```$/, '')
-      .trim();
-  }
-  if (!trimmed.startsWith('{')) {
-    const first = trimmed.indexOf('{');
-    const last = trimmed.lastIndexOf('}');
-    if (first >= 0 && last > first) {
-      trimmed = trimmed.slice(first, last + 1);
-    }
-  }
-  return trimmed;
 }
 
 // ---------------------------------------------------------------------------

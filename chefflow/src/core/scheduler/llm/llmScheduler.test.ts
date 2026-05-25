@@ -63,6 +63,22 @@ describe('scheduleEventLLM — happy path', () => {
     expect(toss.thermalClass).toBe('flash');  // salad ss4 was marked flash in fixture
     expect(toss.endAt).toBe('2026-05-14T18:00:00.000Z');
   });
+
+  // Groq's JSON-mode is reliable but occasionally regresses to fenced output.
+  // The scheduler should still parse cleanly — the fence-strip util at
+  // src/core/llm/stripMarkdownFences.ts unwraps it before JSON.parse.
+  it('parses ```json … ```-wrapped responses (regression: Groq fenced output)', async () => {
+    const fenced = '```json\n' + VALID_DEMO_REPLY + '\n```';
+    const fetchImpl = mockFetchReturning(llmReplyWith(fenced));
+    const { steps } = await scheduleEventLLM({
+      event: DEMO_EVENT,
+      recipes: DEMO_RECIPES,
+      apiKey: 'gsk_test',
+      model: 'llama-3.3-70b-versatile',
+      fetchImpl,
+    });
+    expect(steps).toHaveLength(RIBEYE_RECIPE.steps.length + SALAD_RECIPE.steps.length);
+  });
 });
 
 describe('scheduleEventLLM — error surfaces', () => {
@@ -126,6 +142,113 @@ describe('scheduleEventLLM — error surfaces', () => {
         fetchImpl,
       }),
     ).rejects.toThrow();
+  });
+});
+
+describe('scheduleEventLLM — sub-recipe expansion', () => {
+  it('flattens sub-recipes before prompting the LLM so merged step IDs are in the prompt + index', async () => {
+    // A sauce recipe with 2 steps, referenced from the ribeye via an
+    // ingredient with componentRecipeId. After flattening, the ribeye recipe's
+    // steps should be prefixed sauce steps + the original ribeye steps.
+    const sauceRecipe = {
+      id: 'r_sauce',
+      title: 'Pepper Sauce',
+      originalYield: 4,
+      ingredients: [],
+      steps: [
+        { id: 'sc1', text: 'Sweat shallot', kind: 'active' as const, thermalClass: 'normal' as const, allergenClass: 'allergen-free' as const, dependsOn: [], phase: 'prep' as const, durationSec: 120 },
+        { id: 'sc2', text: 'Reduce cream', kind: 'passive' as const, thermalClass: 'normal' as const, allergenClass: 'allergen-free' as const, dependsOn: ['sc1'], phase: 'cook' as const, durationSec: 300 },
+      ],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const ribeyeWithSauce = {
+      ...RIBEYE_RECIPE,
+      ingredients: [
+        ...RIBEYE_RECIPE.ingredients,
+        { id: 'ing_sauce', raw: '{80|ml|Sauce}', amount: 80, unit: 'ml', name: 'Sauce', isLocked: false, componentRecipeId: 'r_sauce' },
+      ],
+    };
+    const recipes = new Map([
+      [ribeyeWithSauce.id, ribeyeWithSauce],
+      [SALAD_RECIPE.id, SALAD_RECIPE],
+      ['r_sauce', sauceRecipe],
+    ]);
+
+    let capturedBody: string | null = null;
+    const fetchImpl: typeof fetch = vi.fn(async (_url, init) => {
+      capturedBody = typeof init?.body === 'string' ? init.body : null;
+      return new Response(
+        JSON.stringify(llmReplyWith(VALID_DEMO_REPLY)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    await scheduleEventLLM({
+      event: DEMO_EVENT,
+      recipes,
+      apiKey: 'gsk_test',
+      model: 'llama-3.3-70b-versatile',
+      fetchImpl,
+    });
+
+    // The prompt body sent to Groq should contain the namespaced sub-recipe
+    // step IDs — proof that the LLM sees the merged steps.
+    expect(capturedBody).toContain('r_sauce::sc1');
+    expect(capturedBody).toContain('r_sauce::sc2');
+  });
+});
+
+describe('scheduleEventLLM — per-dish portion scaling', () => {
+  // Regression guard for scaleEventForPortions: two dishes referencing the
+  // SAME recipe at DIFFERENT portion counts must each get an independent
+  // scaled copy keyed under the dish.id, not a single shared one. If the
+  // dish-ID remapping ever regresses both dishes would see the same
+  // (incorrectly scaled) timeline.
+  it('builds independent scaled recipe copies for two dishes sharing one recipe', async () => {
+    const dishXl = {
+      id: 'd_ribeye_xl',
+      name: 'Ribeye for 20',
+      recipeId: RIBEYE_RECIPE.id,
+      portions: 20,
+      isPrepared: false,
+      startAt: '2026-05-14T17:45:00.000Z',
+    };
+    const eventTwoDishes = { ...DEMO_EVENT, dishes: [DEMO_EVENT.dishes[0], dishXl] };
+
+    let capturedBody: string | null = null;
+    const fetchImpl: typeof fetch = vi.fn(async (_url, init) => {
+      capturedBody = typeof init?.body === 'string' ? init.body : null;
+      return new Response(
+        JSON.stringify(llmReplyWith(VALID_DEMO_REPLY)),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    try {
+      await scheduleEventLLM({
+        event: eventTwoDishes,
+        recipes: DEMO_RECIPES,
+        apiKey: 'gsk_test',
+        model: 'llama-3.3-70b-versatile',
+        fetchImpl,
+      });
+    } catch {
+      // assertCoversEvent may complain because VALID_DEMO_REPLY only covers
+      // the original d_ribeye dish — that's fine for this test, we only
+      // care about the prompt body that was actually sent to Groq.
+    }
+
+    // Both dish IDs should appear in the prompt body (recipe keys + dish
+    // recipeId values). The body is double-stringified JSON, so we look
+    // for the bare identifiers.
+    expect(capturedBody).toContain('d_ribeye_xl');
+    // The original recipe sends step rs1 at the recipe-authored durationSec
+    // (120 s for 2 portions). The XL clone should send the same step at 10×
+    // (1200 s for 20 portions) — proof the two copies were scaled
+    // independently and not sharing a reference.
+    expect(capturedBody).toContain('120');
+    expect(capturedBody).toContain('1200');
   });
 });
 

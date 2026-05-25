@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CalendarPlus, Sparkles } from 'lucide-react';
+import { CalendarPlus, Plus, Sparkles } from 'lucide-react';
 import EventCard from '../components/EventCard';
 import GenerateEventSheet, { type ResumeReview } from '../components/GenerateEventSheet';
-import { listEvents, saveEvent, deleteEvent } from '../../db/eventsRepo';
+import { listEvents, saveEvent, deleteEvent, subscribeEvents } from '../../db/eventsRepo';
 import { listRecipes } from '../../db/recipesRepo';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
+import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
+import { useAuthGate } from '../../state/useAuthGate';
 import type { KitchenEvent } from '../../core/types';
 
 export default function EventsLibrary() {
+  const requireAuth = useAuthGate();
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   // Populated when the chef returns from the recipe editor mid-review.
@@ -17,9 +21,9 @@ export default function EventsLibrary() {
   const [resumeReview, setResumeReview] = useState<ResumeReview | undefined>(undefined);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    listEvents().then(setEvents);
-  }, []);
+  // Live subscription — re-renders the moment the D1 sync engine commits
+  // new rows into Dexie post-login (no nav round-trip needed).
+  useEffect(() => subscribeEvents(setEvents), []);
 
   // Pick up any pending review draft once on mount.
   useEffect(() => {
@@ -40,6 +44,15 @@ export default function EventsLibrary() {
   }
 
   async function handleCreated(fresh: KitchenEvent) {
+    try {
+      await consumeDailyQuota({ kind: 'event' });
+    } catch (err) {
+      if (err instanceof QuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('event');
+        return;
+      }
+      throw err;
+    }
     await saveEvent(fresh);
     setSheetOpen(false);
     setResumeReview(undefined);
@@ -68,7 +81,7 @@ export default function EventsLibrary() {
           </p>
           <button
             type="button"
-            onClick={() => setSheetOpen(true)}
+            onClick={() => requireAuth(() => setSheetOpen(true))}
             className="btn-primary mt-6 inline-flex items-center gap-2"
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
@@ -91,16 +104,16 @@ export default function EventsLibrary() {
         <h1 className="text-2xl font-bold">Events</h1>
         <button
           type="button"
-          onClick={() => setSheetOpen(true)}
+          onClick={() => requireAuth(() => setSheetOpen(true))}
           className="btn-primary inline-flex items-center gap-2"
         >
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
           New event
         </button>
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {events.map((e) => (
-          <li key={e.id}>
+          <li key={e.id} className="h-full">
             <EventCard event={e} onDelete={handleDelete} />
           </li>
         ))}

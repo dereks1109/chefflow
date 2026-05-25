@@ -7,6 +7,8 @@ import type {
 } from '../types';
 import { estimateDuration, durationWasGiven } from './duration';
 import { topologicalSort, isAllergen } from './rules';
+import { flattenSubRecipes } from '../recipes/flattenSubRecipes';
+import { scaleStepDurations } from './scaleStepDurations';
 
 // ===========================================================================
 // scheduleEvent — pure-function entry point for Plan 3 Task A.
@@ -104,10 +106,20 @@ function scheduleDish(
     return [preparedDishStep(dish, serveAt, opts)];
   }
 
-  const recipe = recipes.get(dish.recipeId);
-  if (!recipe) {
+  const baseRecipe = recipes.get(dish.recipeId);
+  if (!baseRecipe) {
     return [missingRecipeStep(dish, serveAt, opts)];
   }
+  // Expand `componentRecipeId` ingredients: prepend the referenced recipes'
+  // steps onto this recipe so they're scheduled before the parent's steps.
+  // Each sub-recipe step's id is namespaced and carries a `sourceRecipeId`.
+  const flat = flattenSubRecipes(baseRecipe, recipes);
+  // Stretch active step durations for larger portion counts (e.g. searing
+  // 20 steaks takes much longer than 2). Sub-recipe steps (sourceRecipeId
+  // set) pass through unscaled — sub-recipe quantities are literal.
+  const denominator = flat.originalYield > 0 ? flat.originalYield : 1;
+  const ratio = dish.portions / denominator;
+  const recipe = { ...flat, steps: scaleStepDurations(flat.steps, ratio) };
 
   const { sorted, cycleNodeIds } = topologicalSort(recipe.steps);
   const cycleWarning = cycleNodeIds.length > 0
@@ -218,12 +230,18 @@ function makeScheduledStep(args: {
   rulesApplied: number[];
 }): ScheduledStep {
   const { dish, recipeId, step, startMs, endMs, durationSec, warnings, rulesApplied } = args;
+  // Sub-recipe steps (merged in by flattenSubRecipes) get a breadcrumb label
+  // so chefs see which sub-recipe a merged step belongs to:
+  //   "(Demo) Ribeye > (Demo) Black Pepper Sauce"
+  const dishLabel = step.sourceRecipeTitle
+    ? `${dish.name} > ${step.sourceRecipeTitle}`
+    : dish.name;
   return {
     id: `${dish.id}:${step.id}`,
     dishId: dish.id,
     recipeId,
     recipeStepId: step.id,
-    dishLabel: dish.name,
+    dishLabel,
     text: step.text,
     startAt: new Date(startMs).toISOString(),
     endAt: new Date(endMs).toISOString(),

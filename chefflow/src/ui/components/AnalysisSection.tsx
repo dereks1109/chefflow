@@ -1,13 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { AlertTriangle, Plus, Sparkles, X } from 'lucide-react';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
-import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
+import { useProfileStore } from '../../state/useProfileStore';
+import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES, findIngredientsForAllergen } from '../../core/recipes/llm/allergens';
 import { analyzeRecipe } from '../../core/recipes/llm/recipeGen';
-import type { AllergenTag, Recipe, RecipeAnalysis } from '../../core/types';
+import { addEntry as addAuditEntry, markSynced as markAuditSynced } from '../../db/allergenAuditsRepo';
+import { pushAllergenAudit } from '../../core/audit/allergenAuditClient';
+import { getRecipe } from '../../db/recipesRepo';
+import { randomId } from '../../core/util/id';
+import AllergenRemovalModal from './AllergenRemovalModal';
+import type { AllergenTag, AllergenRemovalReason, Recipe, RecipeAnalysis } from '../../core/types';
 
 interface Props {
   recipe: Recipe;
   onChange: (analysis: RecipeAnalysis) => void;
+  /** Notify parent after an allergen-removal audit entry persists so the
+   *  per-recipe history view can refetch. */
+  onAllergenAudit?: () => void;
 }
 
 type Status =
@@ -21,9 +31,11 @@ type Status =
 // ingredient list; every field is editable afterwards so the chef has the
 // final say. Tags + allergens are reflected as removable pills.
 // ---------------------------------------------------------------------------
-export default function AnalysisSection({ recipe, onChange }: Props) {
+export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: Props) {
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
   const model = useLlmSettingsStore((s) => s.model);
+  const profileDisplayName = useProfileStore((s) => s.displayName);
+  const { user } = useUser();
   // See Workflow.tsx comment — proxy mode skips the Groq-key gate.
   const isProxyMode = (import.meta.env.VITE_LLM_MODE as string | undefined) === 'proxy';
   const envApiKey = ((import.meta.env.VITE_GROQ_API_KEY as string | undefined) ?? '').trim();
@@ -32,6 +44,7 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
 
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [newTagDraft, setNewTagDraft] = useState('');
+  const [pendingRemovalTag, setPendingRemovalTag] = useState<AllergenTag | null>(null);
 
   const analysis: RecipeAnalysis = recipe.analysis ?? {};
   const tags = analysis.keyIngredientTags ?? [];
@@ -100,8 +113,44 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
     patch({ keyIngredientTags: tags.filter((t) => t !== tag) });
   }
 
-  function removeAllergen(tag: AllergenTag) {
+  function requestRemoveAllergen(tag: AllergenTag) {
+    // Safety-critical: do NOT patch immediately. Open the removal modal so
+    // the chef has to confirm reason + cooldown before the tag is stripped.
+    setPendingRemovalTag(tag);
+  }
+
+  async function confirmRemoveAllergen(reasons: AllergenRemovalReason[], otherText?: string) {
+    const tag = pendingRemovalTag;
+    if (!tag) return;
+    // Write the audit FIRST — Rule 12 (fail loud). If Dexie throws we abort
+    // the patch so we never lose the safety signal without a recorded reason.
+    const entry = {
+      id: randomId(),
+      recipeId: recipe.id,
+      recipeTitleAtTime: recipe.title,
+      removedTag: tag,
+      reasons,
+      otherText,
+      ingredientsAtTime: findIngredientsForAllergen(recipe, tag),
+      removedAt: Date.now(),
+      userClerkId: user?.id,
+      userDisplayName: profileDisplayName?.trim() || user?.fullName || undefined,
+    };
+    try {
+      await addAuditEntry(entry);
+    } catch {
+      setStatus({ kind: 'error', message: 'Could not record audit entry — allergen tag was NOT removed.' });
+      setPendingRemovalTag(null);
+      return;
+    }
     patch({ allergens: allergens.filter((a) => a !== tag) });
+    setPendingRemovalTag(null);
+    onAllergenAudit?.();
+    // Best-effort sync to the central log — never blocks the user flow.
+    // Anonymous removals (no userClerkId) skip the push entirely.
+    void pushAllergenAudit(entry).then((ok) => {
+      if (ok) void markAuditSynced(entry.id);
+    });
   }
 
   const isAllergenPreview = (() => {
@@ -111,6 +160,7 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
   })();
 
   return (
+    <>
     <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
       <div className="flex items-center justify-between gap-2 mb-3">
         <legend className="text-sm font-medium px-1">Analysis</legend>
@@ -178,7 +228,7 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
             <EditablePill
               key={`allergen-${a}`}
               variant="allergen"
-              onRemove={() => removeAllergen(a)}
+              onRemove={() => requestRemoveAllergen(a)}
               ariaLabel={`Remove allergen ${ALLERGEN_LABEL[a]}`}
               title={`${ALLERGEN_LABEL[a]} — ${ALLERGEN_EXAMPLES[a]}`}
             >
@@ -196,6 +246,11 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
               {t}
             </EditablePill>
           ))}
+          {/* Read-only chips lifted from each `#`-linked sub-recipe's own
+              analysis. Same visual as the editable allergen/key pills, but
+              no remove X (chef edits the SOURCE sub-recipe to change them).
+              Hover/focus the chip → title attribute names the source. */}
+          <SubRecipeInheritedChips recipe={recipe} />
         </div>
         <div className="flex gap-2 mt-2">
           <input
@@ -233,7 +288,16 @@ export default function AnalysisSection({ recipe, onChange }: Props) {
           )}
         </p>
       </div>
+
     </fieldset>
+    <AllergenRemovalModal
+      open={pendingRemovalTag !== null}
+      allergenLabel={pendingRemovalTag ? ALLERGEN_LABEL[pendingRemovalTag] : ''}
+      ingredientsAtTime={pendingRemovalTag ? findIngredientsForAllergen(recipe, pendingRemovalTag) : []}
+      onCancel={() => setPendingRemovalTag(null)}
+      onConfirm={(reasons, otherText) => void confirmRemoveAllergen(reasons, otherText)}
+    />
+    </>
   );
 }
 
@@ -282,4 +346,92 @@ function friendlyError(err: unknown): string {
     return m;
   }
   return String(err);
+}
+
+// ---------------------------------------------------------------------------
+// SubRecipeInheritedChips — read-only chips lifted from each `#`-linked
+// sub-recipe's analysis. Rendered INLINE in the parent's Tags row alongside
+// the editable allergen + key-ingredient pills. Visual is the same red /
+// black pill shape so the row reads as one cohesive list; the absence of
+// the remove X is the only signal that these came from a sub-recipe.
+// `title` attribute names the source so hover/long-press surfaces it.
+//
+// We don't dedup against the parent's own tags — both can coexist (e.g.
+// "Milk" appearing twice because both this recipe and the sauce contribute).
+// The chef can spot duplicates visually; hiding them would mask provenance.
+// ---------------------------------------------------------------------------
+interface InheritedChip {
+  /** Stable key for React. */
+  id: string;
+  kind: 'allergen' | 'key';
+  /** For allergens, the kebab tag (e.g. 'milk'); for keys, the lowercase string. */
+  value: string;
+  /** Source sub-recipe title — for the title attribute. */
+  source: string;
+}
+
+function SubRecipeInheritedChips({ recipe }: { recipe: Recipe }) {
+  const [chips, setChips] = useState<InheritedChip[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const ing of recipe.ingredients) {
+      if (!ing.componentRecipeId) continue;
+      if (seen.has(ing.componentRecipeId)) continue;
+      seen.add(ing.componentRecipeId);
+      ids.push(ing.componentRecipeId);
+    }
+    if (ids.length === 0) {
+      setChips([]);
+      return;
+    }
+    void Promise.all(ids.map((id) => getRecipe(id))).then((subs) => {
+      if (cancelled) return;
+      const next: InheritedChip[] = [];
+      for (const sub of subs) {
+        if (!sub) continue;
+        const title = sub.title || 'Untitled sub-recipe';
+        for (const a of sub.analysis?.allergens ?? []) {
+          next.push({ id: `${sub.id}-a-${a}`, kind: 'allergen', value: a, source: title });
+        }
+        for (const t of sub.analysis?.keyIngredientTags ?? []) {
+          next.push({ id: `${sub.id}-t-${t}`, kind: 'key', value: t, source: title });
+        }
+      }
+      setChips(next);
+    });
+    return () => { cancelled = true; };
+  }, [recipe.ingredients]);
+
+  if (chips.length === 0) return null;
+  return (
+    <>
+      {chips.map((c) =>
+        c.kind === 'allergen' ? (
+          <span
+            key={c.id}
+            className="inline-flex items-center gap-1 rounded-full border border-red-600
+                       text-red-700 dark:text-red-300 dark:border-red-500 px-2 py-0.5 text-xs"
+            title={`Inherited from ${c.source}`}
+            data-testid={`analysis-inherited-allergen-${c.value}`}
+          >
+            <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+            {ALLERGEN_LABEL[c.value as AllergenTag] ?? c.value}
+          </span>
+        ) : (
+          <span
+            key={c.id}
+            className="inline-flex items-center rounded-full border border-slate-900 dark:border-slate-200
+                       text-slate-900 dark:text-slate-200 px-2 py-0.5 text-xs"
+            title={`Inherited from ${c.source}`}
+            data-testid={`analysis-inherited-key-${c.value}`}
+          >
+            {c.value}
+          </span>
+        ),
+      )}
+    </>
+  );
 }

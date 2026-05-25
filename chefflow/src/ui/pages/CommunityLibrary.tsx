@@ -1,0 +1,72 @@
+import { useEffect, useState } from 'react';
+import { Globe2 } from 'lucide-react';
+import CommunityRecipeCard from '../components/CommunityRecipeCard';
+import {
+  listCommunityRecipes,
+  type CommunityRecipeSummary,
+} from '../../core/community/communityClient';
+
+type LoadState =
+  | { kind: 'loading' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; items: CommunityRecipeSummary[] };
+
+export default function CommunityLibrary() {
+  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    listCommunityRecipes()
+      .then((items) => {
+        if (!cancelled) setState({ kind: 'ready', items });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Failed to load community recipes';
+        setState({ kind: 'error', message });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (state.kind === 'loading') {
+    return <div className="p-6 text-slate-500">Loading community…</div>;
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <section className="p-6 max-w-md mx-auto text-center">
+        <h1 className="text-xl font-bold">Community</h1>
+        <p className="mt-2 text-rose-600 dark:text-rose-400" role="alert">{state.message}</p>
+      </section>
+    );
+  }
+
+  if (state.items.length === 0) {
+    return (
+      <section className="p-6 text-center max-w-md mx-auto">
+        <Globe2 className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600" aria-hidden="true" />
+        <h1 className="text-2xl font-bold mt-4">Community</h1>
+        <p className="mt-2 text-slate-600 dark:text-slate-400">
+          No shared recipes yet. Publish one of yours from the recipe editor.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="p-4 md:p-6 max-w-5xl mx-auto">
+      <header className="flex items-center justify-between mb-6 gap-2">
+        <h1 className="text-2xl font-bold">Community</h1>
+      </header>
+      <ul className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+        {state.items.map((r) => (
+          <li key={r.id} className="h-full">
+            <CommunityRecipeCard recipe={r} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

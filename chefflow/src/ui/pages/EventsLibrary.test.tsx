@@ -53,8 +53,11 @@ describe('EventsLibrary', () => {
       renderPage();
       await waitFor(() => screen.getByText('Sunday Dinner'));
       await userEvent.click(screen.getByRole('button', { name: /delete event sunday dinner/i }));
+      // Soft-delete: tombstone retained for sync. Check via listEvents, which
+      // filters them out.
+      const { listEvents } = await import('../../db/eventsRepo');
       await waitFor(async () => {
-        expect(await db.events.count()).toBe(0);
+        expect((await listEvents()).length).toBe(0);
       });
     } finally {
       window.confirm = originalConfirm;

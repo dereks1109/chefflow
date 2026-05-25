@@ -31,7 +31,9 @@ JSON SCHEMA:
   "issues": [
     { "severity": "warning" | "blocker", "message": "string" }
   ],
-  "suggestions": [ "string" ]
+  "suggestions": [
+    { "category": "allergy" | "budget" | "other", "text": "string" }
+  ]
 }
 
 VERDICT RULES:
@@ -46,8 +48,14 @@ ISSUE RULES:
 - Be specific: name the dietary group AND the dishes that conflict.
 
 SUGGESTION RULES:
-- Each suggestion is ONE concrete actionable change (add a vegan main, swap soy sauce for tamari, etc.).
-- Maximum 3 suggestions. One short sentence each.
+- Return EXACTLY 5 suggestions — not more, not fewer.
+- Each suggestion is ONE concrete actionable change, one short sentence.
+- Each suggestion carries a "category" tag:
+  - "allergy" — anything driven by the declared allergies / dietary restrictions (add a vegan main, remove peanut garnish, label nut-free options, etc.).
+  - "budget" — anything driven by the event's food budget (swap an ingredient for a cheaper cut, reduce portion size, drop a high-cost garnish, etc.).
+  - "other" — general improvements (presentation, service flow, beverage pairing, leftover handling, etc.).
+- Aim for coverage across all 3 categories where possible. If allergy or budget concerns truly don't apply to this event, you may use "other" instead — but always exactly 5 total.
+- Don't repeat issues already listed in "issues" — suggestions are forward-looking actions, not restatements.
 
 ALLERGEN VOCABULARY (the closed UK-14 set — use these names in messages):
 ${buildAllergenList()}

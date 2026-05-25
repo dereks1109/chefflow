@@ -18,6 +18,13 @@ export interface Ingredient {
   // []        → user explicitly cleared the highlight
   // [tag...]  → user explicitly flagged these allergens
   allergenFlags?: AllergenTag[];
+  // Set when this ingredient line references another recipe (entered as `#` in
+  // the editor and picked from the autocomplete). `name` holds the display
+  // label (e.g. "(Demo) Black Pepper Sauce"); amount + unit work normally.
+  // The scaler does NOT multiply this ingredient's amount when the parent
+  // scales — the literal quantity is honored. The scheduler expands the
+  // referenced recipe's steps into the parent's timeline.
+  componentRecipeId?: string;
 }
 
 export interface WorkflowStep {
@@ -32,6 +39,13 @@ export interface WorkflowStep {
   batchKey?: string;
   panCapacityPortions?: number;
   phase: StepPhase;
+  // Set by flattenSubRecipes() when a step came from a referenced
+  // (component) recipe. UI uses this to render a "from #<sub-recipe>"
+  // badge on merged steps. Original (parent-recipe) steps leave it unset.
+  sourceRecipeId?: string;
+  /** Display title of the source recipe (so the UI can show a breadcrumb
+   *  like "Ribeye > Black Pepper Sauce" without a separate id→title lookup). */
+  sourceRecipeTitle?: string;
 }
 
 // Closed taxonomy: the 14 allergens UK food law requires businesses to declare.
@@ -58,13 +72,40 @@ export interface RecipeAnalysis {
   caloriesTotal?: number;
   keyIngredientTags?: string[];     // 2–6 lowercase headline ingredients (e.g. "beef")
   allergens?: AllergenTag[];        // closed UK-14 set, deduped
+  /** Ingredient names (lowercase, verbatim from the recipe) the AI could
+   *  not confidently classify. Surfaced as amber "AI to review" warnings
+   *  so the chef checks them manually. Optional — older recipes (analysed
+   *  before this field shipped) render no warnings until re-analyzed. */
+  uncertainIngredients?: string[];
   analyzedAt?: number;              // epoch ms
   source?: 'llm-text' | 'llm-vision' | 'manual';
 }
 
-export interface Recipe {
+/**
+ * Sync-metadata mixin — shared across every Dexie store that participates in
+ * D1 cloud sync (Recipe, KitchenEvent, Menu, AllergenAuditEntry).
+ *
+ *   userId    — Clerk subject (or `anon:<random>` pre-sign-in). Filter for
+ *               every read; stamped on every write so cross-user reads in
+ *               a shared browser can't see each other's rows.
+ *   isDeleted — soft-delete tombstone. Listings filter it; the row stays
+ *               locally so a stale server pull can't resurrect it.
+ *   synced    — push-queue flag. Writes set this false; the sync engine
+ *               flips it true once the server confirms an LWW-applied
+ *               status. `undefined` is treated the same as `false`.
+ */
+export interface SyncMeta {
+  userId?: string;
+  isDeleted?: boolean;
+  synced?: boolean;
+}
+
+export interface Recipe extends SyncMeta {
   id: string;
   title: string;
+  /** Optional freeform description shown under the title in the editor.
+   *  Not yet surfaced on cards/library — editor-only for now. */
+  description?: string;
   originalYield: number;
   prepTime?: string;
   cookTime?: string;
@@ -77,6 +118,13 @@ export interface Recipe {
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().
   pricePerPortion?: number;
+  /** Base64 JPEG data URL, downscaled to <=1600px. Stored in Dexie. */
+  coverPhoto?: string;
+  /** The community recipe id this row was copied from (e.g. `cr_xyz`). Set
+   *  when the user uses "Copy to my library" on a community card. Powers
+   *  auto-uncopy on local soft-delete: deleting a recipe with this field
+   *  set fires POST /community/:id/uncopy to rewind the global counter. */
+  copiedFromCommunityId?: string;
 }
 
 export interface Dish {
@@ -100,7 +148,7 @@ export interface EventSection {
   dishIds: string[];
 }
 
-export interface KitchenEvent {
+export interface KitchenEvent extends SyncMeta {
   id: string;
   title: string;
   serveAt?: string;      // ISO datetime — when food is served / event anchor
@@ -115,6 +163,10 @@ export interface KitchenEvent {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  // Number of expected guests. Optional — older events leave it undefined.
+  // Surfaced on the EventView detail card and used by the LLM menu check as
+  // an explicit signal (previously buried inside the notes free-text).
+  numberOfGuests?: number;
   // Combined freeform field: general event notes + guest dietary requirements.
   // The LLM menu-suitability check reads dietary intent from here.
   notes: string;
@@ -144,16 +196,71 @@ export interface MenuIssue {
   message: string;
 }
 
+export interface Menu extends SyncMeta {
+  id: string;
+  title: string;
+  description?: string;
+  recipeIds: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MenuSuggestionCategory = 'allergy' | 'budget' | 'other';
+
+export interface MenuSuggestion {
+  category: MenuSuggestionCategory;
+  text: string;
+}
+
 export interface MenuAnalysis {
   // 'ok' — no issues. 'warnings' — soft conflicts (e.g. limited vegan options).
   // 'blocked' — at least one guest can't eat anything safely.
   verdict: 'ok' | 'warnings' | 'blocked';
   issues: MenuIssue[];
-  suggestions: string[];
+  /**
+   * Exactly 5 actionable suggestions, each tagged by category so the UI
+   * can render a badge. The LLM is instructed to cover allergies, budget,
+   * and general improvements. Order is preserved as returned. Parser pads
+   * with neutral 'other' entries if the LLM returns fewer than 5; slices
+   * if it returns more.
+   */
+  suggestions: MenuSuggestion[];
   analyzedAt: number;
 }
 
 export type ColorTag = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+
+// Closed set of reasons a chef can pick when removing an allergen tag. Used by
+// the safe-removal modal + the local audit log.
+export type AllergenRemovalReason =
+  | 'ingredient-changed'
+  | 'recipe-changed'
+  | 'mistakenly-added'
+  | 'other';
+
+/**
+ * One audit row per allergen-tag removal. Persisted in Dexie's `allergenAudits`
+ * table. We snapshot `recipeTitleAtTime` + `ingredientsAtTime` so the history
+ * stays readable even if the recipe is later renamed or edited. Multiple
+ * reasons allowed (e.g. ingredient-changed + mistakenly-added co-apply).
+ */
+export interface AllergenAuditEntry extends SyncMeta {
+  id: string;
+  recipeId: string;
+  recipeTitleAtTime: string;
+  removedTag: AllergenTag;
+  reasons: AllergenRemovalReason[];
+  otherText?: string;
+  ingredientsAtTime: string[];
+  removedAt: number;
+  /** Historical Clerk-id field, preserved for the legacy bespoke audit
+   *  endpoint (`/audit/allergen-removal`). The canonical sync-owner field
+   *  is `SyncMeta.userId`; for new audits both are set to the same value. */
+  userClerkId?: string;
+  /** Display name at the time of removal, snapshotted so renames don't
+   *  rewrite history. Falls back to "(anonymous)" in the history view. */
+  userDisplayName?: string;
+}
 
 export interface ScheduledStep {
   // identity — synthesized as `${dishId}:${recipeStepId}`, unique across the workflow

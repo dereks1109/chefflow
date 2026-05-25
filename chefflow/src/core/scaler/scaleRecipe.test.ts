@@ -61,3 +61,31 @@ describe('scaleRecipe — unit system conversion', () => {
     expect(['g', 'kg']).toContain(beef.unit);
   });
 });
+
+describe('scaleRecipe — sub-recipe ingredients', () => {
+  it('does NOT scale an ingredient with componentRecipeId (literal quantity is preserved)', () => {
+    const parent = {
+      ...stew,
+      ingredients: [
+        ...stew.ingredients,
+        {
+          id: 'ing_sauce',
+          raw: '{80|ml|(Demo) Black Pepper Sauce}',
+          amount: 80,
+          unit: 'ml',
+          name: '(Demo) Black Pepper Sauce',
+          isLocked: false,
+          componentRecipeId: 'r_demo_pepper_sauce',
+        },
+      ],
+    };
+    const scaled = scaleRecipe(parent, { targetPortions: parent.originalYield * 2, system: 'metric' });
+    const sauce = scaled.ingredients.find((i) => i.id === 'ing_sauce')!;
+    expect(sauce.amount).toBe(80);
+    expect(sauce.unit).toBe('ml');
+    expect(sauce.componentRecipeId).toBe('r_demo_pepper_sauce');
+    // Sanity: other ingredients DID scale.
+    const beef = scaled.ingredients.find((i) => i.name === 'Beef Chuck')!;
+    expect(beef.amount).not.toBe(stew.ingredients.find((i) => i.name === 'Beef Chuck')!.amount);
+  });
+});
