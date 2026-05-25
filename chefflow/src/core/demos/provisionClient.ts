@@ -1,10 +1,10 @@
-// Triggers the worker's idempotent /api/demos/provision route. Fires once
-// per browser session per signed-in user; the worker also gates with a KV
-// marker, so even multiple call sites here are safe.
+// Triggers the worker's idempotent /api/demos/provision route. The worker
+// gates with a KV marker, so repeat calls are cheap (a single KV read).
 //
-// Called from SyncRunner after the anon-row migration, before the first
-// pull — so demo rows land in D1, then get pulled down into Dexie on the
-// same boot round-trip.
+// `getToken` is injected (typically from `useAuth().getToken` in
+// SyncRunner) so this module never reaches into window.Clerk — the previous
+// version did, and lost a race on first sign-in where `window.Clerk.session`
+// hadn't populated yet, dropping the call silently.
 
 import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 
@@ -14,22 +14,21 @@ export interface ProvisionResult {
   eventsInserted: number;
 }
 
-async function getClerkToken(): Promise<string | null> {
-  const clerk = (window as unknown as {
-    Clerk?: { session?: { getToken(): Promise<string | null> } };
-  }).Clerk;
-  return clerk?.session ? await clerk.session.getToken() : null;
+export interface ProvisionDemosOpts {
+  getToken: () => Promise<string | null>;
+  fetchImpl?: typeof fetch;
+  origin?: string;
 }
 
 function isE2E(): boolean {
   return (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
 }
 
-export async function provisionDemos(opts: { fetchImpl?: typeof fetch; origin?: string } = {}): Promise<ProvisionResult> {
+export async function provisionDemos(opts: ProvisionDemosOpts): Promise<ProvisionResult> {
   if (isE2E()) {
     return { alreadyProvisioned: true, recipesInserted: 0, eventsInserted: 0 };
   }
-  const token = await getClerkToken();
+  const token = await opts.getToken();
   if (!token) throw new Error('Not signed in');
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const base = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');

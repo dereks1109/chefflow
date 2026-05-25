@@ -6,21 +6,47 @@
 // `migrateAnonRowsForUser` first so any local-only anonymous rows are
 // adopted by the Clerk userId before the first push.
 
-import { useEffect, useState } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import { useEffect } from 'react';
+import { useAuth, useUser } from '@clerk/clerk-react';
 import { runSync, registerSyncTriggers } from '../../core/sync/syncEngine';
-import { createSyncStoreForUser } from '../../state/useSyncStore';
+import { useSyncStore } from '../../state/useSyncStore';
 import { migrateAnonRowsForUser } from '../../core/sync/migrateAnonRows';
 import { provisionDemos } from '../../core/demos/provisionClient';
 
+// Bounded retry with exponential backoff. Survives the first-sign-in race
+// where Clerk's session populates ~milliseconds after the user hook reports
+// `isLoaded`. Total wait <= 7s; on final failure logs to console (silent
+// failure here was Bug #1 — users saw empty libraries forever).
+async function provisionWithRetry(
+  getToken: () => Promise<string | null>,
+  signal: { cancelled: boolean },
+): Promise<void> {
+  const delays = [1000, 2000, 4000];
+  for (let attempt = 0; attempt < delays.length; attempt++) {
+    if (signal.cancelled) return;
+    try {
+      await provisionDemos({ getToken });
+      return;
+    } catch (err) {
+      if (attempt === delays.length - 1) {
+        console.error('[provisionDemos] failed after retries:', err);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
 function SyncRunnerInner({ userId }: { userId: string }) {
-  // Per-user store: signing out + back in as a different user gets a fresh
-  // cursor via the localStorage key.
-  const [storeHook] = useState(() => createSyncStoreForUser(userId));
-  const store = storeHook();
+  const { getToken } = useAuth();
 
   useEffect(() => {
-    let cancelled = false;
+    // Scope the singleton store to this user. Resets cursor + status if the
+    // previous owner was a different user (or anon).
+    useSyncStore.getState().switchToUser(userId);
+    const store = useSyncStore.getState();
+
+    const signal = { cancelled: false };
     let unsubscribe: (() => void) | null = null;
 
     void (async () => {
@@ -41,25 +67,22 @@ function SyncRunnerInner({ userId }: { userId: string }) {
       // <userId>`) so the repeat HTTP cost is a single KV read. Runs
       // BEFORE the first sync round so demo rows land in D1 and get pulled
       // down on the same boot.
-      try {
-        await provisionDemos();
-      } catch {
-        // Network or auth blip: try again next time. Don't block sync.
-      }
+      await provisionWithRetry(getToken, signal);
 
-      if (cancelled) return;
+      if (signal.cancelled) return;
       const runOnce = () => {
-        void runSync({ store });
+        void runSync({ store: useSyncStore.getState() });
       };
       runOnce(); // boot pull/push.
       unsubscribe = registerSyncTriggers(runOnce);
     })();
 
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
       if (unsubscribe) unsubscribe();
     };
-    // Eslint: store is stable across renders (created once via useState init).
+    // getToken from useAuth() is referentially stable across Clerk renders;
+    // the singleton store has no React identity to track.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 

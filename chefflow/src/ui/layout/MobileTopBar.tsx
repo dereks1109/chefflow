@@ -4,6 +4,7 @@ import { Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
+import SyncStatusBadge from '../components/SyncStatusBadge';
 import { useAdminStore } from '../../state/useAdminStore';
 
 export default function MobileTopBar() {
@@ -52,6 +53,8 @@ export default function MobileTopBar() {
             <Shield size={20} aria-hidden="true" />
           </NavLink>
         )}
+
+        <SyncStatusBadge />
 
         <UpgradeButton />
 

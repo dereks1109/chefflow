@@ -4,6 +4,7 @@ import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Mail, Settings, Shiel
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
+import SyncStatusBadge from '../components/SyncStatusBadge';
 import { useAdminStore } from '../../state/useAdminStore';
 
 const navItems = [
@@ -87,6 +88,8 @@ export default function TopNav() {
             Admin
           </NavLink>
         )}
+
+        <SyncStatusBadge />
 
         <UpgradeButton />
 
