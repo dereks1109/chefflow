@@ -29,6 +29,13 @@ dist-ssr
 !.dev.vars.example
 .env*
 !.env.example
+# .env.production is tracked: it carries only PUBLIC build-time values
+# (VITE_WORKER_BASE_URL, VITE_LLM_MODE, VITE_CLERK_PUBLISHABLE_KEY).
+# Vite bakes these into the client bundle anyway — they're not secret.
+# Keeping it tracked means a clean-checkout build (Cloudflare Pages,
+# fresh CI, new dev machine) always has them, and chefflow.uk doesn't
+# ship a missing-key fallback because of an empty env on rebuild.
+!.env.production
 
 # Playwright output — test files in e2e/ are NOT ignored
 test-results/
