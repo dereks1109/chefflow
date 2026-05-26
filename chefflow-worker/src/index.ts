@@ -85,6 +85,10 @@ export interface Env {
   // user-friendly failure instead of a silent Stripe blowup.
   STRIPE_PRICE_ID_ENTERPRISE_MONTHLY?: string;
   STRIPE_PRICE_ID_ENTERPRISE_ANNUAL?: string;
+  // Resend API key — drives the contact-form notification email path in
+  // contact.ts. Optional: when absent, the contact form still works but
+  // doesn't email anyone (KV-only). Set via `wrangler secret put RESEND_API_KEY`.
+  RESEND_API_KEY?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;

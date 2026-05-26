@@ -2,9 +2,14 @@
 // the same KV namespace used elsewhere in the worker, and persists the
 // submission to KV so the admin dashboard can list them.
 //
-// No external mail provider: by design, submissions stay inside Cloudflare so
-// there's no third-party API key to manage and no DNS to set up. The admin
-// view at /admin/contact-submissions returns the list newest-first.
+// KV stays the source of truth (/admin/contact-submissions is the canonical
+// archive). After the KV write succeeds, we ALSO fire a best-effort email
+// notification via MailChannels (see contactMail.ts) so the chef sees new
+// submissions without checking the admin page. The notification is wrapped
+// in try/catch — a MailChannels outage must NOT prevent the submission
+// from being recorded.
+
+import { sendContactNotification } from './contactMail';
 
 const KEY_SUBMISSION_PREFIX = 'contact:s:';
 const KEY_INDEX = 'contact:i:byCreatedDesc';
@@ -122,6 +127,10 @@ async function writeIndex(kv: KVNamespace, entries: IndexEntry[]): Promise<void>
 
 interface ContactEnv {
   RATE_LIMIT: KVNamespace;
+  /** Resend API key — optional. When absent the notification step skips
+   *  silently and the submission still lands in KV. Set via
+   *  `wrangler secret put RESEND_API_KEY`. */
+  RESEND_API_KEY?: string;
 }
 
 /**
@@ -149,6 +158,24 @@ export async function submit(
   const index = await readIndex(env.RATE_LIMIT);
   index.unshift({ id, createdAt: now });
   await writeIndex(env.RATE_LIMIT, index);
+
+  // Best-effort notification — KV is already durable; if Resend blips we
+  // log and move on. Submission is NOT lost. If RESEND_API_KEY isn't set
+  // (e.g. local dev, ephemeral preview), we skip the send entirely with
+  // no warning.
+  if (env.RESEND_API_KEY) {
+    try {
+      await sendContactNotification({
+        apiKey: env.RESEND_API_KEY,
+        name: validated.name,
+        email: validated.email,
+        message: validated.message,
+      });
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[contact] notification email failed:', err instanceof Error ? err.message : String(err));
+    }
+  }
 
   return { id };
 }
