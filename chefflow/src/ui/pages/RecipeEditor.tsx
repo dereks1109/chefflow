@@ -9,7 +9,6 @@ import AllergenHistorySection from '../components/AllergenHistorySection';
 import SubRecipeStepsPanel from '../components/SubRecipeStepsPanel';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
 import {
-  findAllergensInIngredient,
   isAllergenTag,
   applyRecipeAllergenAdd,
   applyRecipeAllergenRemove,
@@ -419,33 +418,17 @@ export default function RecipeEditor() {
               Tip: type <code className="px-1 rounded bg-slate-100 dark:bg-surface-2">#</code> in an ingredient name to link another recipe (e.g. a sauce). The linked recipe expands inline and its steps merge into the kitchen timeline.
             </p>
             <ul className="space-y-3">
-              {(() => {
-                // Build the uncertain set once (per render) so every IngredientRow
-                // gets an O(1) lookup. Lowercased to tolerate casing differences
-                // between the LLM payload and the in-editor ingredient name.
-                const uncertainSet = new Set(
-                  (r.analysis?.uncertainIngredients ?? []).map((s) => s.toLowerCase()),
-                );
-                return r.ingredients.map((ing, i) => {
-                  // User override wins; otherwise fall back to regex auto-detect
-                  // against the recipe's declared allergens.
-                  const effective = ing.allergenFlags
-                    ?? findAllergensInIngredient(ing.name, r.analysis?.allergens ?? []);
-                  const isUncertain = uncertainSet.has((ing.name ?? '').toLowerCase());
-                  return (
-                    <IngredientRow
-                      key={ing.id}
-                      index={i}
-                      value={ing}
-                      currentRecipeId={r.id}
-                      onChange={(next) => updateIngredient(i, next)}
-                      onRemove={() => removeIngredient(i)}
-                      allergenMatches={effective}
-                      uncertain={isUncertain}
-                    />
-                  );
-                });
-              })()}
+              {r.ingredients.map((ing, i) => (
+                <IngredientRow
+                  key={ing.id}
+                  index={i}
+                  value={ing}
+                  currentRecipeId={r.id}
+                  onChange={(next) => updateIngredient(i, next)}
+                  onRemove={() => removeIngredient(i)}
+                  allergenMatches={ing.allergenFlags ?? []}
+                />
+              ))}
             </ul>
             <button type="button" onClick={addIngredient} className="btn-secondary mt-3">
               Add ingredient

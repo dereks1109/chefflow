@@ -13,18 +13,15 @@ interface Props {
   onRemove: () => void;
   /** Current recipe id (excluded from RecipeAutocomplete to prevent self-reference). */
   currentRecipeId?: string;
-  /** Effective allergens carried by this ingredient (user override OR auto-detection). */
+  /** Allergen tags the chef has flagged on this ingredient. ChefFlow no
+   *  longer auto-detects allergens — this is purely user-declared data. */
   allergenMatches?: AllergenTag[];
-  /** True when the recipe-level AI analysis flagged this ingredient as
-   *  uncertain — renders an amber chip alongside the allergen UI so the
-   *  chef knows to verify before serving. */
-  uncertain?: boolean;
 }
 
 const WEIGHT_UNITS = ['g', 'kg', 'oz', 'lb'];
 const VOLUME_UNITS = ['ml', 'L', 'tsp', 'tbsp', 'cup', 'fl oz', 'pt', 'qt', 'gal'];
 
-export default function IngredientRow({ index, value, onChange, onRemove, currentRecipeId, allergenMatches, uncertain }: Props) {
+export default function IngredientRow({ index, value, onChange, onRemove, currentRecipeId, allergenMatches }: Props) {
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
   // Inherited tags from the linked sub-recipe (when this is a `#` ingredient).
   // Empty list when this isn't a sub-recipe link, or the sub-recipe has no
@@ -207,17 +204,6 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                   <option key={t} value={t}>{ALLERGEN_LABEL[t]}</option>
                 ))}
               </select>
-            )}
-            {uncertain && (
-              <span
-                className="inline-flex items-center gap-1 rounded-full border border-amber-500
-                           text-amber-700 dark:text-amber-300 dark:border-amber-600 px-2 py-0.5 text-xs"
-                title="AI cannot recognise this ingredient, please chef further check the ingredient"
-                data-testid={`ingredient-uncertain-${index}`}
-              >
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                AI unsure — please verify
-              </span>
             )}
           </div>
           <div className="flex gap-2">

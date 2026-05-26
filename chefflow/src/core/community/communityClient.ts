@@ -44,10 +44,6 @@ export interface CommunityRecipeSummary {
   tags?: {
     allergens?: AllergenTag[];
     keyIngredientTags?: string[];
-    /** Ingredient names the original chef's AI flagged as uncertain.
-     *  Surfaced on the community card as an amber pill so prospective
-     *  copiers see the safety caveat. */
-    uncertainIngredients?: string[];
   };
 }
 

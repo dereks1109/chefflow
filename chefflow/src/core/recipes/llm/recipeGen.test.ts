@@ -56,7 +56,9 @@ describe('generateRecipeFromText', () => {
     expect(recipe.steps).toHaveLength(2);
     expect(recipe.steps[0].id).toBe('s1');
     expect(recipe.analysis?.source).toBe('llm-text');
-    expect(recipe.analysis?.allergens).toEqual(['sulphites']);
+    // The LLM no longer populates allergens (user-declared only). Even when
+    // the model emits an `allergens` field the validator drops it.
+    expect(recipe.analysis?.allergens).toBeUndefined();
     expect(recipe.analysis?.analyzedAt).toBeGreaterThan(0);
     expect(recipe.id).toMatch(/^r_/);
   });
@@ -111,12 +113,11 @@ describe('analyzeRecipe', () => {
     updatedAt: 0,
   };
 
-  it('returns a RecipeAnalysis with source=llm-text stamped', async () => {
+  it('returns a RecipeAnalysis with source=llm-text stamped (calories + key tags only)', async () => {
     const json = JSON.stringify({
       caloriesPerPortion: 600,
       caloriesTotal: 2400,
       keyIngredientTags: ['beef', 'red wine'],
-      allergens: ['sulphites'],
     });
     const analysis = await analyzeRecipe({
       recipe: sampleRecipe,
@@ -127,19 +128,19 @@ describe('analyzeRecipe', () => {
     expect(analysis.caloriesPerPortion).toBe(600);
     expect(analysis.caloriesTotal).toBe(2400);
     expect(analysis.keyIngredientTags).toEqual(['beef', 'red wine']);
-    expect(analysis.allergens).toEqual(['sulphites']);
+    expect(analysis.allergens).toBeUndefined();
     expect(analysis.source).toBe('llm-text');
     expect(analysis.analyzedAt).toBeGreaterThan(0);
   });
 
-  it('tolerates an empty analysis response (everything degrades to empty)', async () => {
+  it('tolerates an empty analysis response (everything degrades to empty / undefined)', async () => {
     const analysis = await analyzeRecipe({
       recipe: sampleRecipe,
       apiKey: 'k',
       model: 'm',
       fetchImpl: fetchReturning('{}'),
     });
-    expect(analysis.allergens).toEqual([]);
+    expect(analysis.allergens).toBeUndefined();
     expect(analysis.keyIngredientTags).toEqual([]);
     expect(analysis.caloriesPerPortion).toBeUndefined();
   });
@@ -166,15 +167,14 @@ describe('analyzeRecipe', () => {
     ).rejects.toBeInstanceOf(LlmRecipeValidationError);
   });
 
-  it('passes uncertainIngredients through to the analysis when LLM emits them — chef gets the amber warning', async () => {
-    // The recipe has one real ingredient: "beef chuck". The LLM flagged it
-    // as uncertain (let's say a fusion preparation it couldn't classify).
-    // The projection should keep the name on the analysis so the editor
-    // + card render the amber pill.
+  it('ignores any allergens or uncertainIngredients fields the LLM might still emit (legal de-risk)', async () => {
+    // The model is no longer asked to produce allergens, but a stale or
+    // off-spec response might include them. Both fields must be silently
+    // discarded so they never become user-visible allergen claims.
     const json = JSON.stringify({
       keyIngredientTags: ['beef'],
-      allergens: [],
-      uncertainIngredients: ['beef chuck'],
+      allergens: ['milk', 'gluten'],
+      uncertainIngredients: ['house chilli paste'],
     });
     const analysis = await analyzeRecipe({
       recipe: sampleRecipe,
@@ -182,37 +182,9 @@ describe('analyzeRecipe', () => {
       model: 'm',
       fetchImpl: fetchReturning(json),
     });
-    expect(analysis.uncertainIngredients).toEqual(['beef chuck']);
-  });
-
-  it('filters out hallucinated uncertain names that do not match a real ingredient — defensive guard against LLM drift', async () => {
-    const json = JSON.stringify({
-      keyIngredientTags: [],
-      allergens: [],
-      // "house chilli paste" is NOT in sampleRecipe. The projection should drop it.
-      uncertainIngredients: ['house chilli paste', 'beef chuck'],
-    });
-    const analysis = await analyzeRecipe({
-      recipe: sampleRecipe,
-      apiKey: 'k',
-      model: 'm',
-      fetchImpl: fetchReturning(json),
-    });
-    expect(analysis.uncertainIngredients).toEqual(['beef chuck']);
-  });
-
-  it('omits uncertainIngredients entirely when the LLM emits nothing / empty array', async () => {
-    const json = JSON.stringify({
-      keyIngredientTags: ['beef'],
-      allergens: [],
-    });
-    const analysis = await analyzeRecipe({
-      recipe: sampleRecipe,
-      apiKey: 'k',
-      model: 'm',
-      fetchImpl: fetchReturning(json),
-    });
-    expect(analysis.uncertainIngredients).toBeUndefined();
+    expect((analysis as { allergens?: unknown }).allergens).toBeUndefined();
+    expect((analysis as { uncertainIngredients?: unknown }).uncertainIngredients).toBeUndefined();
+    expect(analysis.keyIngredientTags).toEqual(['beef']);
   });
 });
 

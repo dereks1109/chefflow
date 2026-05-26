@@ -3,7 +3,7 @@ import { useUser } from '@clerk/clerk-react';
 import { AlertTriangle, Plus, Sparkles, X } from 'lucide-react';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { useProfileStore } from '../../state/useProfileStore';
-import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES, findIngredientsForAllergen } from '../../core/recipes/llm/allergens';
+import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
 import { analyzeRecipe } from '../../core/recipes/llm/recipeGen';
 import { addEntry as addAuditEntry, markSynced as markAuditSynced } from '../../db/allergenAuditsRepo';
 import { pushAllergenAudit } from '../../core/audit/allergenAuditClient';
@@ -11,6 +11,16 @@ import { getRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
 import AllergenRemovalModal from './AllergenRemovalModal';
 import type { AllergenTag, AllergenRemovalReason, Recipe, RecipeAnalysis } from '../../core/types';
+
+// Inline replacement for the deleted `findIngredientsForAllergen` helper.
+// Returns names of ingredients the chef manually flagged with a given tag —
+// used by the audit log + removal modal to record context.
+function ingredientsFlaggedWith(recipe: Recipe, tag: AllergenTag): string[] {
+  return recipe.ingredients
+    .filter((i) => i.allergenFlags?.includes(tag))
+    .map((i) => i.name)
+    .filter((n): n is string => Boolean(n));
+}
 
 interface Props {
   recipe: Recipe;
@@ -131,7 +141,7 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
       removedTag: tag,
       reasons,
       otherText,
-      ingredientsAtTime: findIngredientsForAllergen(recipe, tag),
+      ingredientsAtTime: ingredientsFlaggedWith(recipe, tag),
       removedAt: Date.now(),
       userClerkId: user?.id,
       userDisplayName: profileDisplayName?.trim() || user?.fullName || undefined,
@@ -293,7 +303,7 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
     <AllergenRemovalModal
       open={pendingRemovalTag !== null}
       allergenLabel={pendingRemovalTag ? ALLERGEN_LABEL[pendingRemovalTag] : ''}
-      ingredientsAtTime={pendingRemovalTag ? findIngredientsForAllergen(recipe, pendingRemovalTag) : []}
+      ingredientsAtTime={pendingRemovalTag ? ingredientsFlaggedWith(recipe, pendingRemovalTag) : []}
       onCancel={() => setPendingRemovalTag(null)}
       onConfirm={(reasons, otherText) => void confirmRemoveAllergen(reasons, otherText)}
     />

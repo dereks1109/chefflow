@@ -3,15 +3,16 @@
 //
 // Strict on the structural fields (title / ingredients / steps) — those drive
 // the editable Recipe. Lenient on `analysis` — missing fields become undefined
-// or empty arrays, and unknown allergen strings are silently dropped so a
-// drift in the LLM's vocabulary doesn't blow up the whole call.
+// or empty arrays.
+//
+// Allergens are NOT parsed from the LLM response: the model is no longer
+// asked to produce them (legal-risk de-risking). Allergens are pure
+// user-declared data; if the LLM returns an `allergens` field anyway it is
+// silently ignored.
 //
 // Mirrors src/core/scheduler/llm/responseSchema.ts in spirit: hand-rolled +
 // path-carrying error + small focused surface.
 // ---------------------------------------------------------------------------
-
-import type { AllergenTag } from '../../types';
-import { isAllergenTag } from './allergens';
 
 export type LlmStepPhase = 'prep' | 'cook' | 'serve';
 
@@ -32,12 +33,6 @@ export interface LlmAnalysis {
   caloriesPerPortion?: number;
   caloriesTotal?: number;
   keyIngredientTags: string[];
-  allergens: AllergenTag[];
-  /** Ingredient names (lowercase, verbatim from the recipe) the LLM was
-   *  unsure about. Surfaced as amber "AI to review" pills so the chef
-   *  knows to verify them manually. Optional + tolerant — older responses
-   *  without this field render no pill. */
-  uncertainIngredients?: string[];
 }
 
 export interface LlmRecipe {
@@ -182,9 +177,11 @@ function validateStep(raw: unknown, path: string): LlmStep {
 
 function validateAnalysis(raw: unknown): LlmAnalysis {
   // Lenient: missing analysis becomes an empty stub. Callers stamp source +
-  // analyzedAt afterwards regardless.
+  // analyzedAt afterwards regardless. Any `allergens` or `uncertainIngredients`
+  // fields a stale model might still emit are silently ignored — allergens
+  // are now user-declared only.
   if (!raw || typeof raw !== 'object') {
-    return { keyIngredientTags: [], allergens: [] };
+    return { keyIngredientTags: [] };
   }
   const a = raw as Record<string, unknown>;
 
@@ -201,26 +198,10 @@ function validateAnalysis(raw: unknown): LlmAnalysis {
       )
     : [];
 
-  const allergens: AllergenTag[] = Array.isArray(a.allergens)
-    ? Array.from(new Set(a.allergens.filter(isAllergenTag)))
-    : [];
-
-  const uncertainIngredients: string[] = Array.isArray(a.uncertainIngredients)
-    ? Array.from(
-        new Set(
-          a.uncertainIngredients
-            .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
-            .map((t) => t.trim().toLowerCase()),
-        ),
-      )
-    : [];
-
   return {
     caloriesPerPortion,
     caloriesTotal,
     keyIngredientTags,
-    allergens,
-    ...(uncertainIngredients.length > 0 ? { uncertainIngredients } : {}),
   };
 }
 

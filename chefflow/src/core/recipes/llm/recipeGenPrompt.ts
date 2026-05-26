@@ -1,24 +1,17 @@
 // ---------------------------------------------------------------------------
 // Prompt builders for LLM-assisted recipe creation + analysis.
 //
-// SYSTEM prompt is constant per build: shape contract + closed allergen
-// taxonomy + calorie rule + tagging rule. USER prompt is built fresh per
+// SYSTEM prompt is constant per build: shape contract + calorie rule +
+// tagging rule. NO allergen output is requested — allergens are pure
+// user-declared data (Food Information Regulations 2014: the chef, not
+// ChefFlow, is the food business operator). USER prompt is built fresh per
 // call (text mode = dish name; photo mode = caller appends the image part).
 // ---------------------------------------------------------------------------
 
-import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from './allergens';
 import type { MultimodalPart } from '../../scheduler/llm/groqClient';
 import type { Recipe } from '../../types';
 
-function buildAllergenList(): string {
-  return ALLERGEN_TAGS
-    .map((tag) => `- "${tag}" — ${ALLERGEN_LABEL[tag]} (${ALLERGEN_EXAMPLES[tag]})`)
-    .join('\n');
-}
-
 export function buildRecipeGenSystemPrompt(): string {
-  const allergenList = buildAllergenList();
-
   return `You are a recipe assistant for ChefFlow. Output a single JSON object — no prose, no markdown fences, no comments.
 
 JSON SCHEMA:
@@ -45,8 +38,7 @@ JSON SCHEMA:
   "analysis": {
     "caloriesPerPortion": <integer kcal — optional>,
     "caloriesTotal": <integer kcal — optional>,
-    "keyIngredientTags": [<string array — 2 to 6 lowercase headline-ingredient tags>],
-    "allergens": [<closed-set tag array — see ALLERGEN TAGS below>]
+    "keyIngredientTags": [<string array — 2 to 6 lowercase headline-ingredient tags>]
   }
 }
 
@@ -61,14 +53,7 @@ KEY-INGREDIENT TAG RULE:
 - Skip pantry staples (salt, pepper, water, oil, sugar, flour-as-thickener).
 - Use singular nouns. Group obvious variants (use "beef" for chuck/sirloin/ribeye unless the cut is the headline).
 
-ALLERGEN TAGS (the closed UK-14 taxonomy — use ONLY these keys):
-${allergenList}
-
-ALLERGEN RULE:
-- Return ONLY tag keys from the list above.
-- If a recipe contains no declarable allergens, return [].
-- Do NOT invent new tag keys.
-- Tag conservatively: if an ingredient typically contains an allergen (e.g. soy sauce → "soybeans" AND "gluten"), include it.
+DO NOT include allergen fields, uncertain-ingredient lists, or any allergen-related output. Allergens are declared exclusively by the chef in the recipe editor.
 
 PORTION RULE:
 - If the user specifies portions, set originalYield exactly and scale ingredient amounts to match.
@@ -131,9 +116,7 @@ JSON SCHEMA:
 {
   "caloriesPerPortion": <integer kcal — optional>,
   "caloriesTotal": <integer kcal — optional>,
-  "keyIngredientTags": [<string array — 2 to 6 lowercase headline-ingredient tags>],
-  "allergens": [<closed-set tag array — see ALLERGEN TAGS below>],
-  "uncertainIngredients": [<lowercase ingredient-name array — ingredients you cannot confidently classify; safer to flag than to silently skip>]
+  "keyIngredientTags": [<string array — 2 to 6 lowercase headline-ingredient tags>]
 }
 
 CALORIE RULE:
@@ -146,20 +129,7 @@ KEY-INGREDIENT TAG RULE:
 - Skip pantry staples (salt, pepper, water, oil, sugar, flour-as-thickener).
 - Use singular nouns. Group obvious variants under one tag.
 
-ALLERGEN TAGS (the closed UK-14 taxonomy — use ONLY these keys):
-${buildAllergenList()}
-
-ALLERGEN RULE:
-- Return ONLY tag keys from the list above.
-- If a recipe contains no declarable allergens, return [].
-- Tag conservatively: if an ingredient typically contains an allergen, include it.
-
-UNCERTAIN RULE:
-- If you cannot confidently say whether a specific ingredient contains any UK-14 allergen — common cases: brand-specific products ("house chilli paste", "Acme XO sauce"), fusion/regional staples you have not seen before, vague descriptors ("seasonal greens"), or anything obscure — list that ingredient's EXACT lowercase name in "uncertainIngredients".
-- Do NOT also add it to "allergens" — uncertain ingredients are the chef's responsibility to verify.
-- "uncertainIngredients" is for AI uncertainty ONLY, never for ingredients that you are confident about.
-- Use the ingredient name verbatim from the recipe (lowercase). Do NOT paraphrase. Example: if the recipe lists "House Chilli Paste", emit "house chilli paste".
-- If you are confident about every ingredient, return [] (or omit the field).
+DO NOT include allergen fields, uncertain-ingredient lists, or any allergen-related output. Allergens are declared exclusively by the chef in the recipe editor.
 
 Return ONLY the JSON object.`;
 }

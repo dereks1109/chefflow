@@ -13,10 +13,11 @@ export interface Ingredient {
   unit: string;
   name: string;
   isLocked: boolean;
-  // User override of the regex-based allergen auto-detection.
-  // undefined → use auto-detection (findAllergensInIngredient against recipe.analysis.allergens)
-  // []        → user explicitly cleared the highlight
-  // [tag...]  → user explicitly flagged these allergens
+  // Allergen tags the chef manually flagged on this ingredient. ChefFlow no
+  // longer auto-detects allergens (the LLM + regex paths were removed for
+  // legal-risk reasons under FIR 2014). undefined / [] both mean "the chef
+  // has not flagged any allergens on this row"; [tag...] is the user's
+  // explicit declaration.
   allergenFlags?: AllergenTag[];
   // Set when this ingredient line references another recipe (entered as `#` in
   // the editor and picked from the autocomplete). `name` holds the display
@@ -71,12 +72,13 @@ export interface RecipeAnalysis {
   caloriesPerPortion?: number;
   caloriesTotal?: number;
   keyIngredientTags?: string[];     // 2–6 lowercase headline ingredients (e.g. "beef")
-  allergens?: AllergenTag[];        // closed UK-14 set, deduped
-  /** Ingredient names (lowercase, verbatim from the recipe) the AI could
-   *  not confidently classify. Surfaced as amber "AI to review" warnings
-   *  so the chef checks them manually. Optional — older recipes (analysed
-   *  before this field shipped) render no warnings until re-analyzed. */
-  uncertainIngredients?: string[];
+  /** Recipe-level allergen declarations from the closed UK-14 set, user-
+   *  declared. The LLM no longer populates this — the previous AI-detection
+   *  path was removed for legal-risk reasons (the chef, not ChefFlow, is
+   *  the food business operator under FIR 2014). The field stays as a
+   *  catch-all for allergens not tied to a specific ingredient (e.g. the
+   *  chef knows a supplier's pre-mix contains soy). */
+  allergens?: AllergenTag[];
   analyzedAt?: number;              // epoch ms
   source?: 'llm-text' | 'llm-vision' | 'manual';
 }

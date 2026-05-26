@@ -26,7 +26,7 @@ describe('AllergenAttestationModal', () => {
 
   it('shows the "none detected — still your responsibility" copy when allergens is empty', () => {
     render(<AllergenAttestationModal allergens={[]} onConfirm={() => {}} onCancel={() => {}} />);
-    expect(screen.getByTestId('allergen-attestation-modal').textContent).toContain('None detected');
+    expect(screen.getByTestId('allergen-attestation-modal').textContent).toContain('None declared');
   });
 
   it('disables Publish until the attestation checkbox is ticked', () => {

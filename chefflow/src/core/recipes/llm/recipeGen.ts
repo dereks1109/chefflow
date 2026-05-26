@@ -93,9 +93,12 @@ export interface AnalyzeRecipeInput {
 
 /**
  * Analyse an existing recipe: ask the LLM only for the analysis subset
- * (calories + tags + allergens) based on the recipe's current ingredients +
- * steps. Used by the Editor's "Analyse with AI" button so that after the user
- * has edited the recipe, the analysis reflects what they actually wrote.
+ * (calories + key-ingredient tags) based on the recipe's current ingredients
+ * + steps. Used by the Editor's "Analyse with AI" button so that after the
+ * user has edited the recipe, the analysis reflects what they actually wrote.
+ *
+ * Does NOT return allergens — allergens are user-declared in the editor and
+ * the LLM is never asked to produce them.
  */
 export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAnalysis> {
   const systemPrompt = buildAnalyzeSystemPrompt();
@@ -119,24 +122,10 @@ export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAn
     throw new LlmRecipeValidationError(`LLM did not return valid JSON: ${message}`, 'root');
   }
   const llmAnalysis = parseLlmAnalysis(parsed);
-  // Filter uncertainIngredients to names that actually exist in the recipe
-  // — defensive against LLM hallucination (e.g. it invents a name that
-  // looks like the user's ingredient but isn't a real match). Comparison is
-  // lowercase + trimmed to handle minor casing differences from the model.
-  const recipeNameSet = new Set(
-    input.recipe.ingredients
-      .map((i) => i.name?.trim().toLowerCase())
-      .filter((n): n is string => Boolean(n)),
-  );
-  const uncertainIngredients = (llmAnalysis.uncertainIngredients ?? []).filter((n) =>
-    recipeNameSet.has(n),
-  );
   return {
     caloriesPerPortion: llmAnalysis.caloriesPerPortion,
     caloriesTotal: llmAnalysis.caloriesTotal,
     keyIngredientTags: llmAnalysis.keyIngredientTags,
-    allergens: llmAnalysis.allergens,
-    ...(uncertainIngredients.length > 0 ? { uncertainIngredients } : {}),
     analyzedAt: Date.now(),
     source: 'llm-text',
   };
@@ -206,7 +195,6 @@ function buildRecipe(llm: LlmRecipe, source: 'llm-text' | 'llm-vision'): Recipe 
       caloriesPerPortion: llm.analysis.caloriesPerPortion,
       caloriesTotal: llm.analysis.caloriesTotal,
       keyIngredientTags: llm.analysis.keyIngredientTags,
-      allergens: llm.analysis.allergens,
       analyzedAt: now,
       source,
     },

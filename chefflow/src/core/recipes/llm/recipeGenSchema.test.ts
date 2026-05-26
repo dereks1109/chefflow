@@ -23,14 +23,16 @@ const valid = {
 };
 
 describe('parseLlmRecipe — happy path', () => {
-  it('accepts a fully-populated valid recipe', () => {
+  it('accepts a fully-populated valid recipe (allergens silently dropped — user-declared only)', () => {
     const r = parseLlmRecipe(valid);
     expect(r.title).toBe('Beef Bourguignon');
     expect(r.originalYield).toBe(4);
     expect(r.prepTime).toBe('30 min');
     expect(r.ingredients).toHaveLength(2);
     expect(r.steps).toHaveLength(2);
-    expect(r.analysis.allergens).toEqual(['sulphites']);
+    // The LLM no longer participates in allergen tagging — even when a
+    // stale model sends `allergens: [...]` the field is dropped.
+    expect((r.analysis as { allergens?: unknown }).allergens).toBeUndefined();
     expect(r.analysis.caloriesPerPortion).toBe(612);
   });
 
@@ -52,26 +54,26 @@ describe('parseLlmRecipe — happy path', () => {
 describe('parseLlmRecipe — analysis leniency', () => {
   it('returns empty analysis when the field is missing entirely', () => {
     const { analysis } = parseLlmRecipe({ ...valid, analysis: undefined });
-    expect(analysis.allergens).toEqual([]);
+    expect((analysis as { allergens?: unknown }).allergens).toBeUndefined();
     expect(analysis.keyIngredientTags).toEqual([]);
     expect(analysis.caloriesPerPortion).toBeUndefined();
     expect(analysis.caloriesTotal).toBeUndefined();
   });
 
-  it('drops unknown allergen strings silently', () => {
+  it('silently ignores any allergens field the LLM emits — never surfaces them', () => {
     const r = parseLlmRecipe({
       ...valid,
       analysis: { ...valid.analysis, allergens: ['sulphites', 'nightshade', 'eggs'] },
     });
-    expect(r.analysis.allergens).toEqual(['sulphites', 'eggs']);
+    expect((r.analysis as { allergens?: unknown }).allergens).toBeUndefined();
   });
 
-  it('deduplicates allergens', () => {
+  it('silently ignores any uncertainIngredients field the LLM emits — never surfaces them', () => {
     const r = parseLlmRecipe({
       ...valid,
-      analysis: { ...valid.analysis, allergens: ['eggs', 'eggs', 'milk'] },
+      analysis: { ...valid.analysis, uncertainIngredients: ['house chilli paste'] },
     });
-    expect(r.analysis.allergens).toEqual(['eggs', 'milk']);
+    expect((r.analysis as { uncertainIngredients?: unknown }).uncertainIngredients).toBeUndefined();
   });
 
   it('lowercases + dedupes key-ingredient tags', () => {

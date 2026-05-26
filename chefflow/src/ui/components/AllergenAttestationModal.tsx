@@ -29,21 +29,22 @@ export default function AllergenAttestationModal({ allergens, onConfirm, onCance
       <div className="w-full max-w-md rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-1 p-6 shadow-2xl">
         <h2 id="attestation-heading" className="text-lg font-semibold inline-flex items-center gap-2 text-slate-900 dark:text-slate-100">
           <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden="true" />
-          Confirm allergen accuracy
+          Confirm declared allergens
         </h2>
         <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-          Before this recipe is published to the community, please confirm you
-          have verified its allergen tags against your actual supplier labels.
-          ChefFlow's allergen detection is best-effort and not a certified
-          analysis.
+          You declared these allergens. Before publishing to the community,
+          confirm the list is complete and correct. ChefFlow does not detect
+          allergens automatically — what's listed below is exactly what you
+          tagged in the editor.
         </p>
 
         <div className="mt-4">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Detected allergens</p>
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Your declared allergens</p>
           {allergens.length === 0 ? (
             <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">
-              None detected. You're still responsible for confirming nothing
-              was missed.
+              None declared. If this recipe really contains no allergens
+              you can publish — but check the ingredient list once more before
+              you do.
             </p>
           ) : (
             <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="attestation-allergen-list">

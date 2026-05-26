@@ -1,8 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ImageOff, Layers, MoreVertical } from 'lucide-react';
-import { AllergenPill, KeyTagPill, UncertainAllergenPill } from './AllergenBadge';
-import { findIngredientsForAllergen, getRecipeAllergens } from '../../core/recipes/llm/allergens';
+import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
+import type { AllergenTag } from '../../core/types';
+
+// Names of ingredients the chef flagged with a given allergen tag.
+function ingredientsFlaggedWith(recipe: Recipe, tag: AllergenTag): string[] {
+  return recipe.ingredients
+    .filter((i) => i.allergenFlags?.includes(tag))
+    .map((i) => i.name)
+    .filter((n): n is string => Boolean(n));
+}
 import { formatGBP } from '../../core/util/money';
 import { downscaleToDataUrl } from '../../core/util/image';
 import { resolveCoverPhoto } from '../../core/demos/demoPhotoMap';
@@ -314,20 +323,15 @@ function OverflowMenu({ recipe, onDuplicate, onDelete, onCoverPhotoChange }: Ove
 
 function RecipeAnalysisRow({ recipe }: { recipe: Recipe }) {
   const keyTags = recipe.analysis?.keyIngredientTags ?? [];
-  // Union: analysis-level + per-ingredient manual flags. Picks up tags
-  // the chef added directly on an IngredientRow without re-running the
-  // AI analyzer.
+  // Union: recipe-level catch-all + per-ingredient flags. Both are user-
+  // declared; the LLM no longer participates in allergen tagging.
   const allergens = getRecipeAllergens(recipe);
-  const uncertain = recipe.analysis?.uncertainIngredients ?? [];
-  if (keyTags.length === 0 && allergens.length === 0 && uncertain.length === 0) return null;
+  if (keyTags.length === 0 && allergens.length === 0) return null;
   return (
     <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe tags">
       {allergens.map((a) => (
-        <AllergenPill key={a} tag={a} ingredients={findIngredientsForAllergen(recipe, a)} />
+        <AllergenPill key={a} tag={a} ingredients={ingredientsFlaggedWith(recipe, a)} />
       ))}
-      {uncertain.length > 0 && (
-        <UncertainAllergenPill count={uncertain.length} ingredients={uncertain} />
-      )}
       {keyTags.slice(0, 2).map((t) => (
         <KeyTagPill key={t}>{t}</KeyTagPill>
       ))}

@@ -6,26 +6,18 @@ import {
   buildAnalyzeSystemPrompt,
   buildAnalyzeUserPrompt,
 } from './recipeGenPrompt';
-import { ALLERGEN_TAGS, ALLERGEN_LABEL } from './allergens';
 import type { Recipe } from '../../types';
 
 describe('buildRecipeGenSystemPrompt', () => {
   const prompt = buildRecipeGenSystemPrompt();
 
-  it('enumerates every UK-14 allergen tag', () => {
-    for (const tag of ALLERGEN_TAGS) {
-      expect(prompt).toContain(`"${tag}"`);
-    }
-  });
-
-  it('includes the human label for every allergen', () => {
-    for (const tag of ALLERGEN_TAGS) {
-      expect(prompt).toContain(ALLERGEN_LABEL[tag]);
-    }
-  });
-
-  it('forbids inventing new tag keys', () => {
-    expect(prompt).toMatch(/Do NOT invent new tag keys/);
+  it('explicitly forbids the LLM from producing allergen output', () => {
+    // Legal de-risk: allergens are user-declared only. The prompt must tell
+    // the LLM not to emit allergen fields, uncertain-ingredient lists, or
+    // any allergen-related output.
+    expect(prompt).toMatch(/DO NOT include allergen fields/i);
+    expect(prompt).not.toMatch(/ALLERGEN TAGS \(the closed UK-14 taxonomy/);
+    expect(prompt).not.toMatch(/"allergens":/);
   });
 
   it('spells out the calorie computation rule', () => {
@@ -96,20 +88,15 @@ const fakeRecipe: Recipe = {
 };
 
 describe('buildAnalyzeSystemPrompt', () => {
-  it('lists every UK-14 allergen', () => {
-    const prompt = buildAnalyzeSystemPrompt();
-    for (const tag of ALLERGEN_TAGS) {
-      expect(prompt).toContain(`"${tag}"`);
-      expect(prompt).toContain(ALLERGEN_LABEL[tag]);
-    }
-  });
-
-  it('asks only for the analysis subset (no title/ingredients fields)', () => {
+  it('asks only for the analysis subset (no title/ingredients fields, no allergens)', () => {
     const prompt = buildAnalyzeSystemPrompt();
     expect(prompt).toContain('caloriesPerPortion');
-    expect(prompt).toContain('allergens');
+    expect(prompt).toContain('keyIngredientTags');
     expect(prompt).not.toMatch(/"title":/);
     expect(prompt).not.toMatch(/"ingredients":/);
+    expect(prompt).not.toMatch(/"allergens":/);
+    expect(prompt).not.toMatch(/"uncertainIngredients":/);
+    expect(prompt).toMatch(/DO NOT include allergen fields/i);
   });
 });
 
