@@ -92,9 +92,11 @@ describe('CommunityLibrary', () => {
     });
   });
 
-  it('AllergenPill in the community card renders its tooltip element even when no ingredient data is on the summary', async () => {
-    // Pre-fix the pill had no hoverable surface for tag-only summaries.
-    // Now the tooltip span is always in the DOM so chefs can hover.
+  it('does NOT render an AllergenPill on a community card, even when the summary carries a (now-deprecated) tags.allergens field', async () => {
+    // Allergen pills were removed from the community surface to avoid
+    // ChefFlow making an allergen claim about another chef's recipe.
+    // The summary type no longer carries allergens; if a stale cache
+    // still does, the card must still not render the pill.
     listMock.mockResolvedValue([
       {
         id: 'cr_dumpling',
@@ -104,7 +106,8 @@ describe('CommunityLibrary', () => {
         likes: 0,
         copies: 0,
         publishedAt: 0,
-        tags: { allergens: ['gluten'] },
+        // Stale-cache simulation — the type no longer accepts allergens.
+        tags: { allergens: ['gluten'] } as unknown as { keyIngredientTags?: string[] },
       },
     ]);
     render(
@@ -113,9 +116,12 @@ describe('CommunityLibrary', () => {
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      expect(screen.getByText(/Declared at recipe level/i)).toBeInTheDocument();
+      // The card itself is on screen — wait for the title to confirm.
+      expect(screen.getByText(/Steamed Vegetable Dumplings/i)).toBeInTheDocument();
     });
+    // No allergen tooltip surface, no "Declared at recipe level" copy.
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    expect(screen.queryByText(/Declared at recipe level/i)).toBeNull();
   });
 
 });

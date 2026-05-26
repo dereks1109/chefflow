@@ -550,9 +550,9 @@ export function buildDemoEvents(now: number): DemoEvent[] {
       // across mixed proteins). Casual but generous.
       budget: 600,
       numberOfGuests: 8,
-      contactName: 'Alex Johnson',
-      contactEmail: 'alex@example.com',
-      contactPhone: '+44 7700 900123',
+      contactName: 'Priscilla Morgan',
+      contactEmail: 'priscilla.morgan@example.com',
+      contactPhone: '+44 7700 900456',
       notes: [
         '8 guests for a birthday dinner.',
         'Anna and Ben are vegetarian (no meat or fish).',

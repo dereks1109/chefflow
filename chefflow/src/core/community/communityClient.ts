@@ -1,7 +1,7 @@
 // Client for the chefflow-worker /community/* endpoints. Mirrors the shape
 // of `quotaClient` — same Clerk JWT fetch, same E2E bypass.
 
-import type { AllergenTag, Recipe } from '../types';
+import type { Recipe } from '../types';
 import { getWorkerBaseUrl } from '../util/workerBaseUrl';
 
 export interface CommunityRecipe {
@@ -38,11 +38,11 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe. Optional for backward-compat
    *  with summaries cached before this field was added. */
   originalYield?: number;
-  /** Tags surfaced on the card — allergens (UK-14) + key ingredient tags +
-   *  AI-uncertain ingredient names. Optional + tolerant: any missing field
-   *  renders no chips. */
+  /** Tags surfaced on the card — key ingredient tags only. Allergens were
+   *  previously projected here too but were removed: ChefFlow doesn't
+   *  display allergen claims about another chef's recipe (the publishing
+   *  chef remains the food business operator under FIR 2014). */
   tags?: {
-    allergens?: AllergenTag[];
     keyIngredientTags?: string[];
   };
 }

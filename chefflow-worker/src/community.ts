@@ -60,16 +60,14 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe — surfaced on the card so chefs
    *  see "yields 4" at a glance. */
   originalYield: number;
-  /** Tags surfaced on the card: UK-14 allergens + key ingredient tags +
-   *  the AI-uncertain ingredient list. Trimmed projection of the full
-   *  RecipeAnalysis to keep the list endpoint payload small. */
+  /** Tags surfaced on the card — key ingredient tags only. Allergens were
+   *  previously projected here too but were dropped: ChefFlow doesn't
+   *  display allergen claims about another chef's recipe (the publishing
+   *  chef remains the food business operator under FIR 2014). Likewise
+   *  the AI-uncertain ingredient list is gone — the LLM no longer
+   *  participates in allergen tagging. */
   tags?: {
-    allergens?: string[];
     keyIngredientTags?: string[];
-    /** Ingredient names the original chef's AI flagged as uncertain.
-     *  Surfaced on the community card as an amber "AI to review" pill so
-     *  prospective copiers see the safety caveat before they copy. */
-    uncertainIngredients?: string[];
   };
 }
 
@@ -235,20 +233,10 @@ export async function listRecent(
   const out: CommunityRecipeSummary[] = [];
   for (const r of records) {
     if (!r) continue;
-    const analysis = (r.analysis ?? null) as null | {
-      allergens?: unknown;
-      keyIngredientTags?: unknown;
-      uncertainIngredients?: unknown;
-    };
+    const analysis = (r.analysis ?? null) as null | { keyIngredientTags?: unknown };
     const tags = analysis ? {
-      allergens: Array.isArray(analysis.allergens)
-        ? analysis.allergens.filter((x): x is string => typeof x === 'string')
-        : undefined,
       keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
         ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
-        : undefined,
-      uncertainIngredients: Array.isArray(analysis.uncertainIngredients)
-        ? analysis.uncertainIngredients.filter((x): x is string => typeof x === 'string')
         : undefined,
     } : undefined;
     out.push({
@@ -284,20 +272,10 @@ export async function listByAuthor(
   for (const r of records) {
     if (!r) continue;
     if (r.authorClerkId !== authorClerkId) continue;
-    const analysis = (r.analysis ?? null) as null | {
-      allergens?: unknown;
-      keyIngredientTags?: unknown;
-      uncertainIngredients?: unknown;
-    };
+    const analysis = (r.analysis ?? null) as null | { keyIngredientTags?: unknown };
     const tags = analysis ? {
-      allergens: Array.isArray(analysis.allergens)
-        ? analysis.allergens.filter((x): x is string => typeof x === 'string')
-        : undefined,
       keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
         ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
-        : undefined,
-      uncertainIngredients: Array.isArray(analysis.uncertainIngredients)
-        ? analysis.uncertainIngredients.filter((x): x is string => typeof x === 'string')
         : undefined,
     } : undefined;
     out.push({

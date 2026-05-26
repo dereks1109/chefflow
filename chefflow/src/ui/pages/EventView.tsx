@@ -9,14 +9,13 @@ import {
   type DraggableProvided,
 } from '@hello-pangea/dnd';
 import { randomId } from '../../core/util/id';
-import { ArrowLeft, Calendar, Edit3, ExternalLink, GripVertical, Layers, MapPin, Plus, Sparkles, StickyNote, Trash2, Users, Wallet } from 'lucide-react';
-import EventContactRow from '../components/EventContactRow';
+import { ArrowLeft, GripVertical, Layers, Plus, Sparkles, Trash2, Wallet } from 'lucide-react';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
+import EventDetailCard from '../components/EventDetailCard';
 import EventDetailsSheet from '../components/EventDetailsSheet';
-import NotesList from '../components/NotesList';
 import MenuCheckPanel from '../components/MenuCheckPanel';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
@@ -283,61 +282,7 @@ export default function EventView() {
         <WorkflowCta event={e} />
       </header>
 
-      <div className="relative rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink text-sm">
-        <button
-          type="button"
-          onClick={() => setDetailsSheetOpen(true)}
-          aria-label="Edit event details"
-          data-testid="event-view-edit-details"
-          className="absolute top-3 right-3 p-1.5 rounded text-slate-400 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          title="Edit event details"
-        >
-          <Edit3 className="h-4 w-4" aria-hidden="true" />
-        </button>
-        <h1 className="text-2xl font-bold pr-8" data-testid="event-view-title">{e.title || 'Untitled event'}</h1>
-        <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
-          <Calendar className="h-4 w-4" aria-hidden="true" />
-          <span>{formatDateTime(e.serveAt)}</span>
-        </div>
-        {e.location && (
-          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
-            <MapPin className="h-4 w-4" aria-hidden="true" />
-            <a
-              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.location)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 hover:text-accent hover:underline"
-              title="Open in Google Maps"
-            >
-              {e.location}
-              <ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" />
-            </a>
-          </div>
-        )}
-        <EventContactRow name={e.contactName} email={e.contactEmail} phone={e.contactPhone} />
-        {e.numberOfGuests !== undefined && (
-          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
-            <Users className="h-4 w-4" aria-hidden="true" />
-            <span>
-              {e.numberOfGuests} guest{e.numberOfGuests === 1 ? '' : 's'}
-            </span>
-          </div>
-        )}
-        {e.budget !== undefined && (
-          <div className="mt-2 flex items-center gap-2 text-slate-600 dark:text-slate-400">
-            <Wallet className="h-4 w-4" aria-hidden="true" />
-            <span>Budget {formatGBP(e.budget)}</span>
-          </div>
-        )}
-        {e.notes && (
-          <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <NotesList notes={e.notes} />
-            </div>
-          </div>
-        )}
-      </div>
+      <EventDetailCard event={e} onEdit={() => setDetailsSheetOpen(true)} />
 
       <MenuCheckPanel
         event={e}

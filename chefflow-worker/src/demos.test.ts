@@ -106,11 +106,11 @@ describe('provisionDemosForUser', () => {
     expect(Array.from(rows.values()).some((r) => r.id === 'e_demo_main')).toBe(true);
   });
 
-  it('second call is a no-op (KV v3 marker fast-skips)', async () => {
+  it('second call is a no-op (KV v4 marker fast-skips)', async () => {
     const { db } = makeStubDb();
     const { kv, store } = makeStubKv();
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
-    expect(store.get('demos:provisioned:v3:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v4:user_alice')).toBe('1');
     const second = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(second.alreadyProvisioned).toBe(true);
     expect(second.recipesInserted).toBe(0);
@@ -146,7 +146,7 @@ describe('provisionDemosForUser', () => {
     expect(userIds.filter((u) => u === 'user_bob').length).toBe(15);
   });
 
-  it('v2-marker users get re-provisioned for v3: mango sorbet tombstoned, allergens stripped from existing demos', async () => {
+  it('v2-marker users get re-provisioned for v4: mango sorbet tombstoned, allergens stripped from existing demos', async () => {
     const { db, rows } = makeStubDb();
     const { kv, store } = makeStubKv();
     // Pre-seed the v2 marker (chef was provisioned in the previous version).
@@ -181,7 +181,7 @@ describe('provisionDemosForUser', () => {
     expect(out.recipesTombstoned).toBe(1);
     expect(out.recipesUpdated).toBe(1);
     // V3 marker is now set.
-    expect(store.get('demos:provisioned:v3:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v4:user_alice')).toBe('1');
 
     // Mango sorbet → tombstoned.
     const mango = rows.get('recipes::user_alice::r_demo_mango_sorbet');
@@ -236,7 +236,13 @@ describe('provisionDemosForUser', () => {
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     const updated = rows.get('events::user_alice::e_demo_main');
     expect(updated).toBeDefined();
-    const payload = JSON.parse(updated!.payload) as { budget: number; dishes: Array<{ recipeId: string }> };
+    const payload = JSON.parse(updated!.payload) as {
+      budget: number;
+      dishes: Array<{ recipeId: string }>;
+      contactName?: string;
+      contactEmail?: string;
+      contactPhone?: string;
+    };
     expect(payload.budget).toBe(600);
     expect(payload.dishes.length).toBe(5);
     expect(payload.dishes.map((d) => d.recipeId)).toEqual(
@@ -244,5 +250,10 @@ describe('provisionDemosForUser', () => {
         'r_demo_salad', 'r_demo_calamari', 'r_demo_tikka_masala', 'r_demo_lamb_rack', 'r_demo_ribeye',
       ]),
     );
+    // v4 demo contact upgrade: client name + email + phone are present so
+    // the demo event shows what a complete booking record looks like.
+    expect(payload.contactName).toBe('Priscilla Morgan');
+    expect(payload.contactEmail).toBe('priscilla.morgan@example.com');
+    expect(payload.contactPhone).toBe('+44 7700 900456');
   });
 });
