@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ImageOff, Layers, MoreVertical } from 'lucide-react';
 import { AllergenPill, KeyTagPill } from './AllergenBadge';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
+import { getRecipeKeyTags } from '../../core/recipes/recipeShape';
 import type { AllergenTag } from '../../core/types';
 
 // Names of ingredients the chef flagged with a given allergen tag.
@@ -322,7 +323,7 @@ function OverflowMenu({ recipe, onDuplicate, onDelete, onCoverPhotoChange }: Ove
 }
 
 function RecipeAnalysisRow({ recipe }: { recipe: Recipe }) {
-  const keyTags = recipe.analysis?.keyIngredientTags ?? [];
+  const keyTags = getRecipeKeyTags(recipe);
   // Union: recipe-level catch-all + per-ingredient flags. Both are user-
   // declared; the LLM no longer participates in allergen tagging.
   const allergens = getRecipeAllergens(recipe);

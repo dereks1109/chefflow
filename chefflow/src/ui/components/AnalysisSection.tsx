@@ -9,7 +9,9 @@ import { addEntry as addAuditEntry, markSynced as markAuditSynced } from '../../
 import { pushAllergenAudit } from '../../core/audit/allergenAuditClient';
 import { getRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
+import { getRecipeAllergenList, getRecipeKeyTags } from '../../core/recipes/recipeShape';
 import AllergenRemovalModal from './AllergenRemovalModal';
+import AllergenAdditionModal from './AllergenAdditionModal';
 import type { AllergenTag, AllergenRemovalReason, Recipe, RecipeAnalysis } from '../../core/types';
 
 // Inline replacement for the deleted `findIngredientsForAllergen` helper.
@@ -24,7 +26,11 @@ function ingredientsFlaggedWith(recipe: Recipe, tag: AllergenTag): string[] {
 
 interface Props {
   recipe: Recipe;
-  onChange: (analysis: RecipeAnalysis) => void;
+  /** Emits the next Recipe — pre-2026-05-27 this was `RecipeAnalysis`, but
+   *  the move of `allergens` + `keyIngredientTags` to top-level meant the
+   *  section had to mutate fields outside `analysis`, so the contract is
+   *  now "give me a fully updated Recipe back". The parent commits it. */
+  onChange: (next: Recipe) => void;
   /** Notify parent after an allergen-removal audit entry persists so the
    *  per-recipe history view can refetch. */
   onAllergenAudit?: () => void;
@@ -55,10 +61,17 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [newTagDraft, setNewTagDraft] = useState('');
   const [pendingRemovalTag, setPendingRemovalTag] = useState<AllergenTag | null>(null);
+  // Adding a recipe-level allergen also goes through a 5-second cooldown
+  // modal — mirror of the IngredientRow add gate, so the safety framing is
+  // consistent regardless of which surface the chef tagged from.
+  const [pendingAddAllergen, setPendingAddAllergen] = useState<AllergenTag | null>(null);
 
   const analysis: RecipeAnalysis = recipe.analysis ?? {};
-  const tags = analysis.keyIngredientTags ?? [];
-  const allergens = analysis.allergens ?? [];
+  // Both fields use the shim so legacy rows (where these still live inside
+  // `analysis`) continue to render correctly until the opportunistic
+  // promote in saveRecipe migrates them up.
+  const tags = getRecipeKeyTags(recipe);
+  const allergens = getRecipeAllergenList(recipe);
 
   // Map every spelling we'll accept (kebab key + display label, lowercased)
   // back to the canonical AllergenTag, so "Eggs", "eggs", and "egg" all hit.
@@ -75,52 +88,77 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
     }
     setStatus({ kind: 'analyzing' });
     try {
-      const next = await analyzeRecipe({ recipe, apiKey, model });
-      onChange(next);
+      const nextAnalysis = await analyzeRecipe({ recipe, apiKey, model });
+      // The LLM returns calorie estimates only (no allergens — banned via
+      // recipeGenPrompt). keyIngredientTags from the LLM now live at
+      // top-level on the Recipe; carry them through. Other analysis
+      // fields are calorie-only.
+      const { keyIngredientTags: llmKeyTags, ...calorieAnalysis } = nextAnalysis;
+      onChange({
+        ...recipe,
+        analysis: { ...(recipe.analysis ?? {}), ...calorieAnalysis },
+        ...(llmKeyTags !== undefined ? { keyIngredientTags: llmKeyTags } : {}),
+      });
       setStatus({ kind: 'idle' });
     } catch (err) {
       setStatus({ kind: 'error', message: friendlyError(err) });
     }
   }
 
-  function patch(next: Partial<RecipeAnalysis>) {
-    onChange({ ...analysis, ...next });
+  // Calorie patches go through the analysis object (those ARE AI-derived).
+  function patchAnalysis(next: Partial<RecipeAnalysis>) {
+    onChange({ ...recipe, analysis: { ...analysis, ...next } });
   }
 
   function setKcalPerPortion(raw: string) {
-    if (raw === '') return patch({ caloriesPerPortion: undefined });
+    if (raw === '') return patchAnalysis({ caloriesPerPortion: undefined });
     const n = Number.parseInt(raw, 10);
-    if (Number.isFinite(n) && n >= 0) patch({ caloriesPerPortion: n });
+    if (Number.isFinite(n) && n >= 0) patchAnalysis({ caloriesPerPortion: n });
   }
 
   function setKcalTotal(raw: string) {
-    if (raw === '') return patch({ caloriesTotal: undefined });
+    if (raw === '') return patchAnalysis({ caloriesTotal: undefined });
     const n = Number.parseInt(raw, 10);
-    if (Number.isFinite(n) && n >= 0) patch({ caloriesTotal: n });
+    if (Number.isFinite(n) && n >= 0) patchAnalysis({ caloriesTotal: n });
   }
 
   // Smart classification: matches the input against the closed allergen
   // taxonomy (by kebab key or display label); anything else becomes a free
-  // ingredient tag. Keeps the v1 add-flow to ONE input field.
+  // ingredient tag. Both go to TOP-LEVEL Recipe fields (not analysis), so
+  // the data shape itself signals "chef-declared, not AI-generated".
   function addTag() {
     const raw = newTagDraft.trim();
     if (!raw) return;
     const lower = raw.toLowerCase();
     const allergenMatch = allergenLookup.get(lower);
     if (allergenMatch) {
+      // Allergen add → defer through the 5-second cooldown modal. The
+      // chef's input stays put until they confirm/cancel; cancelling means
+      // they can edit and retry without losing what they typed.
       if (!allergens.includes(allergenMatch)) {
-        patch({ allergens: [...allergens, allergenMatch] });
+        setPendingAddAllergen(allergenMatch);
+      } else {
+        setNewTagDraft('');
       }
-    } else {
-      if (!tags.includes(lower)) {
-        patch({ keyIngredientTags: [...tags, lower] });
-      }
+      return;
+    }
+    if (!tags.includes(lower)) {
+      onChange({ ...recipe, keyIngredientTags: [...tags, lower] });
     }
     setNewTagDraft('');
   }
 
+  function commitAddAllergen() {
+    if (!pendingAddAllergen) return;
+    if (!allergens.includes(pendingAddAllergen)) {
+      onChange({ ...recipe, allergens: [...allergens, pendingAddAllergen] });
+    }
+    setPendingAddAllergen(null);
+    setNewTagDraft('');
+  }
+
   function removeTag(tag: string) {
-    patch({ keyIngredientTags: tags.filter((t) => t !== tag) });
+    onChange({ ...recipe, keyIngredientTags: tags.filter((t) => t !== tag) });
   }
 
   function requestRemoveAllergen(tag: AllergenTag) {
@@ -153,7 +191,7 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
       setPendingRemovalTag(null);
       return;
     }
-    patch({ allergens: allergens.filter((a) => a !== tag) });
+    onChange({ ...recipe, allergens: allergens.filter((a) => a !== tag) });
     setPendingRemovalTag(null);
     onAllergenAudit?.();
     // Best-effort sync to the central log — never blocks the user flow.
@@ -172,8 +210,16 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
   return (
     <>
     <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+      <legend className="text-sm font-medium px-1">Recipe details</legend>
+      {/* Sub-section label split (2026-05-27): make it visible to the chef
+          which fields ChefFlow's LLM can populate (calories) vs which are
+          chef-declared (allergens + tags). The two were previously bundled
+          under a single "Analysis" heading, which read as "all of this is
+          AI-generated" — exactly the wrong signal for the allergens. */}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <legend className="text-sm font-medium px-1">Analysis</legend>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          Calorie estimate (AI)
+        </p>
         <button
           type="button"
           onClick={() => void handleAnalyze()}
@@ -226,9 +272,17 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
         </label>
       </div>
 
-      {/* Tags — key ingredients + allergens combined */}
-      <div>
-        <p className="text-xs font-medium text-slate-500 mb-1.5">Tags</p>
+      {/* Tags — key ingredients + allergens. CHEF-DECLARED (top-level
+          Recipe.allergens + Recipe.keyIngredientTags) since 2026-05-27 —
+          the heading + sub-label make the data ownership explicit. */}
+      <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          Tags &amp; allergens (chef-declared)
+        </p>
+        <p className="text-xs text-slate-500 mb-2">
+          ChefFlow does not detect allergens. Anything below is what you
+          have explicitly tagged — supplier labels remain authoritative.
+        </p>
         <div className="flex flex-wrap items-center gap-1.5">
           {tags.length === 0 && allergens.length === 0 && (
             <span className="text-xs text-slate-500 italic">None — add tags or run Analyse.</span>
@@ -306,6 +360,12 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
       ingredientsAtTime={pendingRemovalTag ? ingredientsFlaggedWith(recipe, pendingRemovalTag) : []}
       onCancel={() => setPendingRemovalTag(null)}
       onConfirm={(reasons, otherText) => void confirmRemoveAllergen(reasons, otherText)}
+    />
+    <AllergenAdditionModal
+      open={pendingAddAllergen !== null}
+      allergenLabel={pendingAddAllergen ? ALLERGEN_LABEL[pendingAddAllergen] : ''}
+      onCancel={() => setPendingAddAllergen(null)}
+      onConfirm={commitAddAllergen}
     />
     </>
   );
@@ -403,10 +463,10 @@ function SubRecipeInheritedChips({ recipe }: { recipe: Recipe }) {
       for (const sub of subs) {
         if (!sub) continue;
         const title = sub.title || 'Untitled sub-recipe';
-        for (const a of sub.analysis?.allergens ?? []) {
+        for (const a of getRecipeAllergenList(sub)) {
           next.push({ id: `${sub.id}-a-${a}`, kind: 'allergen', value: a, source: title });
         }
-        for (const t of sub.analysis?.keyIngredientTags ?? []) {
+        for (const t of getRecipeKeyTags(sub)) {
           next.push({ id: `${sub.id}-t-${t}`, kind: 'key', value: t, source: title });
         }
       }

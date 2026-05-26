@@ -49,14 +49,17 @@ export async function generateEventFromText(input: GenerateEventInput): Promise<
     fetchImpl: input.fetchImpl,
     signal: input.signal,
   });
-  return parseLlmEvent(raw);
+  // Preserve the original input on the parsed event so the EventView notes
+  // popover can prove each bullet came from the customer's text (rather
+  // than being synthesized by the LLM). See `KitchenEvent.notesOriginal`.
+  return parseLlmEvent(raw, input.text);
 }
 
 // ---------------------------------------------------------------------------
 // Lenient parser. Tolerates fences + stray prose around the JSON body.
 // Missing fields default to safe values; unknown extras are ignored.
 // ---------------------------------------------------------------------------
-export function parseLlmEvent(raw: string): KitchenEvent {
+export function parseLlmEvent(raw: string, originalInput?: string): KitchenEvent {
   const stripped = stripMarkdownFences(raw);
   let parsed: unknown;
   try {
@@ -82,12 +85,14 @@ export function parseLlmEvent(raw: string): KitchenEvent {
   const dishes = parseDishes(o.dishes, serveAt);
 
   const now = Date.now();
+  const trimmedOriginal = typeof originalInput === 'string' ? originalInput.trim() : '';
   return {
     id: randomId(),
     title,
     serveAt,
     location,
     notes,
+    notesOriginal: trimmedOriginal.length > 0 ? trimmedOriginal : undefined,
     dishes,
     createdAt: now,
     updatedAt: now,

@@ -16,6 +16,7 @@ import type {
   Recipe,
 } from '../../types';
 import { complete } from '../../llm/llmClient';
+import { getRecipeAllergenList, getRecipeKeyTags } from '../../recipes/recipeShape';
 import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import {
   buildMenuCheckSystemPrompt,
@@ -68,8 +69,8 @@ export async function checkMenu(input: CheckMenuInput): Promise<MenuAnalysis> {
     return {
       name: d.name,
       portions: d.portions,
-      allergens: recipe?.analysis?.allergens,
-      keyIngredients: recipe?.analysis?.keyIngredientTags,
+      allergens: recipe ? getRecipeAllergenList(recipe) : undefined,
+      keyIngredients: recipe ? getRecipeKeyTags(recipe) : undefined,
     };
   });
 

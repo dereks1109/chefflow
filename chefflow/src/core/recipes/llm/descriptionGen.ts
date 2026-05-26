@@ -1,4 +1,5 @@
 import type { Recipe } from '../../types';
+import { getRecipeKeyTags } from '../recipeShape';
 import { complete } from '../../llm/llmClient';
 import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import { LlmRecipeValidationError } from './recipeGenSchema';
@@ -25,8 +26,9 @@ function buildUserPrompt(recipe: Recipe): string {
     .map((i) => i.name?.trim())
     .filter((n): n is string => Boolean(n))
     .slice(0, 20);
-  const tagHint = recipe.analysis?.keyIngredientTags?.length
-    ? `\nKey ingredients: ${recipe.analysis.keyIngredientTags.join(', ')}.`
+  const keyTags = getRecipeKeyTags(recipe);
+  const tagHint = keyTags.length
+    ? `\nKey ingredients: ${keyTags.join(', ')}.`
     : '';
   return [
     `Dish: ${recipe.title || 'Untitled dish'}.`,

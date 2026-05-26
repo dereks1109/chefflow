@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import RecipeEditor from './RecipeEditor';
 import { db } from '../../db/dexie';
 import { usePublishedSet } from '../../state/usePublishedSet';
+import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import type { Recipe } from '../../core/types';
 
 // Hoisted spy so we can assert auto-republish was (or wasn't) invoked
@@ -24,6 +25,11 @@ beforeEach(async () => {
   unpublishRecipeMock.mockClear();
   // Save / remove buttons confirm via window.confirm — auto-accept in tests.
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+  // T4b (2026-05-27) introduces a session-scoped save-time attestation
+  // gate. Pre-set the flag in tests that don't specifically exercise it
+  // so existing test assertions about save behaviour still hold without
+  // having to dismiss the modal in every test.
+  useSessionAttestationStore.setState({ recipeSaveAttested: true });
 });
 
 afterEach(() => {

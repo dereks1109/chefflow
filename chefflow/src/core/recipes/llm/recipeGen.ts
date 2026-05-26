@@ -191,10 +191,14 @@ function buildRecipe(llm: LlmRecipe, source: 'llm-text' | 'llm-vision'): Recipe 
     steps,
     createdAt: now,
     updatedAt: now,
+    // LLM-suggested keyIngredientTags go to top-level so the data shape
+    // doesn't imply ChefFlow ran allergen detection (allergens are NEVER
+    // emitted by the LLM — see recipeGenPrompt.ts). The chef can edit /
+    // remove the suggestions in the Tags section like any chef-declared tag.
+    keyIngredientTags: llm.analysis.keyIngredientTags,
     analysis: {
       caloriesPerPortion: llm.analysis.caloriesPerPortion,
       caloriesTotal: llm.analysis.caloriesTotal,
-      keyIngredientTags: llm.analysis.keyIngredientTags,
       analyzedAt: now,
       source,
     },

@@ -2,6 +2,7 @@ import { liveQuery } from 'dexie';
 import { db } from './dexie';
 import { getCurrentUserId } from '../core/auth/getCurrentUserId';
 import { uncopyRecipe } from '../core/community/communityClient';
+import { promoteLegacyRecipeFields } from '../core/recipes/recipeShape';
 import type { Recipe } from '../core/types';
 
 // All repo functions are scoped to `getCurrentUserId()`:
@@ -69,14 +70,21 @@ export async function getRecipe(id: string): Promise<Recipe | undefined> {
 
 export async function saveRecipe(recipe: Recipe): Promise<void> {
   const userId = getCurrentUserId();
+  // Opportunistic legacy promotion: any row still carrying allergens or
+  // keyIngredientTags inside `analysis` gets lifted to the new top-level
+  // shape (see `core/recipes/recipeShape.ts`). Idempotent — no-op once
+  // the row is on the new shape. Removes the only place the legacy
+  // fields are still written; reads use the shim until the cleanup
+  // commit.
+  const promoted = promoteLegacyRecipeFields(recipe);
   const next: Recipe = {
-    ...recipe,
-    userId: recipe.userId ?? userId,
+    ...promoted,
+    userId: promoted.userId ?? userId,
     // Honor caller-set updatedAt (consumers + sync engine pass it explicitly;
     // tests use it to seed deterministic sort order). Fall back to Date.now()
     // only when missing — guards against malformed rows landing without a
     // sortable timestamp.
-    updatedAt: recipe.updatedAt > 0 ? recipe.updatedAt : Date.now(),
+    updatedAt: promoted.updatedAt > 0 ? promoted.updatedAt : Date.now(),
     // Any write — including pin toggle, content edit, or analysis refresh —
     // re-queues the row for the next sync push. Cleared back to `true` by
     // the sync engine when the server confirms an 'applied' LWW status.

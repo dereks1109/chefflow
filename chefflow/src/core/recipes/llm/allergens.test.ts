@@ -56,11 +56,16 @@ describe('isAllergenTag', () => {
   });
 });
 
+// Post-2026-05-27: writes now go to TOP-LEVEL `recipe.allergens` (see
+// `core/recipes/recipeShape.ts`). Reads still tolerate legacy
+// `analysis.allergens` via the shim — the "reads legacy shape" test
+// below pins that fallback path.
+
 describe('applyRecipeAllergenAdd', () => {
-  it('adds the tag to analysis.allergens and does NOT touch any ingredient', () => {
+  it('adds the tag to recipe.allergens (top-level) and does NOT touch any ingredient', () => {
     const r = makeRecipe();
     const next = applyRecipeAllergenAdd(r, 'milk');
-    expect(next.analysis?.allergens).toEqual(['milk']);
+    expect(next.allergens).toEqual(['milk']);
     // Regression guard: the previous regex-cascade was removed. The chef is
     // responsible for tagging individual ingredients themselves.
     expect(next.ingredients[0].allergenFlags).toBeUndefined();
@@ -71,21 +76,28 @@ describe('applyRecipeAllergenAdd', () => {
     const r = makeRecipe();
     const once = applyRecipeAllergenAdd(r, 'milk');
     const twice = applyRecipeAllergenAdd(once, 'milk');
-    expect(twice.analysis?.allergens).toEqual(['milk']);
+    expect(twice.allergens).toEqual(['milk']);
+  });
+
+  it('reads legacy shape (analysis.allergens) and writes the merged result top-level', () => {
+    const r = makeRecipe({ analysis: { allergens: ['gluten'] } });
+    const next = applyRecipeAllergenAdd(r, 'milk');
+    expect(next.allergens).toContain('gluten');
+    expect(next.allergens).toContain('milk');
   });
 });
 
 describe('applyRecipeAllergenRemove', () => {
-  it('removes the tag from analysis.allergens and does NOT touch ingredients', () => {
+  it('removes the tag from recipe.allergens and does NOT touch ingredients', () => {
     const r = makeRecipe({
-      analysis: { allergens: ['milk', 'gluten'] },
+      allergens: ['milk', 'gluten'],
       ingredients: [
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
         { id: 'i2', raw: '', amount: 200, unit: 'g', name: 'flour', isLocked: false, allergenFlags: ['gluten'] },
       ],
     });
     const next = applyRecipeAllergenRemove(r, 'milk');
-    expect(next.analysis?.allergens).toEqual(['gluten']);
+    expect(next.allergens).toEqual(['gluten']);
     // Per-ingredient flags untouched — chef removes them via the row chip
     // separately. Removal at recipe level is a catch-all removal only.
     expect(next.ingredients[0].allergenFlags).toEqual(['milk']);
@@ -94,12 +106,12 @@ describe('applyRecipeAllergenRemove', () => {
 });
 
 describe('applyIngredientAllergenAdd', () => {
-  it('adds a tag to the targeted ingredient AND promotes to recipe-level', () => {
+  it('adds a tag to the targeted ingredient AND promotes to recipe-level (top-level)', () => {
     const r = makeRecipe();
     const next = applyIngredientAllergenAdd(r, 'i1', 'milk');
     expect(next.ingredients[0].allergenFlags).toEqual(['milk']);
     expect(next.ingredients[1].allergenFlags).toBeUndefined();
-    expect(next.analysis?.allergens).toEqual(['milk']);
+    expect(next.allergens).toEqual(['milk']);
   });
 
   it('is a no-op when the ingredient already carries the tag', () => {
@@ -108,11 +120,11 @@ describe('applyIngredientAllergenAdd', () => {
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
         { id: 'i2', raw: '', amount: 200, unit: 'g', name: 'beef', isLocked: false },
       ],
-      analysis: { allergens: ['milk'] },
+      allergens: ['milk'],
     });
     const next = applyIngredientAllergenAdd(r, 'i1', 'milk');
     expect(next.ingredients[0].allergenFlags).toEqual(['milk']);
-    expect(next.analysis?.allergens).toEqual(['milk']);
+    expect(next.allergens).toEqual(['milk']);
   });
 });
 
@@ -123,11 +135,11 @@ describe('applyIngredientAllergenRemove', () => {
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
         { id: 'i2', raw: '', amount: 200, unit: 'g', name: 'beef', isLocked: false },
       ],
-      analysis: { allergens: ['milk'] },
+      allergens: ['milk'],
     });
     const next = applyIngredientAllergenRemove(r, 'i1', 'milk');
     expect(next.ingredients[0].allergenFlags).toBeUndefined();
-    expect(next.analysis?.allergens).toEqual([]);
+    expect(next.allergens).toEqual([]);
   });
 
   it('keeps the recipe-level tag when ANOTHER ingredient still carries it', () => {
@@ -136,19 +148,19 @@ describe('applyIngredientAllergenRemove', () => {
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
         { id: 'i2', raw: '', amount: 50, unit: 'g', name: 'cream', isLocked: false, allergenFlags: ['milk'] },
       ],
-      analysis: { allergens: ['milk'] },
+      allergens: ['milk'],
     });
     const next = applyIngredientAllergenRemove(r, 'i1', 'milk');
     expect(next.ingredients[0].allergenFlags).toBeUndefined();
     expect(next.ingredients[1].allergenFlags).toEqual(['milk']);
-    expect(next.analysis?.allergens).toEqual(['milk']);
+    expect(next.allergens).toEqual(['milk']);
   });
 });
 
 describe('getRecipeAllergens', () => {
   it('returns the union of recipe-level and per-ingredient flags, sorted', () => {
     const r = makeRecipe({
-      analysis: { allergens: ['milk'] },
+      allergens: ['milk'],
       ingredients: [
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
         { id: 'i2', raw: '', amount: 200, unit: 'g', name: 'flour', isLocked: false, allergenFlags: ['gluten'] },
@@ -157,9 +169,17 @@ describe('getRecipeAllergens', () => {
     expect(getRecipeAllergens(r)).toEqual(['gluten', 'milk']);
   });
 
+  it('reads the legacy shape (analysis.allergens) for backward compatibility', () => {
+    const r = makeRecipe({
+      analysis: { allergens: ['milk'] },
+      ingredients: [],
+    });
+    expect(getRecipeAllergens(r)).toEqual(['milk']);
+  });
+
   it('filters out garbage values that snuck into persisted data', () => {
     const r = makeRecipe({
-      analysis: { allergens: ['milk', 'not-a-tag' as unknown as AllergenTag] },
+      allergens: ['milk', 'not-a-tag' as unknown as AllergenTag],
     });
     expect(getRecipeAllergens(r)).toEqual(['milk']);
   });

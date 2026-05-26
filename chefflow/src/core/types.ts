@@ -71,13 +71,15 @@ export type AllergenTag =
 export interface RecipeAnalysis {
   caloriesPerPortion?: number;
   caloriesTotal?: number;
-  keyIngredientTags?: string[];     // 2–6 lowercase headline ingredients (e.g. "beef")
-  /** Recipe-level allergen declarations from the closed UK-14 set, user-
-   *  declared. The LLM no longer populates this — the previous AI-detection
-   *  path was removed for legal-risk reasons (the chef, not ChefFlow, is
-   *  the food business operator under FIR 2014). The field stays as a
-   *  catch-all for allergens not tied to a specific ingredient (e.g. the
-   *  chef knows a supplier's pre-mix contains soy). */
+  /** @deprecated since 2026-05-27 — moved to top-level Recipe.keyIngredientTags
+   *  so the "Analysis" object stays AI-only (calories) and the chef-declared
+   *  tags don't look auto-generated. Reads use `getKeyTags()` from
+   *  `core/recipes/recipeShape.ts`; writes go to top-level only; legacy rows
+   *  are promoted opportunistically on save. Remove once telemetry confirms
+   *  no remaining legacy rows. */
+  keyIngredientTags?: string[];
+  /** @deprecated since 2026-05-27 — moved to top-level Recipe.allergens for
+   *  the same reason as keyIngredientTags. See note above. */
   allergens?: AllergenTag[];
   analyzedAt?: number;              // epoch ms
   source?: 'llm-text' | 'llm-vision' | 'manual';
@@ -116,6 +118,14 @@ export interface Recipe extends SyncMeta {
   createdAt: number;
   updatedAt: number;
   isPinned?: boolean;
+  /** Chef-declared UK Top-14 allergen tags. Top-level (NOT under `analysis`)
+   *  so the data model itself signals "chef-declared, not AI-generated". */
+  allergens?: AllergenTag[];
+  /** Chef-or-LLM-suggested headline ingredients (2–6 lowercase, e.g. "beef").
+   *  Top-level for the same reason as `allergens` — even though the LLM may
+   *  suggest these, they're displayed alongside the chef's edits and never
+   *  imply a safety claim. */
+  keyIngredientTags?: string[];
   analysis?: RecipeAnalysis;
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().
@@ -172,6 +182,15 @@ export interface KitchenEvent extends SyncMeta {
   // Combined freeform field: general event notes + guest dietary requirements.
   // The LLM menu-suitability check reads dietary intent from here.
   notes: string;
+  /** The original unparsed text (e.g. a customer email) the chef pasted into
+   *  GenerateEventSheet. Set ONLY when the event came from an LLM-extraction
+   *  flow; undefined for manually-typed events. The EventView notes hover
+   *  popover renders this in full + highlights which lines produced each
+   *  bullet, so the chef can confirm a note really came from the customer
+   *  rather than being synthesized by the LLM. Not synced to D1 today (would
+   *  bloat the payload for a feature only used during local editing) — when
+   *  needed, plumb through community.ts publishRecipe / sync.ts push paths. */
+  notesOriginal?: string;
   dishes: Dish[];
   // User-defined menu sections (containers of dishIds). Optional — older
   // events without this field render every dish under "Unassigned" until the

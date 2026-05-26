@@ -89,7 +89,7 @@ export default function EventDetailCard({ event, onEdit }: Props) {
         <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
           <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
           <div className="min-w-0 flex-1">
-            <NotesList notes={event.notes} />
+            <NotesList notes={event.notes} notesOriginal={event.notesOriginal} />
           </div>
         </div>
       )}

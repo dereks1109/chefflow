@@ -20,11 +20,13 @@ import { publishRecipe, unpublishRecipe } from '../../core/community/communityCl
 import { generateDescription } from '../../core/recipes/llm/descriptionGen';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import AllergenAttestationModal from '../components/AllergenAttestationModal';
+import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
+import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { useAuthGate } from '../../state/useAuthGate';
-import type { AllergenTag, Recipe, RecipeAnalysis, Ingredient, WorkflowStep } from '../../core/types';
+import type { AllergenTag, Recipe, Ingredient, WorkflowStep } from '../../core/types';
 
 type LoadState =
   | { kind: 'loading' }
@@ -43,6 +45,7 @@ export default function RecipeEditor() {
   const [descError, setDescError] = useState<string | null>(null);
   const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const [attestOpen, setAttestOpen] = useState(false);
+  const [saveAttestOpen, setSaveAttestOpen] = useState(false);
   const displayName = useProfileStore((s) => s.displayName);
   const showNameOnCommunity = useProfileStore((s) => s.showNameOnCommunity);
   const storedApiKey = useLlmSettingsStore((s) => s.apiKey);
@@ -145,18 +148,20 @@ export default function RecipeEditor() {
     update('steps', r.steps.filter((_, i) => i !== idx));
   }
 
-  function updateAnalysis(next: RecipeAnalysis) {
-    // Diff the recipe-level allergens. Non-allergen analysis fields (calories,
-    // keyIngredientTags, uncertainIngredients) flow through `working.analysis`
-    // unchanged; only the allergen deltas trigger the cascade helpers, which
-    // also flag/unflag matching ingredient rows.
-    let working: Recipe = { ...r, analysis: next };
+  function updateRecipeFromSection(next: Recipe) {
+    // AnalysisSection now emits the full Recipe with top-level
+    // allergens / keyIngredientTags already updated (2026-05-27). Diff
+    // recipe-level allergens here so a chef-typed allergen still cascades
+    // to matching ingredient rows via the mutation helpers — the cascade
+    // is a parent-side concern because the section can't see which
+    // ingredients to mirror onto.
     const prevAllergens = new Set<AllergenTag>(
-      (r.analysis?.allergens ?? []).filter(isAllergenTag),
+      (r.allergens ?? r.analysis?.allergens ?? []).filter(isAllergenTag),
     );
     const nextAllergens = new Set<AllergenTag>(
       (next.allergens ?? []).filter(isAllergenTag),
     );
+    let working: Recipe = next;
     for (const tag of nextAllergens) {
       if (!prevAllergens.has(tag)) working = applyRecipeAllergenAdd(working, tag);
     }
@@ -176,7 +181,19 @@ export default function RecipeEditor() {
   }
 
   async function handleSave() {
-    if (!window.confirm('Save changes to this recipe?')) return;
+    // Session-scoped hygiene-attestation gate: ensure the chef has seen
+    // the "ChefFlow is not a hygiene-certification service" framing at
+    // least once per browser session. Subsequent saves in the same
+    // session skip the modal and save directly. A refresh / sign-out
+    // re-arms the gate by resetting the (non-persisted) Zustand store.
+    if (!useSessionAttestationStore.getState().recipeSaveAttested) {
+      setSaveAttestOpen(true);
+      return;
+    }
+    await actualSave();
+  }
+
+  async function actualSave() {
     const nextRecipe: Recipe = { ...r, updatedAt: Date.now() };
     await saveRecipe(nextRecipe);
     setDirty(false);
@@ -263,6 +280,15 @@ export default function RecipeEditor() {
           onConfirm={() => void doPublish()}
         />
       )}
+      <RecipeSaveAttestationModal
+        open={saveAttestOpen}
+        onCancel={() => setSaveAttestOpen(false)}
+        onConfirm={() => {
+          useSessionAttestationStore.getState().setRecipeSaveAttested(true);
+          setSaveAttestOpen(false);
+          void actualSave();
+        }}
+      />
       <header className="flex items-center justify-between mb-4 gap-2">
         <h1 className="text-2xl font-bold">Edit recipe</h1>
         <div className="flex flex-wrap gap-2 items-center">
@@ -312,7 +338,7 @@ export default function RecipeEditor() {
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <AnalysisSection
           recipe={r}
-          onChange={updateAnalysis}
+          onChange={updateRecipeFromSection}
           onAllergenAudit={() => setAuditRefreshKey((k) => k + 1)}
         />
         <AllergenHistorySection recipeId={r.id} refreshKey={auditRefreshKey} />

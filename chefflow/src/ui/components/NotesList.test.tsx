@@ -64,4 +64,55 @@ describe('NotesList', () => {
     const items = screen.getAllByTestId(/notes-list-item-/);
     items.forEach((li) => expect(li).toHaveAttribute('tabIndex', '0'));
   });
+
+  // Provenance mode — kicks in when `notesOriginal` is supplied (e.g. the
+  // chef pasted a customer email into GenerateEventSheet). The popover
+  // shows the WHOLE original text with the bullet's source line wrapped in
+  // <mark>; bullets that don't match get the "AI paraphrase" badge.
+
+  it('with notesOriginal: popover renders the WHOLE original text', () => {
+    const original = 'Hi chef,\nWe have 3 vegans and 1 peanut allergy at the table.\nThanks!';
+    render(
+      <NotesList
+        notes={'3 vegans\n1 peanut allergy'}
+        notesOriginal={original}
+      />,
+    );
+    // Both bullets' popovers carry the full original (chef can prove the
+    // whole context they were extracted from).
+    expect(screen.getByTestId('notes-list-original-0').textContent).toContain('Hi chef,');
+    expect(screen.getByTestId('notes-list-original-0').textContent).toContain('Thanks!');
+  });
+
+  it('with notesOriginal: each bullet that matches a source line gets a <mark> highlight', () => {
+    // Multi-line notes → bullets are rendered (single-line falls back to <p>).
+    render(
+      <NotesList
+        notes={'3 vegans at the table\nNo nuts please'}
+        notesOriginal={'Hi chef, we have 3 vegans at the table and no nuts please.'}
+      />,
+    );
+    const mark = screen.getByTestId('notes-list-original-0').querySelector('mark');
+    expect(mark?.textContent).toContain('3 vegans at the table');
+  });
+
+  it('with notesOriginal: bullets with NO match in the source get a "AI paraphrase" badge', () => {
+    render(
+      <NotesList
+        notes={'Three vegans guests\nNo nuts'}
+        notesOriginal={'Could you put together a vegan-friendly menu? Also avoid nuts.'}
+      />,
+    );
+    // Both bullets are paraphrased (neither appears verbatim in the
+    // customer text) — chef gets the badge on both so they know to
+    // double-check.
+    expect(screen.getByTestId('notes-list-paraphrase-0')).toBeTruthy();
+    expect(screen.getByTestId('notes-list-paraphrase-0').textContent).toContain('AI paraphrase');
+    expect(screen.getByTestId('notes-list-paraphrase-1')).toBeTruthy();
+  });
+
+  it('without notesOriginal: NO paraphrase badge (legacy / manual-entry events keep current behaviour)', () => {
+    render(<NotesList notes={'something the chef typed\nanother line'} />);
+    expect(screen.queryByTestId('notes-list-paraphrase-0')).toBeNull();
+  });
 });

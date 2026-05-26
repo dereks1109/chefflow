@@ -76,9 +76,10 @@ export function isAllergenTag(s: unknown): s is AllergenTag {
 
 // ---------------------------------------------------------------------------
 // Pure mutation helpers — return a new Recipe, never mutate. Used by the
-// editor to keep `recipe.analysis.allergens` (recipe-level catch-all) and
-// per-ingredient `ingredient.allergenFlags` consistent when the chef adds
-// or removes a tag.
+// editor to keep `recipe.allergens` (recipe-level catch-all, top-level
+// since 2026-05-27 — see recipeShape.ts) and per-ingredient
+// `ingredient.allergenFlags` consistent when the chef adds or removes
+// a tag.
 //
 // Critically: NONE of these helpers cascade across the recipe/ingredient
 // boundary on ADD/REMOVE at recipe level. The chef who adds "milk" at recipe
@@ -94,24 +95,25 @@ export function isAllergenTag(s: unknown): s is AllergenTag {
 // at recipe level, "milk" is de-promoted.
 // ---------------------------------------------------------------------------
 
+// Reads use the shim so legacy `analysis.allergens` rows still resolve;
+// writes go to the new top-level field. The shim disappears once the
+// opportunistic-promote in saveRecipe has migrated all live data.
+function readDeclared(recipe: Recipe): AllergenTag[] {
+  return recipe.allergens ?? recipe.analysis?.allergens ?? [];
+}
+
 /** Add a tag to the recipe-level catch-all. Does NOT touch ingredients. */
 export function applyRecipeAllergenAdd(recipe: Recipe, tag: AllergenTag): Recipe {
-  const declared = new Set<AllergenTag>(recipe.analysis?.allergens ?? []);
+  const declared = new Set<AllergenTag>(readDeclared(recipe));
   if (declared.has(tag)) return recipe;
   declared.add(tag);
-  return {
-    ...recipe,
-    analysis: { ...(recipe.analysis ?? {}), allergens: Array.from(declared) },
-  };
+  return { ...recipe, allergens: Array.from(declared) };
 }
 
 /** Remove a tag from the recipe-level catch-all. Does NOT touch ingredients. */
 export function applyRecipeAllergenRemove(recipe: Recipe, tag: AllergenTag): Recipe {
-  const declared = (recipe.analysis?.allergens ?? []).filter((a) => a !== tag);
-  return {
-    ...recipe,
-    analysis: { ...(recipe.analysis ?? {}), allergens: declared },
-  };
+  const declared = readDeclared(recipe).filter((a) => a !== tag);
+  return { ...recipe, allergens: declared };
 }
 
 /**
@@ -132,19 +134,15 @@ export function applyIngredientAllergenAdd(
     flags.add(tag);
     return { ...ing, allergenFlags: Array.from(flags) };
   });
-  const declared = new Set<AllergenTag>(recipe.analysis?.allergens ?? []);
+  const declared = new Set<AllergenTag>(readDeclared(recipe));
   declared.add(tag);
-  return {
-    ...recipe,
-    ingredients: nextIngredients,
-    analysis: { ...(recipe.analysis ?? {}), allergens: Array.from(declared) },
-  };
+  return { ...recipe, ingredients: nextIngredients, allergens: Array.from(declared) };
 }
 
 /**
  * Ingredient-level REMOVE: strip the tag from that ingredient. THEN: if no
  * other ingredient still carries the tag in its `allergenFlags`, also
- * de-promote from `analysis.allergens`. Symmetric to the ADD path.
+ * de-promote from the recipe-level catch-all. Symmetric to the ADD path.
  */
 export function applyIngredientAllergenRemove(
   recipe: Recipe,
@@ -160,24 +158,20 @@ export function applyIngredientAllergenRemove(
   });
   const anyOtherSource = nextIngredients.some((ing) => ing.allergenFlags?.includes(tag));
   const declared = anyOtherSource
-    ? (recipe.analysis?.allergens ?? [])
-    : (recipe.analysis?.allergens ?? []).filter((a) => a !== tag);
-  return {
-    ...recipe,
-    ingredients: nextIngredients,
-    analysis: { ...(recipe.analysis ?? {}), allergens: declared },
-  };
+    ? readDeclared(recipe)
+    : readDeclared(recipe).filter((a) => a !== tag);
+  return { ...recipe, ingredients: nextIngredients, allergens: declared };
 }
 
 /**
  * Effective allergen list for display: union of the recipe-level catch-all
- * (`analysis.allergens`) and every per-ingredient `allergenFlags`. Sorted
- * alphabetically so the library card + editor render in the same order
- * regardless of insertion sequence.
+ * and every per-ingredient `allergenFlags`. Sorted alphabetically so the
+ * library card + editor render in the same order regardless of insertion
+ * sequence.
  */
 export function getRecipeAllergens(recipe: Recipe): AllergenTag[] {
   const set = new Set<AllergenTag>();
-  for (const a of recipe.analysis?.allergens ?? []) {
+  for (const a of readDeclared(recipe)) {
     if (isAllergenTag(a)) set.add(a);
   }
   for (const ing of recipe.ingredients) {

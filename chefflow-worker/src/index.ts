@@ -52,6 +52,7 @@ import {
 } from './sync';
 import { provisionDemosForUser } from './demos';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
+import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import {
   submitReport as takedownSubmitReport,
   listReports as takedownListReports,
@@ -89,6 +90,11 @@ export interface Env {
   // contact.ts. Optional: when absent, the contact form still works but
   // doesn't email anyone (KV-only). Set via `wrangler secret put RESEND_API_KEY`.
   RESEND_API_KEY?: string;
+  // One-shot bearer token gating POST /admin/bootstrap (set + replace
+  // admin@chefflow.uk as the sole admin). Optional — when unset the route
+  // returns 503. Set via `wrangler secret put ADMIN_BOOTSTRAP_TOKEN`
+  // immediately before use, then `wrangler secret delete` after.
+  ADMIN_BOOTSTRAP_TOKEN?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -185,6 +191,39 @@ export async function handleRequest(
         return json({ error: err.message }, err.status);
       }
       const msg = err instanceof Error ? err.message : 'Failed to send';
+      return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /admin/bootstrap?email=… — one-shot endpoint to set / replace
+  // the admin user. Gated by the `ADMIN_BOOTSTRAP_TOKEN` worker secret
+  // (NOT by Clerk auth) so it works when no admin exists yet — the
+  // chicken-and-egg case. Operator workflow:
+  //   1. wrangler secret put ADMIN_BOOTSTRAP_TOKEN   (any random hex)
+  //   2. curl -X POST -H "Authorization: Bearer <token>" \
+  //        "https://api.chefflow.uk/admin/bootstrap?email=admin@chefflow.uk"
+  //   3. wrangler secret delete ADMIN_BOOTSTRAP_TOKEN
+  // Lives OUTSIDE the Clerk auth gate. The bootstrap token shouldn't sit
+  // around — operator is expected to revoke it immediately after use.
+  if (req.method === 'POST' && url.pathname === '/admin/bootstrap') {
+    const presentToken = env.ADMIN_BOOTSTRAP_TOKEN;
+    if (!presentToken) {
+      return json({ error: 'admin bootstrap disabled — set ADMIN_BOOTSTRAP_TOKEN secret first' }, 503);
+    }
+    const auth = req.headers.get('Authorization') ?? '';
+    const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (supplied !== presentToken) {
+      return json({ error: 'invalid bootstrap token' }, 401);
+    }
+    const email = url.searchParams.get('email') ?? '';
+    try {
+      const result = await setAdminByEmail(email, env.CLERK_SECRET_KEY, fetchImpl);
+      return json({ ok: true, ...result }, 200);
+    } catch (err) {
+      if (err instanceof AdminBootstrapError) {
+        return json({ error: err.message }, err.status >= 400 && err.status < 600 ? err.status : 500);
+      }
+      const msg = err instanceof Error ? err.message : 'admin bootstrap failed';
       return json({ error: msg }, 500);
     }
   }

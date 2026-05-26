@@ -233,12 +233,18 @@ export async function listRecent(
   const out: CommunityRecipeSummary[] = [];
   for (const r of records) {
     if (!r) continue;
-    const analysis = (r.analysis ?? null) as null | { keyIngredientTags?: unknown };
-    const tags = analysis ? {
-      keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
-        ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
-        : undefined,
-    } : undefined;
+    // Read shim — newer payloads carry `keyIngredientTags` at top-level
+    // (post 2026-05-27 SPA change); legacy rows still have it nested under
+    // `analysis.keyIngredientTags`. Drop the shim half once telemetry
+    // shows no legacy payloads remain.
+    const rec = r as unknown as {
+      keyIngredientTags?: unknown;
+      analysis?: { keyIngredientTags?: unknown };
+    };
+    const rawKeyTags = rec.keyIngredientTags ?? rec.analysis?.keyIngredientTags;
+    const tags = Array.isArray(rawKeyTags)
+      ? { keyIngredientTags: rawKeyTags.filter((x): x is string => typeof x === 'string') }
+      : undefined;
     out.push({
       id: r.id,
       sourceLocalId: r.sourceLocalId,
@@ -272,12 +278,18 @@ export async function listByAuthor(
   for (const r of records) {
     if (!r) continue;
     if (r.authorClerkId !== authorClerkId) continue;
-    const analysis = (r.analysis ?? null) as null | { keyIngredientTags?: unknown };
-    const tags = analysis ? {
-      keyIngredientTags: Array.isArray(analysis.keyIngredientTags)
-        ? analysis.keyIngredientTags.filter((x): x is string => typeof x === 'string')
-        : undefined,
-    } : undefined;
+    // Read shim — newer payloads carry `keyIngredientTags` at top-level
+    // (post 2026-05-27 SPA change); legacy rows still have it nested under
+    // `analysis.keyIngredientTags`. Drop the shim half once telemetry
+    // shows no legacy payloads remain.
+    const rec = r as unknown as {
+      keyIngredientTags?: unknown;
+      analysis?: { keyIngredientTags?: unknown };
+    };
+    const rawKeyTags = rec.keyIngredientTags ?? rec.analysis?.keyIngredientTags;
+    const tags = Array.isArray(rawKeyTags)
+      ? { keyIngredientTags: rawKeyTags.filter((x): x is string => typeof x === 'string') }
+      : undefined;
     out.push({
       id: r.id,
       sourceLocalId: r.sourceLocalId,

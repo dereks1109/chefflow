@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
+import { getRecipeAllergenList, getRecipeKeyTags } from '../../core/recipes/recipeShape';
 import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
 import { getRecipe } from '../../db/recipesRepo';
 import RecipeAutocomplete from './RecipeAutocomplete';
+import AllergenAdditionModal from './AllergenAdditionModal';
 
 interface Props {
   index: number;
@@ -38,8 +40,8 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
     }
     void getRecipe(value.componentRecipeId).then((sub) => {
       if (cancelled || !sub) return;
-      setInheritedAllergens(sub.analysis?.allergens ?? []);
-      setInheritedKeyTags(sub.analysis?.keyIngredientTags ?? []);
+      setInheritedAllergens(getRecipeAllergenList(sub));
+      setInheritedKeyTags(getRecipeKeyTags(sub));
     });
     return () => { cancelled = true; };
   }, [value.componentRecipeId]);
@@ -99,8 +101,15 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
     setAllergenFlags(flags.filter((t) => t !== tag));
   }
 
-  function addFlag(tag: AllergenTag) {
-    setAllergenFlags([...flags, tag]);
+  // Adding goes through a 5-second cooldown modal (mirror of the removal
+  // gate — protects against a misclick on the dropdown silently adding a
+  // false-positive allergen). The select onChange opens the modal; the
+  // modal Confirm callback runs `commitAddFlag`.
+  const [pendingAddTag, setPendingAddTag] = useState<AllergenTag | null>(null);
+  function commitAddFlag() {
+    if (!pendingAddTag) return;
+    setAllergenFlags([...flags, pendingAddTag]);
+    setPendingAddTag(null);
   }
 
   function handleRemoveIngredient() {
@@ -194,7 +203,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                   value=""
                   onChange={(e) => {
                     const v = e.target.value as AllergenTag | '';
-                    if (v) addFlag(v);
+                    if (v) setPendingAddTag(v);
                   }}
                   className="text-xs rounded border border-slate-300 dark:border-slate-700
                              bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
@@ -254,6 +263,13 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
           ✕
         </button>
       </div>
+      <AllergenAdditionModal
+        open={pendingAddTag !== null}
+        allergenLabel={pendingAddTag ? ALLERGEN_LABEL[pendingAddTag] : ''}
+        ingredientName={value.name || `ingredient #${index + 1}`}
+        onCancel={() => setPendingAddTag(null)}
+        onConfirm={commitAddFlag}
+      />
     </li>
   );
 }
