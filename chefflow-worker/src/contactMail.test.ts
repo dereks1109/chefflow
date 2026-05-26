@@ -37,7 +37,7 @@ describe('sendContactNotification (Resend)', () => {
       reply_to: string;
     };
     expect(payload.to).toEqual(['admin@chefflow.uk']);
-    expect(payload.from).toBe('ChefFlow Contact Form <onboarding@resend.dev>');
+    expect(payload.from).toBe('ChefFlow Contact Form <noreply@chefflow.uk>');
     expect(payload.reply_to).toBe('alice@example.com');
     expect(payload.subject).toContain('Alice Smith');
     expect(payload.text).toContain('Hi — quick question about ingredient scaling.');

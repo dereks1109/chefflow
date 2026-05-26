@@ -9,10 +9,11 @@
 // REQUIRES the worker secret `RESEND_API_KEY` set via:
 //   cd chefflow-worker && npx wrangler secret put RESEND_API_KEY
 //
-// DEFAULT `from` is `onboarding@resend.dev` — Resend's bundled sandbox
-// sender that requires no domain verification. To send from
-// `noreply@chefflow.uk` instead, verify chefflow.uk in Resend's dashboard
-// (adds an MX + two TXT records), then pass `fromAddress` accordingly.
+// DEFAULT `from` is `noreply@chefflow.uk` — chefflow.uk is verified on
+// Resend (DKIM TXT at resend._domainkey, SPF TXT + MX at send subdomain
+// pointing to Amazon SES feedback handler). Using the verified domain
+// means SPF + DKIM align with chefflow.uk, the mail passes DMARC, and
+// Gmail/Workspace delivers to Primary instead of Spam/Promotions.
 //
 // The contact handler calls `sendContactNotification` AFTER the KV store
 // write — KV is the source of truth, email is best-effort. A Resend
@@ -34,7 +35,7 @@ export interface ContactNotificationInput {
 }
 
 const DEFAULT_TO = 'admin@chefflow.uk';
-const DEFAULT_FROM = 'ChefFlow Contact Form <onboarding@resend.dev>';
+const DEFAULT_FROM = 'ChefFlow Contact Form <noreply@chefflow.uk>';
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 
 export class MailNotificationError extends Error {
