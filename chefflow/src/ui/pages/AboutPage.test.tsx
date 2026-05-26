@@ -35,8 +35,8 @@ describe('AboutPage', () => {
   it('renders the three selling points — reliability, audit, scheduler', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 3, name: /kitchen-grade reliability/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /ai co-chef that respects allergens/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: /workflow scheduler that prevents collisions/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /audit/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: /scheduler/i })).toBeInTheDocument();
   });
 
   it('renders the Pricing section with three tiers (Free, Pro, Enterprise)', () => {

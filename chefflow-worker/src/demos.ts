@@ -1,24 +1,36 @@
 // Idempotent demo provisioning: writes the canonical demo recipes + event
 // into D1 under the caller's user_id on first sign-in. Behavior:
-//   - KV marker `demos:provisioned:v2:<userId>` fast-skips repeat callers.
+//   - KV marker `demos:provisioned:v3:<userId>` fast-skips repeat callers.
+//   - On v3 first-touch (existing v2 users + brand-new users) we run a
+//     one-shot cleanup pass BEFORE the INSERT loop:
+//       1. Tombstone every id in RETIRED_DEMO_RECIPE_IDS (e.g. the
+//          discontinued (Demo) Mango Sorbet). Existing users see the
+//          tombstone via the next sync pull → dish drops from library.
+//       2. For every active demo recipe id, if a row already exists,
+//          rewrite its payload to strip `analysis.allergens` and every
+//          ingredient's `allergenFlags`. Aligns with the yesterday's
+//          legal de-risk: ChefFlow no longer authors allergen tags;
+//          chefs declare them manually.
 //   - RECIPES use INSERT OR IGNORE so any recipes the user has edited stay
-//     intact. Soft-deleted demos do NOT resurrect — the tombstone row
-//     (is_deleted=1) wins the conflict.
-//   - The DEMO EVENT uses a full UPSERT instead. The chef explicitly wants
-//     the canonical event (budget + dish lineup) to be authoritative across
-//     content updates, so when the seed shape changes (v2: £600 + 5 dishes
-//     vs v1: £50 + 2 dishes), the new shape overwrites the user's row.
+//     intact across fields other than allergens. Soft-deleted demos do
+//     NOT resurrect — the tombstone row (is_deleted=1) wins the conflict.
+//   - The DEMO EVENT uses a full UPSERT instead.
 //   - Returns the number of rows newly inserted / upserted, so the SPA can
 //     show "Loaded N demo recipes" or stay silent on a repeat call.
 //
 // MARKER VERSIONING: when the canonical demo content changes in a way that
-// existing users should see, bump the prefix (e.g. v2 → v3). The old marker
+// existing users should see, bump the prefix (e.g. v3 → v4). The old marker
 // becomes orphan — KV TTL eventually evicts it.
 
 import { buildDemoRecipes, buildDemoEvents } from './demoSeed';
 
 const MARKER_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5y — effectively forever.
-const MARKER_KEY_PREFIX = 'demos:provisioned:v2:';
+const MARKER_KEY_PREFIX = 'demos:provisioned:v3:';
+
+// Demo recipe ids that USED to be in buildDemoRecipes() but are no longer
+// shipped. The cleanup pass tombstones any existing rows so users who
+// previously received them see the deletion on the next sync.
+const RETIRED_DEMO_RECIPE_IDS = ['r_demo_mango_sorbet'] as const;
 
 function markerKey(userId: string): string {
   return `${MARKER_KEY_PREFIX}${userId}`;
@@ -28,6 +40,8 @@ export interface ProvisionResult {
   alreadyProvisioned: boolean;
   recipesInserted: number;
   eventsInserted: number;
+  recipesUpdated: number;        // retroactive allergen-strip count
+  recipesTombstoned: number;     // retired demo id count
 }
 
 export interface DemosEnv {
@@ -41,13 +55,43 @@ export async function provisionDemosForUser(
 ): Promise<ProvisionResult> {
   const marker = await env.RATE_LIMIT.get(markerKey(userId));
   if (marker === '1') {
-    return { alreadyProvisioned: true, recipesInserted: 0, eventsInserted: 0 };
+    return {
+      alreadyProvisioned: true,
+      recipesInserted: 0,
+      eventsInserted: 0,
+      recipesUpdated: 0,
+      recipesTombstoned: 0,
+    };
   }
 
   const now = Date.now();
   const recipes = buildDemoRecipes(now);
   const events = buildDemoEvents(now);
 
+  // ---- Cleanup pass (one-shot per user on first v3 touch). ----
+  // 1. Tombstone retired demo recipe ids that the user might still have.
+  let recipesTombstoned = 0;
+  for (const retiredId of RETIRED_DEMO_RECIPE_IDS) {
+    const res = await env.DB
+      .prepare(
+        `UPDATE recipes
+           SET is_deleted = 1, updated_at = ?
+           WHERE user_id = ? AND id = ? AND is_deleted = 0`,
+      )
+      .bind(now, userId, retiredId)
+      .run();
+    const changes = (res.meta?.changes ?? res.meta?.changed_rows ?? 0) as number;
+    recipesTombstoned += changes;
+  }
+
+  // 2. Strip allergens from any existing copies of currently-active demo recipes.
+  let recipesUpdated = 0;
+  for (const r of recipes) {
+    const updated = await stripAllergensIfExists(env.DB, userId, r.id, now);
+    if (updated) recipesUpdated += 1;
+  }
+
+  // ---- Standard provisioning (idempotent across users + content versions). ----
   let recipesInserted = 0;
   for (const r of recipes) {
     const inserted = await insertOrIgnoreRow(env.DB, 'recipes', userId, r.id, now, JSON.stringify(r));
@@ -66,7 +110,71 @@ export async function provisionDemosForUser(
 
   await env.RATE_LIMIT.put(markerKey(userId), '1', { expirationTtl: MARKER_TTL_SECONDS });
 
-  return { alreadyProvisioned: false, recipesInserted, eventsInserted };
+  return {
+    alreadyProvisioned: false,
+    recipesInserted,
+    eventsInserted,
+    recipesUpdated,
+    recipesTombstoned,
+  };
+}
+
+/**
+ * If `(userId, recipeId)` has an active row in D1, rewrite its payload to
+ * remove `analysis.allergens` and every ingredient's `allergenFlags`.
+ * Returns true when an update happened, false when the row didn't exist
+ * (the subsequent INSERT OR IGNORE will plant a fresh one for new users).
+ *
+ * NOTE: this is intentionally surgical — we keep all other chef edits
+ * (title, ingredients other than allergenFlags, steps, calories,
+ * keyIngredientTags, pricePerPortion, coverPhoto…) so a chef who tuned a
+ * demo recipe keeps their work. Only allergen data is wiped.
+ */
+async function stripAllergensIfExists(
+  db: D1Database,
+  userId: string,
+  recipeId: string,
+  now: number,
+): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT payload FROM recipes WHERE user_id = ? AND id = ? AND is_deleted = 0`)
+    .bind(userId, recipeId)
+    .first<{ payload: string }>();
+  if (!row) return false;
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(row.payload) as Record<string, unknown>;
+  } catch {
+    return false; // unreadable row — leave alone, don't corrupt further.
+  }
+
+  let dirty = false;
+  const analysis = parsed.analysis as { allergens?: unknown; uncertainIngredients?: unknown } | undefined;
+  if (analysis && 'allergens' in analysis) {
+    delete analysis.allergens;
+    dirty = true;
+  }
+  if (analysis && 'uncertainIngredients' in analysis) {
+    delete analysis.uncertainIngredients;
+    dirty = true;
+  }
+  const ingredients = parsed.ingredients;
+  if (Array.isArray(ingredients)) {
+    for (const ing of ingredients) {
+      if (ing && typeof ing === 'object' && 'allergenFlags' in (ing as Record<string, unknown>)) {
+        delete (ing as Record<string, unknown>).allergenFlags;
+        dirty = true;
+      }
+    }
+  }
+  if (!dirty) return false;
+
+  await db
+    .prepare(`UPDATE recipes SET payload = ?, updated_at = ? WHERE user_id = ? AND id = ?`)
+    .bind(JSON.stringify(parsed), now, userId, recipeId)
+    .run();
+  return true;
 }
 
 async function insertOrIgnoreRow(

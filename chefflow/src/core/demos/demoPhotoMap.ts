@@ -32,10 +32,9 @@ const DEMO_PHOTOS: Record<string, string> = {
   r_demo_swordfish: swordfishPhoto,
   r_demo_pork_belly: porkBellyPhoto,
   r_demo_creme_brulee: cremeBruleePhoto,
-  // The three without bundled JPEGs fall through to the Unsplash URLs.
+  // The two without bundled JPEGs fall through to Unsplash URLs.
   r_demo_dumplings: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?auto=format&fit=crop&w=1600&q=80',
   r_demo_tikka_masala: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=1600&q=80',
-  r_demo_mango_sorbet: 'https://images.unsplash.com/photo-1488900128323-21503983a07e?auto=format&fit=crop&w=1600&q=80',
 };
 
 /**

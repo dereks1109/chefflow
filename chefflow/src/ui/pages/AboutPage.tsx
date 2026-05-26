@@ -3,9 +3,9 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   Check,
   ChefHat,
+  ClipboardCheck,
   Crown,
   Hotel,
-  ShieldCheck,
   Sparkles,
   Timer,
   Users,
@@ -38,12 +38,14 @@ export default function AboutPage() {
         <h1 className="mt-2 text-3xl md:text-5xl font-bold tracking-tight">
           Plan. Prep. Serve.
           <br className="hidden md:block" />
-          <span className="text-slate-500 dark:text-slate-400">Without losing your evening.</span>
+          <span className="text-slate-500 dark:text-slate-400">Hours back in your day.</span>
         </h1>
         <p className="mt-4 max-w-2xl mx-auto text-sm md:text-base text-slate-600 dark:text-slate-300">
-          ChefFlow is the kitchen-grade planning tool for private chefs, small bistros, and large
-          banquet kitchens. Reliable offline. AI assists where it should. Audits everything it
-          touches — including the parts that protect your guests.
+          ChefFlow is a productivity tool for working chefs. It cuts the planning
+          time on a six-course event from 90 minutes to under 10, batches your
+          prep across dishes, and lays out a chef-by-chef timeline that keeps
+          two cooks off the same burner. Built to keep running when the wifi
+          doesn't.
         </p>
         <div className="mt-6 flex flex-wrap gap-2 justify-center">
           <Link to="/recipes" className="btn-primary inline-flex items-center gap-2">
@@ -62,21 +64,21 @@ export default function AboutPage() {
           <AudienceCard
             icon={ChefHat}
             heading="Private chefs + supper clubs"
-            body="Solo operators running 6–30 covers. AI drafts a recipe, scales portions, and lays out the prep schedule so you stop juggling sticky notes."
+            body="Solo operators running 6–30 covers. Turn a same-day client brief into a costed menu and a reverse-engineered prep schedule in minutes — not the hour you used to spend with a notebook."
             tier="Pro"
             tone="accent"
           />
           <AudienceCard
             icon={Users}
             heading="Small bistros"
-            body="One- to three-chef kitchens. Per-chef workflow colours, station audit trails, printable PDF checklists for the line."
+            body="One- to three-chef kitchens. Per-chef colour coding shows who owns what, the scheduler keeps a junior and a sous off the same pan, and you can print a station-by-station checklist before service."
             tier="Pro"
             tone="accent"
           />
           <AudienceCard
             icon={Hotel}
             heading="Hotels + large banquets"
-            body="Back-of-house teams up to 50 seats. No AI caps, priority support, and the same allergen audit log that holds up if a diner reacts."
+            body="Back-of-house teams up to 50 seats. Run multiple events through the same scheduler, watch oven contention before it happens, and audit who did what after the night's over."
             tier="Enterprise"
             tone="amber"
           />
@@ -95,29 +97,33 @@ export default function AboutPage() {
           tagline="Built to keep working when your wifi doesn't."
           bullets={[
             'Local-first — recipes load instantly, even on a flaky kitchen connection.',
+            'Install to the home screen and the app boots offline once cached. Service goes on if the router dies.',
             'Cross-device sync (Cloudflare D1) means your laptop draft is on your phone before service.',
             'Clear browser cache by accident? Your library is still there next time you sign in.',
           ]}
         />
 
         <SellingPoint
-          icon={ShieldCheck}
-          heading="AI co-chef that respects allergens"
-          tagline="The AI helps. The audit log covers your back."
+          icon={ClipboardCheck}
+          heading="Audited every step"
+          tagline="A paper trail your team and your insurance both want."
           bullets={[
-            'Draft a recipe, generate a menu description, or schedule a multi-dish service in seconds.',
-            'Every UK-14 allergen is auto-flagged from ingredient names; chefs see them on every recipe card.',
-            'Removing an allergen tag triggers a two-step modal + 5-second cooldown, and the reason lands in a tamper-resistant audit log. That log is your evidence if a diner ever asks.',
+            "Every chef sees the same per-step status — who's prepped what, who's plating, what's left.",
+            'Allergens are chef-declared (not AI-guessed) — you remain the food business operator under FIR 2014, and ChefFlow stores your declaration verbatim.',
+            'Removing an allergen tag asks for a reason and records it in a tamper-resistant log; the log syncs to your account so a manager can review it after the event.',
+            'Publish a recipe to the community library and ChefFlow asks you to attest your allergen list is complete — the attestation is logged too.',
           ]}
         />
 
         <SellingPoint
           icon={Timer}
-          heading="Workflow scheduler that prevents collisions"
-          tagline="LLM + culinary rules merge multi-dish events into one timeline."
+          heading="Scheduler that prevents collisions"
+          tagline="Multi-dish events get a single coordinated timeline."
           bullets={[
-            'Plans timing across every dish in an event — flash items at the end, stable braises start early.',
-            'Per-chef colour coding shows who owns what; print a PDF checklist for each station.',
+            'Plans timing across every dish in an event — flash items hit the pass last, braises start early, the LLM cites the 10 culinary rules it applied on each step.',
+            'Chef Team Parallelism (Rule 7): two chefs with different colour tags run in parallel; bottlenecks get flagged with "consider reassigning dish X to chef Y".',
+            'Equipment Scheduling (Rule 8): the scheduler tracks shared oven slots + burners and shifts the second-in-line with a clear "delayed N min — oven contention" warning.',
+            'Plating & Service Window (Rule 9): the last 3 minutes before serve are reserved for plating, with a single "FIRE — plating begins" milestone so courses walk out together.',
             'Aggregates the shopping list across all dishes, deduped by unit family and tagged by sub-recipe.',
           ]}
         />
@@ -217,9 +223,11 @@ export default function AboutPage() {
           A note on trust
         </h2>
         <p className="mt-2 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-          ChefFlow doesn't sell your data. Allergen audits are recorded per-device unless you sign in
-          (in which case they sync to your own cloud account on Cloudflare). Recipes never leave your
-          account. If you cancel, your library stays browsable offline until you clear browser data.
+          ChefFlow doesn't sell your data. Allergens are user-declared and never
+          inferred by ChefFlow's AI; you stay the food business operator. The
+          audit trail records what your kitchen did, not what the model
+          guessed. Recipes never leave your account; if you cancel, your
+          library stays browsable offline until you clear browser data.
         </p>
         <p className="mt-3 text-sm text-slate-700 dark:text-slate-300">
           Questions, bug reports, feature requests:{' '}

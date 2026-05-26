@@ -1,32 +1,75 @@
 import { describe, it, expect, vi } from 'vitest';
 import { provisionDemosForUser } from './demos';
 
-// In-memory stub of (user_id, id) → row. Mimics two D1 statement shapes:
-//   - `INSERT OR IGNORE INTO <table>` → conflict = no-op (changes=0)
-//   - `INSERT INTO <table> … ON CONFLICT … DO UPDATE` → conflict = overwrite
+// In-memory stub of (user_id, id) → row. Mimics the SQL surface demos.ts
+// uses:
+//   - SELECT payload FROM recipes WHERE user_id = ? AND id = ? AND is_deleted = 0
+//   - UPDATE recipes SET is_deleted = 1, updated_at = ? WHERE user_id = ? AND id = ? AND is_deleted = 0
+//   - UPDATE recipes SET payload = ?, updated_at = ? WHERE user_id = ? AND id = ?
+//   - INSERT OR IGNORE INTO <table> (id, user_id, updated_at, is_deleted, payload) VALUES (?,?,?,0,?)
+//   - INSERT INTO <table> … ON CONFLICT … DO UPDATE
 function makeStubDb() {
-  const rows = new Map<string, { id: string; user_id: string; updated_at: number; is_deleted: number; payload: string }>();
+  type Row = { id: string; user_id: string; updated_at: number; is_deleted: number; payload: string };
+  const rows = new Map<string, Row>();
   const key = (table: string, userId: string, id: string) => `${table}::${userId}::${id}`;
 
   const db = {
     prepare: (sql: string) => {
-      const ignoreMatch = sql.match(/INSERT OR IGNORE INTO (\w+)/);
-      const upsertMatch = sql.match(/INSERT INTO (\w+)[\s\S]*ON CONFLICT/);
-      const isUpsert = Boolean(upsertMatch);
-      const table = ignoreMatch?.[1] ?? upsertMatch?.[1] ?? '';
-      return {
-        bind: (id: string, userId: string, updatedAt: number, payload: string) => ({
-          run: async () => {
-            const k = key(table, userId, id);
+      let params: unknown[] = [];
+      const stmt = {
+        bind(...args: unknown[]) { params = args; return stmt; },
+
+        async first<T = unknown>() {
+          // SELECT payload FROM recipes WHERE user_id = ? AND id = ? AND is_deleted = 0
+          if (/^SELECT payload FROM recipes/i.test(sql)) {
+            const [userId, id] = params as [string, string];
+            const row = rows.get(key('recipes', userId, id));
+            if (!row || row.is_deleted) return null;
+            return { payload: row.payload } as unknown as T;
+          }
+          return null;
+        },
+
+        async run() {
+          // Tombstone UPDATE.
+          if (/^UPDATE recipes\s+SET is_deleted = 1/i.test(sql)) {
+            const [updatedAt, userId, id] = params as [number, string, string];
+            const k = key('recipes', userId, id);
             const existing = rows.get(k);
-            if (existing && !isUpsert) {
-              return { success: true, meta: { changes: 0 } };
-            }
-            rows.set(k, { id, user_id: userId, updated_at: updatedAt, is_deleted: 0, payload });
+            if (!existing || existing.is_deleted) return { success: true, meta: { changes: 0 } };
+            rows.set(k, { ...existing, is_deleted: 1, updated_at: updatedAt });
             return { success: true, meta: { changes: 1 } };
-          },
-        }),
+          }
+
+          // Allergen-strip UPDATE.
+          if (/^UPDATE recipes SET payload = \?/i.test(sql)) {
+            const [payload, updatedAt, userId, id] = params as [string, number, string, string];
+            const k = key('recipes', userId, id);
+            const existing = rows.get(k);
+            if (!existing) return { success: true, meta: { changes: 0 } };
+            rows.set(k, { ...existing, payload, updated_at: updatedAt });
+            return { success: true, meta: { changes: 1 } };
+          }
+
+          // INSERT OR IGNORE.
+          const ignoreMatch = sql.match(/INSERT OR IGNORE INTO (\w+)/);
+          // INSERT ... ON CONFLICT DO UPDATE (upsert).
+          const upsertMatch = sql.match(/INSERT INTO (\w+)[\s\S]*ON CONFLICT/);
+          const isUpsert = Boolean(upsertMatch);
+          const table = ignoreMatch?.[1] ?? upsertMatch?.[1] ?? '';
+          if (!table) return { success: true, meta: { changes: 0 } };
+
+          const [id, userId, updatedAt, payload] = params as [string, string, number, string];
+          const k = key(table, userId, id);
+          const existing = rows.get(k);
+          if (existing && !isUpsert) {
+            return { success: true, meta: { changes: 0 } };
+          }
+          rows.set(k, { id, user_id: userId, updated_at: updatedAt, is_deleted: 0, payload });
+          return { success: true, meta: { changes: 1 } };
+        },
       };
+      return stmt;
     },
   } as unknown as D1Database;
 
@@ -44,36 +87,39 @@ function makeStubKv() {
 }
 
 describe('provisionDemosForUser', () => {
-  it('first call provisions all demo recipes + the demo event under the caller user_id', async () => {
+  it('first call provisions all 14 active demo recipes + the demo event under the caller user_id', async () => {
     const { db, rows } = makeStubDb();
     const { kv } = makeStubKv();
     const out = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(out.alreadyProvisioned).toBe(false);
-    expect(out.recipesInserted).toBe(15);
+    expect(out.recipesInserted).toBe(14);
     expect(out.eventsInserted).toBe(1);
+    expect(out.recipesTombstoned).toBe(0); // brand-new user — nothing to tombstone
+    expect(out.recipesUpdated).toBe(0);     // brand-new user — nothing to strip
 
-    // All rows are stamped under user_alice, not whoever the payload claims.
     const userIds = new Set(Array.from(rows.values()).map((r) => r.user_id));
     expect(userIds).toEqual(new Set(['user_alice']));
 
-    // Sanity: a known demo id is present.
+    // Sanity: a known active demo id is present; the retired mango sorbet is NOT.
     expect(Array.from(rows.values()).some((r) => r.id === 'r_demo_ribeye')).toBe(true);
+    expect(Array.from(rows.values()).some((r) => r.id === 'r_demo_mango_sorbet')).toBe(false);
     expect(Array.from(rows.values()).some((r) => r.id === 'e_demo_main')).toBe(true);
   });
 
-  it('second call is a no-op (KV marker fast-skips)', async () => {
+  it('second call is a no-op (KV v3 marker fast-skips)', async () => {
     const { db } = makeStubDb();
-    const { kv } = makeStubKv();
+    const { kv, store } = makeStubKv();
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+    expect(store.get('demos:provisioned:v3:user_alice')).toBe('1');
     const second = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(second.alreadyProvisioned).toBe(true);
     expect(second.recipesInserted).toBe(0);
     expect(second.eventsInserted).toBe(0);
+    expect(second.recipesTombstoned).toBe(0);
+    expect(second.recipesUpdated).toBe(0);
   });
 
-  it('INSERT OR IGNORE preserves an existing recipe with the same id', async () => {
-    // Pre-seed user_alice with a customized r_demo_ribeye. The provision
-    // call must NOT overwrite it. Counts that as 14 recipes inserted (15 - 1).
+  it('INSERT OR IGNORE preserves an existing recipe with the same id (chef customisation survives)', async () => {
     const { db, rows } = makeStubDb();
     const { kv } = makeStubKv();
     rows.set('recipes::user_alice::r_demo_ribeye', {
@@ -84,8 +130,8 @@ describe('provisionDemosForUser', () => {
       payload: JSON.stringify({ id: 'r_demo_ribeye', title: 'My Custom Ribeye' }),
     });
     const out = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
-    expect(out.recipesInserted).toBe(14);
-    // Customized recipe payload still wins.
+    // 14 active demos, one already existed → 13 inserts.
+    expect(out.recipesInserted).toBe(13);
     const ribeye = rows.get('recipes::user_alice::r_demo_ribeye');
     expect(ribeye?.payload).toContain('My Custom Ribeye');
   });
@@ -96,26 +142,90 @@ describe('provisionDemosForUser', () => {
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_bob');
     const userIds = Array.from(rows.values()).map((r) => r.user_id);
-    expect(userIds.filter((u) => u === 'user_alice').length).toBe(16); // 15 recipes + 1 event
-    expect(userIds.filter((u) => u === 'user_bob').length).toBe(16);
+    expect(userIds.filter((u) => u === 'user_alice').length).toBe(15); // 14 recipes + 1 event
+    expect(userIds.filter((u) => u === 'user_bob').length).toBe(15);
   });
 
-  it('v2 marker is consulted (v1 marker no longer fast-skips) — existing users get re-provisioned for the bigger event', async () => {
-    const { db } = makeStubDb();
+  it('v2-marker users get re-provisioned for v3: mango sorbet tombstoned, allergens stripped from existing demos', async () => {
+    const { db, rows } = makeStubDb();
     const { kv, store } = makeStubKv();
-    // Pre-seed the OLD v1 marker, mimicking a chef who was provisioned
-    // last turn. The new v2 marker is absent.
-    store.set('demos:provisioned:user_alice', '1');
+    // Pre-seed the v2 marker (chef was provisioned in the previous version).
+    store.set('demos:provisioned:v2:user_alice', '1');
+    // Pre-seed a mango sorbet row (active) that should get tombstoned.
+    rows.set('recipes::user_alice::r_demo_mango_sorbet', {
+      id: 'r_demo_mango_sorbet',
+      user_id: 'user_alice',
+      updated_at: 1000,
+      is_deleted: 0,
+      payload: JSON.stringify({ id: 'r_demo_mango_sorbet', title: '(Demo) Mango Sorbet' }),
+    });
+    // Pre-seed a ribeye with v2-era allergens that should get stripped.
+    rows.set('recipes::user_alice::r_demo_ribeye', {
+      id: 'r_demo_ribeye',
+      user_id: 'user_alice',
+      updated_at: 1000,
+      is_deleted: 0,
+      payload: JSON.stringify({
+        id: 'r_demo_ribeye',
+        title: '(Demo) Ribeye',
+        ingredients: [
+          { id: 'i1', name: 'Butter', allergenFlags: ['milk'] },
+          { id: 'i2', name: 'Beef' },
+        ],
+        analysis: { caloriesPerPortion: 880, allergens: ['milk'], uncertainIngredients: ['xyz'] },
+      }),
+    });
+
     const out = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(out.alreadyProvisioned).toBe(false);
-    expect(out.eventsInserted).toBe(1);
-    expect(store.get('demos:provisioned:v2:user_alice')).toBe('1');
+    expect(out.recipesTombstoned).toBe(1);
+    expect(out.recipesUpdated).toBe(1);
+    // V3 marker is now set.
+    expect(store.get('demos:provisioned:v3:user_alice')).toBe('1');
+
+    // Mango sorbet → tombstoned.
+    const mango = rows.get('recipes::user_alice::r_demo_mango_sorbet');
+    expect(mango?.is_deleted).toBe(1);
+
+    // Ribeye → allergens + uncertainIngredients + ingredient.allergenFlags wiped,
+    // other fields preserved.
+    const ribeye = rows.get('recipes::user_alice::r_demo_ribeye');
+    const parsed = JSON.parse(ribeye!.payload) as {
+      title: string;
+      ingredients: Array<{ name: string; allergenFlags?: unknown }>;
+      analysis: { caloriesPerPortion: number; allergens?: unknown; uncertainIngredients?: unknown };
+    };
+    expect(parsed.title).toBe('(Demo) Ribeye');
+    expect(parsed.analysis.caloriesPerPortion).toBe(880);
+    expect(parsed.analysis.allergens).toBeUndefined();
+    expect(parsed.analysis.uncertainIngredients).toBeUndefined();
+    expect(parsed.ingredients[0].allergenFlags).toBeUndefined();
   });
 
-  it('the demo event row UPSERTS over a stale v1 payload — chef sees the new £600 budget + 5 dishes', async () => {
+  it('cleanup is a no-op on fields that are already clean (idempotent if run twice somehow)', async () => {
     const { db, rows } = makeStubDb();
     const { kv } = makeStubKv();
-    // Pre-seed a stale v1 event row under user_alice with old budget+dishes.
+    // Pre-seed a ribeye with NO allergens / NO allergenFlags — already clean.
+    rows.set('recipes::user_alice::r_demo_ribeye', {
+      id: 'r_demo_ribeye',
+      user_id: 'user_alice',
+      updated_at: 1000,
+      is_deleted: 0,
+      payload: JSON.stringify({
+        id: 'r_demo_ribeye',
+        title: '(Demo) Ribeye',
+        ingredients: [{ id: 'i1', name: 'Butter' }],
+        analysis: { caloriesPerPortion: 880, keyIngredientTags: ['beef'] },
+      }),
+    });
+    const out = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+    // Already clean → no UPDATE issued for ribeye.
+    expect(out.recipesUpdated).toBe(0);
+  });
+
+  it('the demo event row UPSERTS over a stale payload — chef sees the new £600 budget + 5 dishes', async () => {
+    const { db, rows } = makeStubDb();
+    const { kv } = makeStubKv();
     rows.set('events::user_alice::e_demo_main', {
       id: 'e_demo_main',
       user_id: 'user_alice',
@@ -128,27 +238,11 @@ describe('provisionDemosForUser', () => {
     expect(updated).toBeDefined();
     const payload = JSON.parse(updated!.payload) as { budget: number; dishes: Array<{ recipeId: string }> };
     expect(payload.budget).toBe(600);
-    // Should now carry 5 dishes (salad + calamari + tikka + lamb + ribeye).
     expect(payload.dishes.length).toBe(5);
     expect(payload.dishes.map((d) => d.recipeId)).toEqual(
       expect.arrayContaining([
         'r_demo_salad', 'r_demo_calamari', 'r_demo_tikka_masala', 'r_demo_lamb_rack', 'r_demo_ribeye',
       ]),
     );
-  });
-
-  it('recipe rows still use INSERT OR IGNORE — chef customisations to a demo recipe survive v2 provisioning', async () => {
-    const { db, rows } = makeStubDb();
-    const { kv } = makeStubKv();
-    rows.set('recipes::user_alice::r_demo_ribeye', {
-      id: 'r_demo_ribeye',
-      user_id: 'user_alice',
-      updated_at: 1000,
-      is_deleted: 0,
-      payload: JSON.stringify({ id: 'r_demo_ribeye', title: 'My Custom Ribeye' }),
-    });
-    await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
-    const ribeye = rows.get('recipes::user_alice::r_demo_ribeye');
-    expect(ribeye?.payload).toContain('My Custom Ribeye');
   });
 });
