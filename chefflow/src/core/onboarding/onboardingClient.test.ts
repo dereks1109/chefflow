@@ -5,6 +5,12 @@ function fetchReturning(status: number): typeof fetch {
   return vi.fn(async () => new Response('{}', { status })) as unknown as typeof fetch;
 }
 
+const TOS = {
+  tosAcceptedAt: '2026-05-26T10:00:00.000Z',
+  tosVersion: '2026-05-26',
+  disclaimerVersion: '2026-05-26',
+};
+
 describe('completeOnboarding (client)', () => {
   it('POSTs to /api/onboarding/complete with the injected Bearer token + form fields as JSON', async () => {
     let capturedUrl = '';
@@ -17,7 +23,7 @@ describe('completeOnboarding (client)', () => {
 
     const out = await completeOnboarding({
       getToken: async () => 'jwt.test',
-      fields: { displayName: 'Alice', showNameOnCommunity: true },
+      fields: { ...TOS, displayName: 'Alice', showNameOnCommunity: true },
       fetchImpl,
       origin: 'https://api.test',
     });
@@ -27,6 +33,7 @@ describe('completeOnboarding (client)', () => {
     expect(capturedInit?.method).toBe('POST');
     expect((capturedInit?.headers as Record<string, string>).Authorization).toBe('Bearer jwt.test');
     expect(JSON.parse(capturedInit?.body as string)).toEqual({
+      ...TOS,
       displayName: 'Alice',
       showNameOnCommunity: true,
     });
@@ -37,7 +44,7 @@ describe('completeOnboarding (client)', () => {
     await expect(
       completeOnboarding({
         getToken: async () => null,
-        fields: {},
+        fields: TOS,
         fetchImpl,
         origin: 'https://api.test',
       }),
@@ -49,7 +56,7 @@ describe('completeOnboarding (client)', () => {
     await expect(
       completeOnboarding({
         getToken: async () => 'jwt.test',
-        fields: {},
+        fields: TOS,
         fetchImpl: fetchReturning(500),
         origin: 'https://api.test',
       }),
@@ -62,7 +69,7 @@ describe('completeOnboarding (client)', () => {
     try {
       const getToken = vi.fn(async () => 'jwt.test');
       const fetchImpl = vi.fn() as unknown as typeof fetch;
-      const out = await completeOnboarding({ getToken, fields: {}, fetchImpl });
+      const out = await completeOnboarding({ getToken, fields: TOS, fetchImpl });
       expect(out).toEqual({ ok: true });
       expect(getToken).not.toHaveBeenCalled();
       expect(fetchImpl).not.toHaveBeenCalled();

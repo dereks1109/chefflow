@@ -237,6 +237,11 @@ export async function handleRequest(
         env.CLERK_SECRET_KEY,
         body ?? {},
         fetchImpl,
+        {
+          db: env.DB,
+          ip: req.headers.get('CF-Connecting-IP'),
+          userAgent: req.headers.get('User-Agent'),
+        },
       );
       return json(result, 200);
     } catch (err) {

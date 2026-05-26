@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, X, Info } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
 import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
@@ -189,21 +189,36 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
               </span>
             ))}
             {availableToAdd.length > 0 && (
-              <select
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value as AllergenTag | '';
-                  if (v) addFlag(v);
-                }}
-                className="text-xs rounded border border-slate-300 dark:border-slate-700
-                           bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
-                aria-label="Flag an allergen on this ingredient"
-              >
-                <option value="">{hasAllergens ? '+ add allergen' : '+ flag allergen'}</option>
-                {availableToAdd.map((t) => (
-                  <option key={t} value={t}>{ALLERGEN_LABEL[t]}</option>
-                ))}
-              </select>
+              <>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const v = e.target.value as AllergenTag | '';
+                    if (v) addFlag(v);
+                  }}
+                  className="text-xs rounded border border-slate-300 dark:border-slate-700
+                             bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
+                  aria-label="Flag an allergen on this ingredient"
+                >
+                  <option value="">{hasAllergens ? '+ add allergen' : '+ flag allergen'}</option>
+                  {availableToAdd.map((t) => (
+                    <option key={t} value={t}>{ALLERGEN_LABEL[t]}</option>
+                  ))}
+                </select>
+                {/* Belt-and-braces reminder that allergen tagging is the
+                    chef's responsibility, not ChefFlow's — surfacing the
+                    same framing here as the publish-time attestation modal
+                    means the chef sees it on every ingredient edit. */}
+                <span
+                  data-testid={`ingredient-allergen-reminder-${index}`}
+                  tabIndex={0}
+                  aria-label="Allergen tagging is chef-declared — supplier labels are authoritative"
+                  title="Tag allergens you can confirm from the ingredient's label. ChefFlow does not detect allergens automatically. Supplier labels are authoritative."
+                  className="inline-flex items-center justify-center h-5 w-5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-help focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <Info className="h-3 w-3" aria-hidden="true" />
+                </span>
+              </>
             )}
           </div>
           <div className="flex gap-2">

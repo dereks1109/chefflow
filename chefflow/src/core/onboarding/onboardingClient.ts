@@ -10,6 +10,13 @@ export interface OnboardingFields {
   // avatarDataUrl is intentionally NOT round-tripped to Clerk — Clerk has
   // a 16 KB cap on publicMetadata and avatar data URLs blow past that. The
   // sheet writes the avatar straight to useProfileStore (localStorage).
+  /** ISO timestamp captured client-side when the chef ticked the
+   *  acceptance checkbox. Required — the worker rejects without it. */
+  tosAcceptedAt: string;
+  /** Version of the Terms the chef saw at the moment of acceptance. */
+  tosVersion: string;
+  /** Version of the Disclaimer the chef saw at the moment of acceptance. */
+  disclaimerVersion: string;
 }
 
 export interface CompleteOnboardingOpts {

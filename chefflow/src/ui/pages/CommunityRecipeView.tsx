@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Heart, Download, ArrowLeft, Flag } from 'lucide-react';
 import ReportRecipeDialog from '../components/ReportRecipeDialog';
+import CommunityDisclaimerBanner from '../components/CommunityDisclaimerBanner';
 import {
   getCommunityRecipe,
   getLiked,
@@ -146,6 +147,8 @@ export default function CommunityRecipeView() {
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         Back to community
       </button>
+
+      <CommunityDisclaimerBanner variant="full" />
 
       {r.coverPhoto && (
         <img

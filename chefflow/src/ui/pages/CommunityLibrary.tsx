@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Globe2 } from 'lucide-react';
 import CommunityRecipeCard from '../components/CommunityRecipeCard';
+import CommunityDisclaimerBanner from '../components/CommunityDisclaimerBanner';
 import {
   listCommunityRecipes,
   type CommunityRecipeSummary,
@@ -57,9 +58,10 @@ export default function CommunityLibrary() {
 
   return (
     <section className="p-4 md:p-6 max-w-5xl mx-auto">
-      <header className="flex items-center justify-between mb-6 gap-2">
+      <header className="flex items-center justify-between mb-3 gap-2">
         <h1 className="text-2xl font-bold">Community</h1>
       </header>
+      <CommunityDisclaimerBanner variant="compact" />
       <ul className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
         {state.items.map((r) => (
           <li key={r.id} className="h-full">

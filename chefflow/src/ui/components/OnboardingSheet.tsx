@@ -5,6 +5,10 @@ import Button from './primitives/Button';
 import { useProfileStore } from '../../state/useProfileStore';
 import { downscaleToDataUrl } from '../../core/util/image';
 import { completeOnboarding } from '../../core/onboarding/onboardingClient';
+import {
+  CURRENT_TOS_VERSION,
+  CURRENT_DISCLAIMER_VERSION,
+} from '../../core/legal/versions';
 
 interface Props {
   onDone: () => void;
@@ -25,6 +29,7 @@ export default function OnboardingSheet({ onDone }: Props) {
   const [nameDraft, setNameDraft] = useState('');
   const [avatarDraft, setAvatarDraft] = useState<string | null>(null);
   const [showNameDraft, setShowNameDraft] = useState(false);
+  const [accepted, setAccepted] = useState(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +49,9 @@ export default function OnboardingSheet({ onDone }: Props) {
   }
 
   async function submit(skip: boolean) {
+    // Hard guard: the buttons are disabled when !accepted, but defend
+    // against a tester removing the disabled attr via devtools.
+    if (!accepted) return;
     setSubmitError(null);
     setSubmitting(true);
     try {
@@ -55,11 +63,17 @@ export default function OnboardingSheet({ onDone }: Props) {
         if (avatarDraft) setAvatarDataUrl(avatarDraft);
         setShowNameOnCommunityStore(showNameDraft);
       }
+      const tosFields = {
+        tosAcceptedAt: new Date().toISOString(),
+        tosVersion: CURRENT_TOS_VERSION,
+        disclaimerVersion: CURRENT_DISCLAIMER_VERSION,
+      };
       await completeOnboarding({
         getToken,
         fields: skip
-          ? {}
+          ? tosFields
           : {
+              ...tosFields,
               displayName: nameDraft.trim() || undefined,
               showNameOnCommunity: showNameDraft,
             },
@@ -166,6 +180,44 @@ export default function OnboardingSheet({ onDone }: Props) {
           </div>
         </div>
 
+        <div className="mt-5 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 p-3">
+          <label className="flex items-start gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={(e) => setAccepted(e.target.checked)}
+              data-testid="onboarding-tos-accept"
+              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-accent focus:ring-accent"
+            />
+            <span className="text-slate-700 dark:text-slate-200 leading-snug">
+              I have read and accept the{' '}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+                data-testid="onboarding-tos-link"
+              >
+                Terms of Service
+              </a>
+              {' '}and the{' '}
+              <a
+                href="/disclaimer"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+                data-testid="onboarding-disclaimer-link"
+              >
+                Disclaimer
+              </a>
+              . I understand ChefFlow does not detect allergens and I am the
+              food business operator responsible for verifying allergens
+              against my supplier labels under the Food Information
+              Regulations 2014.
+            </span>
+          </label>
+        </div>
+
         {submitError && (
           <p
             role="alert"
@@ -182,7 +234,7 @@ export default function OnboardingSheet({ onDone }: Props) {
             variant="ghost"
             size="sm"
             onClick={() => void submit(true)}
-            disabled={submitting}
+            disabled={submitting || !accepted}
             data-testid="onboarding-skip"
           >
             Skip for now
@@ -192,7 +244,7 @@ export default function OnboardingSheet({ onDone }: Props) {
             variant="primary"
             size="sm"
             onClick={() => void submit(false)}
-            disabled={submitting}
+            disabled={submitting || !accepted}
             data-testid="onboarding-save"
           >
             {submitting ? 'Saving…' : 'Save and continue'}

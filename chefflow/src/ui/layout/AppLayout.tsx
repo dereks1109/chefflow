@@ -4,6 +4,7 @@ import TopNav from './TopNav';
 import MobileTopBar from './MobileTopBar';
 import UpgradeSheet from '../components/UpgradeSheet';
 import { reopenConsentBanner } from '../../state/consentStore';
+import { CURRENT_TOS_VERSION as CURRENT_TOS_VERSION_FOOTER } from '../../core/legal/versions';
 
 export default function AppLayout() {
   return (
@@ -23,6 +24,18 @@ export default function AppLayout() {
           <Outlet />
         </div>
       </main>
+
+      {/* Print-only legal footer. Hidden on screen; rendered at the end of
+          the printed output so a chef who prints a recipe / prep sheet
+          to PDF (or paper for the prep board) still carries the
+          chef-declared / supplier-labels reminder with them. */}
+      <div
+        aria-hidden="true"
+        data-testid="print-only-disclaimer"
+        className="hidden print:!block print:!text-center print:!text-[10px] print:!text-slate-700 print:!py-1 print:!border-t print:!border-slate-300 print:!mt-4"
+      >
+        Allergens are chef-declared. Verify against supplier labels. — ChefFlow ({CURRENT_TOS_VERSION_FOOTER})
+      </div>
 
       <footer
         className="mb-14 lg:mb-0 print:!hidden border-t border-slate-200 dark:border-[rgba(255,255,255,0.06)]"
