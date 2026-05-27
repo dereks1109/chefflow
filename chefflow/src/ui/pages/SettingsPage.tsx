@@ -4,6 +4,7 @@ import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, U
 import { useClerk, useUser } from '@clerk/clerk-react';
 import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
 import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
+import { usePinStore } from '../../state/usePinStore';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -457,6 +458,8 @@ export default function SettingsPage() {
 
       <AllergyKeywordsSection />
 
+      <PinSection />
+
       {(isSignedIn || isE2E) && <LegalAcceptanceSection user={user ?? null} />}
 
       {/* Sign-out moved here from the top nav so it's not a one-tap-away
@@ -749,6 +752,214 @@ function AllergyKeywordsSection() {
           Add keyword
         </button>
       </div>
+    </section>
+  );
+}
+
+function PinSection() {
+  const isPinSet = usePinStore((s) => s.isPinSet());
+  const setPin = usePinStore((s) => s.setPin);
+  const clearPin = usePinStore((s) => s.clearPin);
+  const verifyPin = usePinStore((s) => s.verifyPin);
+  const [mode, setMode] = useState<'idle' | 'set' | 'change' | 'remove'>('idle');
+  const [oldPin, setOldPin] = useState('');
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  function reset() {
+    setOldPin('');
+    setNewPin('');
+    setConfirmPin('');
+    setError(null);
+    setMode('idle');
+  }
+
+  async function handleSetOrChange() {
+    setError(null);
+    if (!/^\d{4,6}$/.test(newPin)) {
+      setError('PIN must be 4–6 digits.');
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setError('PINs do not match.');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === 'change') {
+        const ok = await verifyPin(oldPin);
+        if (!ok) {
+          setError('Current PIN is incorrect.');
+          setBusy(false);
+          return;
+        }
+      }
+      await setPin(newPin);
+      setStatus(mode === 'change' ? 'PIN changed.' : 'PIN set.');
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not set PIN');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove() {
+    setError(null);
+    setBusy(true);
+    try {
+      const ok = await verifyPin(oldPin);
+      if (!ok) {
+        setError('Current PIN is incorrect.');
+        setBusy(false);
+        return;
+      }
+      clearPin();
+      setStatus('PIN removed.');
+      reset();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="settings-pin-heading"
+      data-testid="settings-pin-section"
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+    >
+      <h2 id="settings-pin-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+        Editor PIN (optional)
+      </h2>
+      <p className="mt-2 text-xs text-slate-500">
+        Set a 4–6 digit PIN to require it before editing recipes or events.
+        Recommended for shared kitchens — stops a passer-by from silently
+        editing a recipe (or untagging an allergen) on an unattended
+        device. You're asked once per browser session.
+      </p>
+
+      {status && (
+        <p data-testid="settings-pin-status" className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {status}
+        </p>
+      )}
+
+      {mode === 'idle' && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {isPinSet ? (
+            <>
+              <button
+                type="button"
+                onClick={() => { setStatus(null); setMode('change'); }}
+                data-testid="settings-pin-change"
+                className="btn-secondary text-sm"
+              >
+                Change PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => { setStatus(null); setMode('remove'); }}
+                data-testid="settings-pin-remove"
+                className="btn-secondary text-sm"
+              >
+                Remove PIN
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { setStatus(null); setMode('set'); }}
+              data-testid="settings-pin-set"
+              className="btn-primary text-sm"
+            >
+              Set PIN
+            </button>
+          )}
+        </div>
+      )}
+
+      {(mode === 'change' || mode === 'remove') && (
+        <label className="block mt-3">
+          <span className="text-xs font-medium text-slate-500">Current PIN</span>
+          <input
+            type="password"
+            inputMode="numeric"
+            value={oldPin}
+            onChange={(e) => setOldPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            data-testid="settings-pin-old-input"
+            className="input mt-1 text-center text-lg font-mono tracking-[0.3em]"
+          />
+        </label>
+      )}
+
+      {(mode === 'set' || mode === 'change') && (
+        <>
+          <label className="block mt-3">
+            <span className="text-xs font-medium text-slate-500">New PIN (4–6 digits)</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              data-testid="settings-pin-new-input"
+              className="input mt-1 text-center text-lg font-mono tracking-[0.3em]"
+            />
+          </label>
+          <label className="block mt-3">
+            <span className="text-xs font-medium text-slate-500">Confirm new PIN</span>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={confirmPin}
+              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              data-testid="settings-pin-confirm-input"
+              className="input mt-1 text-center text-lg font-mono tracking-[0.3em]"
+            />
+          </label>
+        </>
+      )}
+
+      {error && (
+        <p role="alert" data-testid="settings-pin-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      {mode !== 'idle' && (
+        <div className="mt-3 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={reset}
+            className="btn-secondary text-sm"
+          >
+            Cancel
+          </button>
+          {mode === 'remove' ? (
+            <button
+              type="button"
+              onClick={() => void handleRemove()}
+              disabled={busy || oldPin.length < 4}
+              data-testid="settings-pin-confirm-remove"
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              {busy ? 'Working…' : 'Remove'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void handleSetOrChange()}
+              disabled={busy || newPin.length < 4 || confirmPin.length < 4 || (mode === 'change' && oldPin.length < 4)}
+              data-testid="settings-pin-confirm-save"
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              {busy ? 'Working…' : 'Save'}
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

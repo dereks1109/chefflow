@@ -13,6 +13,7 @@ import {
 import { Plus, Calendar, StickyNote, MapPin, Wallet, GripVertical, Trash2, User, Mail, Phone } from 'lucide-react';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
+import PinGate from '../components/PinGate';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
@@ -178,6 +179,7 @@ export default function EventEditor() {
   }
 
   return (
+    <PinGate>
     <section className="p-4 md:p-6 max-w-3xl mx-auto">
       <header className="flex items-center justify-between mb-6 gap-2">
         <h1 className="text-2xl font-bold">Edit event</h1>
@@ -432,6 +434,7 @@ export default function EventEditor() {
         </fieldset>
       </form>
     </section>
+    </PinGate>
   );
 }
 

@@ -17,6 +17,7 @@ import DishRow from '../components/DishRow';
 import EventDetailCard from '../components/EventDetailCard';
 import EventDetailsSheet from '../components/EventDetailsSheet';
 import MenuCheckPanel from '../components/MenuCheckPanel';
+import MenuBuilder from '../components/MenuBuilder';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
 import { groupDishesBySections, moveDishToSection, removeDishFromAllSections } from '../../core/events/sections';
@@ -273,8 +274,8 @@ export default function EventView() {
   }
 
   return (
-    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <header className="flex items-center justify-between gap-2">
+    <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 print:!p-0 print:!space-y-0 print:!max-w-full">
+      <header className="flex items-center justify-between gap-2 print:!hidden">
         <Link to="/events" className="btn-secondary text-sm inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Events
@@ -282,8 +283,13 @@ export default function EventView() {
         <WorkflowCta event={e} />
       </header>
 
-      <EventDetailCard event={e} onEdit={() => setDetailsSheetOpen(true)} />
+      <div className="print:!hidden">
+        <EventDetailCard event={e} onEdit={() => setDetailsSheetOpen(true)} />
+      </div>
 
+      <MenuBuilder event={e} recipesById={recipesById} />
+
+      <div className="print:!hidden space-y-6">
       <MenuCheckPanel
         event={e}
         onAnalysisChange={(menuAnalysis: MenuAnalysis) =>
@@ -452,6 +458,7 @@ export default function EventView() {
           )}
         </div>
       </div>
+      </div>{/* /print:!hidden wrap around MenuCheckPanel + timeline */}
 
       <EventDetailsSheet
         open={detailsSheetOpen}

@@ -24,6 +24,7 @@ import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
+import PinGate from '../components/PinGate';
 import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
@@ -278,6 +279,7 @@ export default function RecipeEditor() {
   }
 
   return (
+    <PinGate>
     <section className="p-4 md:p-6">
       {attestOpen && (
         <AllergenAttestationModal
@@ -502,6 +504,7 @@ export default function RecipeEditor() {
         </div>
       </form>
     </section>
+    </PinGate>
   );
 }
 
