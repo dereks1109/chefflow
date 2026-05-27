@@ -116,6 +116,21 @@ describe('NotesList', () => {
     expect(screen.queryByTestId('notes-list-paraphrase-0')).toBeNull();
   });
 
+  it('with notesOriginal: allergy keywords in the source get a RED <mark> in the popover (data-allergy=true)', () => {
+    render(
+      <NotesList
+        notes={'3 vegans at the table\nNo nuts please'}
+        notesOriginal={'Hi chef, we have 3 vegans at the table and a strict no nuts allergy.'}
+      />,
+    );
+    // Bullet popovers contain at least one allergy-marked element.
+    const allergyMarks = screen.getAllByTestId('notes-list-allergy-mark');
+    expect(allergyMarks.length).toBeGreaterThan(0);
+    // At least one mark text matches a known keyword from the source.
+    const haystack = allergyMarks.map((m) => m.textContent?.toLowerCase() ?? '').join(' | ');
+    expect(haystack).toMatch(/no nuts|allergy|strict/);
+  });
+
   it('with notesOriginal: paraphrased bullets get a visible tint AND data-paraphrase=true; matched ones do not', () => {
     // First bullet matches the source verbatim → no tint.
     // Second bullet is paraphrased → tint + data-paraphrase=true.

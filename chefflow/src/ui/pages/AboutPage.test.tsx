@@ -77,7 +77,7 @@ describe('AboutPage', () => {
   it('renders the trust + contact note with the support email link', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 2, name: /a note on trust/i })).toBeInTheDocument();
-    const email = screen.getByRole('link', { name: /dereks1109@gmail\.com/i });
-    expect(email).toHaveAttribute('href', expect.stringContaining('mailto:dereks1109@gmail.com'));
+    const email = screen.getByRole('link', { name: /admin@chefflow\.uk/i });
+    expect(email).toHaveAttribute('href', expect.stringContaining('mailto:admin@chefflow.uk'));
   });
 });

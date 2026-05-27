@@ -17,7 +17,16 @@
 //     paraphrase" badge so the chef can spot anything the LLM invented.
 //     This is the provenance check — the chef can prove a bullet really
 //     came from the customer rather than being synthesized.
+//
+// Allergy-keyword highlight (2026-05-28): when the popover renders the
+// original blob, any occurrence of an allergy keyword (from the default
+// list + chef's extras in `useAllergyKeywordsStore`) is wrapped in a RED
+// <mark> on top of the existing amber bullet-source highlight. On overlap
+// allergy wins (safety-critical).
 // ---------------------------------------------------------------------------
+
+import { findAllergyKeywords } from '../../core/events/allergyKeywords';
+import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
 
 interface Props {
   notes: string | undefined;
@@ -68,56 +77,95 @@ function findSourceIndex(haystack: string, needle: string): number {
   return m ? m.index : -1;
 }
 
-/** Render `original` with every line of `bullets` highlighted in amber.
- *  Lines that don't match are returned in plain text. Multiple bullets
- *  matching the same range produce a single combined highlight. */
-function renderHighlightedOriginal(original: string, bullets: ParsedLine[]): React.ReactNode {
-  // Compute matched ranges sorted + merged.
-  const ranges: Array<[number, number]> = [];
+interface RangedHighlight {
+  start: number;
+  end: number;
+  kind: 'bullet' | 'allergy';
+}
+
+/** Render `original` with bullet-source ranges in amber and allergy-keyword
+ *  ranges in red. On overlap the allergy range wins (safety-critical).
+ *  Multiple ranges of the same kind that touch get merged into one mark. */
+function renderHighlightedOriginal(
+  original: string,
+  bullets: ParsedLine[],
+  allergyMatches: ReadonlyArray<{ start: number; end: number }> = [],
+): React.ReactNode {
+  const ranges: RangedHighlight[] = [];
   for (const b of bullets) {
     const idx = findSourceIndex(original, b.cleaned);
     if (idx < 0) continue;
-    ranges.push([idx, idx + b.cleaned.length]);
+    ranges.push({ start: idx, end: idx + b.cleaned.length, kind: 'bullet' });
   }
-  ranges.sort((a, b) => a[0] - b[0]);
-  const merged: Array<[number, number]> = [];
-  for (const [s, e] of ranges) {
-    const last = merged[merged.length - 1];
-    if (last && s <= last[1]) {
-      last[1] = Math.max(last[1], e);
-    } else {
-      merged.push([s, e]);
-    }
+  for (const m of allergyMatches) {
+    ranges.push({ start: m.start, end: m.end, kind: 'allergy' });
   }
-
-  if (merged.length === 0) {
+  // Walk left-to-right, emitting plain spans for gaps and a <mark> for
+  // each highlight range. Resolve conflicts character-by-character:
+  // 'allergy' > 'bullet' > nothing.
+  if (ranges.length === 0) {
     return <span className="opacity-80">{original}</span>;
+  }
+  const winnerAt: Array<'allergy' | 'bullet' | null> = new Array(original.length).fill(null);
+  for (const r of ranges) {
+    for (let i = r.start; i < Math.min(r.end, original.length); i++) {
+      if (winnerAt[i] === 'allergy') continue;
+      winnerAt[i] = r.kind;
+    }
   }
   const out: React.ReactNode[] = [];
   let cursor = 0;
-  for (let i = 0; i < merged.length; i++) {
-    const [s, e] = merged[i];
-    if (s > cursor) {
-      out.push(<span key={`p-${i}`} className="opacity-70">{original.slice(cursor, s)}</span>);
+  let segStart = 0;
+  let segKind: 'allergy' | 'bullet' | null = winnerAt[0] ?? null;
+  function flushSegment(end: number, key: string) {
+    if (end <= segStart) return;
+    const slice = original.slice(segStart, end);
+    if (segKind === 'allergy') {
+      out.push(
+        <mark
+          key={key}
+          data-testid="notes-list-allergy-mark"
+          data-allergy="true"
+          className="bg-red-300 dark:bg-red-500 text-slate-900 dark:text-slate-900 rounded px-0.5"
+        >
+          {slice}
+        </mark>,
+      );
+    } else if (segKind === 'bullet') {
+      out.push(
+        <mark key={key} className="bg-amber-300 dark:bg-amber-500 text-slate-900 dark:text-slate-900 rounded px-0.5">
+          {slice}
+        </mark>,
+      );
+    } else {
+      out.push(
+        <span key={key} className="opacity-70">{slice}</span>,
+      );
     }
-    out.push(
-      <mark key={`m-${i}`} className="bg-amber-300 dark:bg-amber-500 text-slate-900 dark:text-slate-900 rounded px-0.5">
-        {original.slice(s, e)}
-      </mark>,
-    );
-    cursor = e;
   }
-  if (cursor < original.length) {
-    out.push(<span key="tail" className="opacity-70">{original.slice(cursor)}</span>);
+  for (let i = 1; i < original.length; i++) {
+    const k = winnerAt[i] ?? null;
+    if (k !== segKind) {
+      flushSegment(i, `seg-${cursor++}`);
+      segStart = i;
+      segKind = k;
+    }
   }
+  flushSegment(original.length, `seg-${cursor++}`);
   return out;
 }
 
 export default function NotesList({ notes, notesOriginal, className = '' }: Props) {
+  const extras = useAllergyKeywordsStore((s) => s.extras);
   if (!notes) return null;
   const lines = parseLines(notes);
   if (lines.length === 0) return null;
   const hasOriginal = typeof notesOriginal === 'string' && notesOriginal.trim().length > 0;
+  // Scan the original blob (or the parsed notes when there's no original)
+  // for allergy keywords. The matches feed into renderHighlightedOriginal
+  // for the popover overlay; EventDetailCard runs a separate scan to
+  // populate the banner count.
+  const allergyMatches = hasOriginal ? findAllergyKeywords(notesOriginal!, extras) : [];
   if (lines.length === 1) {
     // Single-line: no popover needed — what you see is what was typed.
     return <p className={`whitespace-pre-wrap ${className}`}>{lines[0].cleaned}</p>;
@@ -176,7 +224,7 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
                 {hasOriginal ? 'Source — customer text (highlighted = this bullet)' : 'Original'}
               </span>
               {hasOriginal
-                ? renderHighlightedOriginal(notesOriginal!, [line])
+                ? renderHighlightedOriginal(notesOriginal!, [line], allergyMatches)
                 : line.raw}
             </span>
           </li>

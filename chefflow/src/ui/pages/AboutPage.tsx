@@ -14,7 +14,7 @@ import {
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 
-const SUPPORT_EMAIL = 'dereks1109@gmail.com';
+const SUPPORT_EMAIL = 'admin@chefflow.uk';
 
 export default function AboutPage() {
   const openUpgrade = useUpgradeSheetStore((s) => s.openWith);

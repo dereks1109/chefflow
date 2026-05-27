@@ -1,4 +1,5 @@
 import {
+  AlertTriangle,
   Calendar,
   Edit3,
   ExternalLink,
@@ -11,6 +12,8 @@ import EventContactRow from './EventContactRow';
 import NotesList from './NotesList';
 import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
+import { findAllergyKeywords } from '../../core/events/allergyKeywords';
+import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
 import type { KitchenEvent } from '../../core/types';
 
 interface Props {
@@ -89,10 +92,38 @@ export default function EventDetailCard({ event, onEdit }: Props) {
         <div className="mt-2 flex gap-2 text-sm text-slate-700 dark:text-slate-300">
           <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" aria-hidden="true" />
           <div className="min-w-0 flex-1">
+            <AllergyKeywordBanner notes={event.notes} notesOriginal={event.notesOriginal} />
             <NotesList notes={event.notes} notesOriginal={event.notesOriginal} />
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Banner above the notes block that surfaces the count of allergy /
+// intolerance keywords found in the customer's text. Scans `notesOriginal`
+// when present (real source), else the parsed `notes` (manual-entry events).
+// Hidden when no matches are found. The matched words themselves are
+// highlighted inside the NotesList hover popover.
+function AllergyKeywordBanner({ notes, notesOriginal }: { notes: string; notesOriginal?: string }) {
+  const extras = useAllergyKeywordsStore((s) => s.extras);
+  const haystack = notesOriginal && notesOriginal.trim().length > 0 ? notesOriginal : notes;
+  const matches = findAllergyKeywords(haystack, extras);
+  if (matches.length === 0) return null;
+  return (
+    <div
+      role="note"
+      data-testid="event-detail-allergy-banner"
+      className="mb-2 flex items-start gap-2 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-900 dark:text-red-200"
+    >
+      <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+      <span>
+        <strong>{matches.length}</strong> allergy / intolerance keyword
+        {matches.length === 1 ? '' : 's'} found in the {notesOriginal ? 'customer email' : 'notes'}.
+        Hover the notes below to see them highlighted, and please read the
+        original text carefully.
+      </span>
     </div>
   );
 }

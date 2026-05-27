@@ -124,7 +124,7 @@ export default function RecipeCard({
       </div>
       <header className="flex items-start justify-between gap-1.5">
         <Link
-          to={`/recipes/${recipe.id}/edit`}
+          to={`/recipes/${recipe.id}`}
           className="text-sm font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2"
         >
           {recipe.title || 'Untitled recipe'}

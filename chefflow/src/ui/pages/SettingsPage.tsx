@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/clerk-react';
+import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
+import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -453,6 +455,8 @@ export default function SettingsPage() {
         </p>
       </section>
 
+      <AllergyKeywordsSection />
+
       {(isSignedIn || isE2E) && <LegalAcceptanceSection user={user ?? null} />}
 
       {/* Sign-out moved here from the top nav so it's not a one-tap-away
@@ -644,6 +648,107 @@ function LegalAcceptanceSection({ user }: { user: UserLike | null }) {
         {' · '}
         <Link to="/disclaimer" className="hover:underline">View current Disclaimer</Link>
       </p>
+    </section>
+  );
+}
+
+function AllergyKeywordsSection() {
+  const extras = useAllergyKeywordsStore((s) => s.extras);
+  const addExtra = useAllergyKeywordsStore((s) => s.add);
+  const removeExtra = useAllergyKeywordsStore((s) => s.remove);
+  const defaults = defaultAllergyKeywords();
+  const [draft, setDraft] = useState('');
+
+  function handleAdd() {
+    const word = draft.trim();
+    if (!word) return;
+    addExtra(word);
+    setDraft('');
+  }
+
+  return (
+    <section
+      aria-labelledby="settings-allergy-keywords-heading"
+      data-testid="settings-allergy-keywords-section"
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+    >
+      <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+        Allergy keyword highlights
+      </h2>
+      <p className="mt-2 text-xs text-slate-500">
+        ChefFlow highlights these words in red when they appear in a customer's
+        email or your event notes, so you don't miss an allergy mention. These
+        never run through AI — it's just text search. The default list is
+        always on; add your own below.
+      </p>
+
+      <div className="mt-3">
+        <p className="text-xs font-medium text-slate-500 mb-1.5">Defaults (always on)</p>
+        <div className="flex flex-wrap gap-1.5">
+          {defaults.map((w) => (
+            <span
+              key={`d-${w}`}
+              className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-800 dark:text-red-200 px-2 py-0.5 text-xs"
+            >
+              {w}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs font-medium text-slate-500 mb-1.5">Your additions</p>
+        {extras.length === 0 ? (
+          <p className="text-xs text-slate-500 italic">None yet — add your own keywords below.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {extras.map((w) => (
+              <span
+                key={`x-${w}`}
+                data-testid={`allergy-keyword-extra-${w}`}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-2 py-0.5 text-xs"
+              >
+                {w}
+                <button
+                  type="button"
+                  onClick={() => removeExtra(w)}
+                  aria-label={`Remove keyword ${w}`}
+                  className="ml-0.5 opacity-60 hover:opacity-100"
+                >
+                  <XCircle className="h-3 w-3" aria-hidden="true" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleAdd();
+            }
+          }}
+          placeholder="e.g. celiac, kosher, halal…"
+          className="input flex-1 text-sm"
+          data-testid="settings-allergy-keyword-input"
+          aria-label="Add allergy keyword"
+        />
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={draft.trim().length === 0}
+          data-testid="settings-allergy-keyword-add"
+          className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50"
+        >
+          Add keyword
+        </button>
+      </div>
     </section>
   );
 }
