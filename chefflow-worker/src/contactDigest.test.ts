@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the contactMail send before importing the module under test so the
 // digest runs through a fake transport.
@@ -67,12 +67,18 @@ describe('runContactDigest', () => {
     expect(out.sent).toBe(true);
     expect(out.windowed).toBe(2);
     expect(sendMock).toHaveBeenCalledTimes(1);
-    const call = sendMock.mock.calls[0]?.[0];
-    expect(call.toAddress).toBe('admin@chefflow.uk');
-    expect(call.subjectOverride).toContain('2 contact submissions');
-    expect(call.htmlBodyOverride).toContain('Bob');
-    expect(call.htmlBodyOverride).toContain('Carol');
-    expect(call.htmlBodyOverride).not.toContain('Dave');
+    const allCalls = sendMock.mock.calls as unknown as Array<Array<{
+      toAddress?: string;
+      subjectOverride?: string;
+      htmlBodyOverride?: string;
+    }>>;
+    const call = allCalls[0]?.[0];
+    expect(call).toBeDefined();
+    expect(call?.toAddress).toBe('admin@chefflow.uk');
+    expect(call?.subjectOverride).toContain('2 contact submissions');
+    expect(call?.htmlBodyOverride).toContain('Bob');
+    expect(call?.htmlBodyOverride).toContain('Carol');
+    expect(call?.htmlBodyOverride).not.toContain('Dave');
   });
 
   it('skips with no-api-key when RESEND_API_KEY is absent (logs warn, no throw)', async () => {

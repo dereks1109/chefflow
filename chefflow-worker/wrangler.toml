@@ -39,8 +39,13 @@ DAILY_LIMIT = "30"
 # the literal cron string so adding a new schedule means appending here
 # AND adding a case branch in scheduled().
 #
-#   - "0 8 * * *" — daily 08:00 UTC contact-submissions digest to
-#     admin@chefflow.uk. Skipped silently on zero-submission days.
+#   - "0 8 * * *"   — daily 08:00 UTC contact-submissions digest to
+#                     admin@chefflow.uk. Skipped silently on zero-
+#                     submission days.
+#   - "30 7 * * *"  — daily 07:30 UTC Gmail inbox digest to
+#                     admin@chefflow.uk. Requires GOOGLE_OAUTH_* worker
+#                     secrets (see docs/operations/gmail-oauth-setup.md).
+#                     Skips silently with no-secrets when unset.
 # ---------------------------------------------------------------------------
 [triggers]
-crons = ["0 8 * * *"]
+crons = ["0 8 * * *", "30 7 * * *"]

@@ -54,6 +54,7 @@ import { provisionDemosForUser } from './demos';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
+import { runGmailDigest } from './gmailDigest';
 import {
   submitReport as takedownSubmitReport,
   listReports as takedownListReports,
@@ -96,6 +97,13 @@ export interface Env {
   // returns 503. Set via `wrangler secret put ADMIN_BOOTSTRAP_TOKEN`
   // immediately before use, then `wrangler secret delete` after.
   ADMIN_BOOTSTRAP_TOKEN?: string;
+  // Gmail OAuth for the daily inbox digest cron (07:30 UTC). All three
+  // must be set before the cron will fire — see
+  // docs/operations/gmail-oauth-setup.md for the one-time setup. When
+  // any are missing the cron logs a 'no-secrets' skip and exits cleanly.
+  GOOGLE_OAUTH_CLIENT_ID?: string;
+  GOOGLE_OAUTH_CLIENT_SECRET?: string;
+  GOOGLE_OAUTH_REFRESH_TOKEN?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -831,6 +839,10 @@ export default {
       '0 8 * * *': async () => {
         const result = await runContactDigest(env);
         console.log('[cron:contact-digest]', JSON.stringify(result));
+      },
+      '30 7 * * *': async () => {
+        const result = await runGmailDigest(env);
+        console.log('[cron:gmail-digest]', JSON.stringify(result));
       },
     };
     const handler = handlers[event.cron];
