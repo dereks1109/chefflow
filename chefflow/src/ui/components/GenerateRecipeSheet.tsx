@@ -6,6 +6,8 @@ import {
   generateRecipeFromText,
   generateRecipeFromPhoto,
 } from '../../core/recipes/llm/recipeGen';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { randomId } from '../../core/util/id';
 import { downscaleToDataUrl } from '../../core/util/image';
 import type { Recipe } from '../../core/types';
@@ -142,6 +144,11 @@ export default function GenerateRecipeSheet({ open, onClose, onCreated, initialT
       }
       onCreated(recipe);
     } catch (err) {
+      if (err instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        setStatus({ kind: 'idle' });
+        return;
+      }
       setStatus({ kind: 'error', message: friendlyError(err) });
     }
   }

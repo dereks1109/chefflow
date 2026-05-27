@@ -16,6 +16,8 @@ import {
 import LlmSettingsSheet from './LlmSettingsSheet';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { generateEventFromText } from '../../core/events/llm/eventGen';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
 import {
@@ -171,6 +173,11 @@ export default function GenerateEventSheet({ open, onClose, onCreated, initialRe
       };
       setStatus({ kind: 'review', event: eventWithLinks, recipes, matches, choices: {} });
     } catch (err) {
+      if (err instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        setStatus({ kind: 'idle' });
+        return;
+      }
       setStatus({ kind: 'error', message: friendlyError(err) });
     }
   }

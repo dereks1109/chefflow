@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { AlertTriangle, CheckCircle2, PoundSterling, ShieldAlert, Sparkles, Utensils } from 'lucide-react';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { checkMenu } from '../../core/events/llm/menuCheck';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { getRecipe } from '../../db/recipesRepo';
 import { saveEvent } from '../../db/eventsRepo';
 import type { KitchenEvent, MenuAnalysis, MenuSuggestionCategory, Recipe } from '../../core/types';
@@ -54,6 +56,11 @@ export default function MenuCheckPanel({ event, onAnalysisChange }: Props) {
       onAnalysisChange(next);
       setStatus({ kind: 'idle' });
     } catch (err) {
+      if (err instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        setStatus({ kind: 'idle' });
+        return;
+      }
       setStatus({ kind: 'error', message: friendlyError(err) });
     }
   }

@@ -30,6 +30,8 @@ import {
 import { aggregateIngredients } from '../../core/recipes/aggregateIngredients';
 import { useAuthGate } from '../../state/useAuthGate';
 import { useLlmSettingsStore } from '../../state/llmSettingsStore';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
 import type {
   ColorTag,
   Dish,
@@ -286,6 +288,13 @@ export default function Workflow() {
       // Show the LLM error (more user-actionable) when present; otherwise
       // the local one.
       const stratErr = err instanceof StrategyError ? (err.llmError ?? err.localError) : err;
+      // Daily LLM-quota exhaustion → open the upgrade sheet (conversion
+      // surface) instead of surfacing a confusing "rate limited" message.
+      if (stratErr instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        setWorkflowStatus({ kind: 'ready' });
+        return;
+      }
       setWorkflowStatus({ kind: 'error', message: friendlyError(stratErr) });
     }
   }

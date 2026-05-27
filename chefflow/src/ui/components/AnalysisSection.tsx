@@ -5,6 +5,8 @@ import { useLlmSettingsStore } from '../../state/llmSettingsStore';
 import { useProfileStore } from '../../state/useProfileStore';
 import { ALLERGEN_TAGS, ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
 import { analyzeRecipe } from '../../core/recipes/llm/recipeGen';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { addEntry as addAuditEntry, markSynced as markAuditSynced } from '../../db/allergenAuditsRepo';
 import { pushAllergenAudit } from '../../core/audit/allergenAuditClient';
 import { getRecipe } from '../../db/recipesRepo';
@@ -101,6 +103,15 @@ export default function AnalysisSection({ recipe, onChange, onAllergenAudit }: P
       });
       setStatus({ kind: 'idle' });
     } catch (err) {
+      // Daily LLM-quota exhaustion is the conversion trigger — open the
+      // upgrade sheet instead of surfacing a confusing "rate limited"
+      // message. Other errors (network, parse, etc.) fall through to the
+      // existing friendlyError path.
+      if (err instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        setStatus({ kind: 'idle' });
+        return;
+      }
       setStatus({ kind: 'error', message: friendlyError(err) });
     }
   }

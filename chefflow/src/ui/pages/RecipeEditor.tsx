@@ -18,6 +18,8 @@ import {
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
 import { generateDescription } from '../../core/recipes/llm/descriptionGen';
+import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
@@ -249,6 +251,10 @@ export default function RecipeEditor() {
       const next = await generateDescription({ recipe: r, apiKey, model });
       update('description', next);
     } catch (err) {
+      if (err instanceof LlmDailyQuotaExceededError) {
+        useUpgradeSheetStore.getState().openWith('llm');
+        return;
+      }
       setDescError(err instanceof Error ? err.message : 'Failed to generate description');
     } finally {
       setDescBusy(false);
