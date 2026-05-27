@@ -1,8 +1,8 @@
 // Idempotent demo provisioning: writes the canonical demo recipes + event
 // into D1 under the caller's user_id on first sign-in. Behavior:
-//   - KV marker `demos:provisioned:v4:<userId>` fast-skips repeat callers.
-//   - On v4 first-touch (existing v2/v3 users + brand-new users) we run a
-//     one-shot cleanup pass BEFORE the INSERT loop:
+//   - KV marker `demos:provisioned:v5:<userId>` fast-skips repeat callers.
+//   - On v5 first-touch (existing v2/v3/v4 users + brand-new users) we run
+//     a one-shot cleanup pass BEFORE the INSERT loop:
 //       1. Tombstone every id in RETIRED_DEMO_RECIPE_IDS (e.g. the
 //          discontinued (Demo) Mango Sorbet). Existing users see the
 //          tombstone via the next sync pull → dish drops from library.
@@ -21,11 +21,15 @@
 // MARKER VERSIONING: when the canonical demo content changes in a way that
 // existing users should see, bump the prefix (e.g. v4 → v5). The old marker
 // becomes orphan — KV TTL eventually evicts it.
+//
+// v5 (2026-05-28): demo event gains a `notesOriginal` field so the
+// notes-provenance hover popover demos out-of-the-box (existing v4 users
+// re-provision via the standard event UPSERT in the loop below).
 
 import { buildDemoRecipes, buildDemoEvents } from './demoSeed';
 
 const MARKER_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5y — effectively forever.
-const MARKER_KEY_PREFIX = 'demos:provisioned:v4:';
+const MARKER_KEY_PREFIX = 'demos:provisioned:v5:';
 
 // Demo recipe ids that USED to be in buildDemoRecipes() but are no longer
 // shipped. The cleanup pass tombstones any existing rows so users who

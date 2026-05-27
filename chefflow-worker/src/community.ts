@@ -60,15 +60,10 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe — surfaced on the card so chefs
    *  see "yields 4" at a glance. */
   originalYield: number;
-  /** Tags surfaced on the card — key ingredient tags only. Allergens were
-   *  previously projected here too but were dropped: ChefFlow doesn't
-   *  display allergen claims about another chef's recipe (the publishing
-   *  chef remains the food business operator under FIR 2014). Likewise
-   *  the AI-uncertain ingredient list is gone — the LLM no longer
-   *  participates in allergen tagging. */
-  tags?: {
-    keyIngredientTags?: string[];
-  };
+  // Tags previously projected on each summary card (allergens, then later
+  // just keyIngredientTags) were dropped 2026-05-28. The publishing chef
+  // remains the food business operator under FIR 2014, and the
+  // keyIngredientTags feature itself was scrapped.
 }
 
 interface IndexEntry {
@@ -233,18 +228,6 @@ export async function listRecent(
   const out: CommunityRecipeSummary[] = [];
   for (const r of records) {
     if (!r) continue;
-    // Read shim — newer payloads carry `keyIngredientTags` at top-level
-    // (post 2026-05-27 SPA change); legacy rows still have it nested under
-    // `analysis.keyIngredientTags`. Drop the shim half once telemetry
-    // shows no legacy payloads remain.
-    const rec = r as unknown as {
-      keyIngredientTags?: unknown;
-      analysis?: { keyIngredientTags?: unknown };
-    };
-    const rawKeyTags = rec.keyIngredientTags ?? rec.analysis?.keyIngredientTags;
-    const tags = Array.isArray(rawKeyTags)
-      ? { keyIngredientTags: rawKeyTags.filter((x): x is string => typeof x === 'string') }
-      : undefined;
     out.push({
       id: r.id,
       sourceLocalId: r.sourceLocalId,
@@ -256,7 +239,6 @@ export async function listRecent(
       copies: r.copies,
       publishedAt: r.publishedAt,
       originalYield: r.originalYield,
-      tags,
     });
   }
   return out;
@@ -278,18 +260,6 @@ export async function listByAuthor(
   for (const r of records) {
     if (!r) continue;
     if (r.authorClerkId !== authorClerkId) continue;
-    // Read shim — newer payloads carry `keyIngredientTags` at top-level
-    // (post 2026-05-27 SPA change); legacy rows still have it nested under
-    // `analysis.keyIngredientTags`. Drop the shim half once telemetry
-    // shows no legacy payloads remain.
-    const rec = r as unknown as {
-      keyIngredientTags?: unknown;
-      analysis?: { keyIngredientTags?: unknown };
-    };
-    const rawKeyTags = rec.keyIngredientTags ?? rec.analysis?.keyIngredientTags;
-    const tags = Array.isArray(rawKeyTags)
-      ? { keyIngredientTags: rawKeyTags.filter((x): x is string => typeof x === 'string') }
-      : undefined;
     out.push({
       id: r.id,
       sourceLocalId: r.sourceLocalId,
@@ -301,7 +271,6 @@ export async function listByAuthor(
       copies: r.copies,
       publishedAt: r.publishedAt,
       originalYield: r.originalYield,
-      tags,
     });
     if (out.length >= limit) break;
   }

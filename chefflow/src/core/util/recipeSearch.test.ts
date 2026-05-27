@@ -28,14 +28,14 @@ const stew = recipe({
   id: 'r1',
   title: 'Beef Stew',
   ingredients: [ing('Beef Chuck'), ing('Carrots')],
-  analysis: { keyIngredientTags: ['beef', 'root vegetable'], allergens: ['celery'] },
+  allergens: ['celery'],
 });
 
 const cake = recipe({
   id: 'r2',
   title: 'Chocolate Cake',
   ingredients: [ing('Cocoa'), ing('Flour')],
-  analysis: { keyIngredientTags: ['chocolate'], allergens: ['gluten', 'eggs'] },
+  allergens: ['gluten', 'eggs'],
 });
 
 const plain = recipe({ id: 'r3', title: 'Plain Rice', ingredients: [ing('Rice')] });
@@ -61,9 +61,14 @@ describe('filterRecipes', () => {
     expect(out).toEqual([cake]);
   });
 
-  it('matches against an analysis key-ingredient tag', () => {
+  it('does NOT match against analysis.keyIngredientTags — feature dropped 2026-05-28', () => {
+    // Pre-2026-05-28 search used to include keyIngredientTags in the corpus
+    // (chef could search "root" and find the stew tagged with "root
+    // vegetable"). The keyIngredientTags feature was scrapped; search no
+    // longer reads it. The stew is still found via "beef chuck" ingredient
+    // text, just not via the dropped key-tag list.
     const out = filterRecipes(corpus, 'root');
-    expect(out).toEqual([stew]);
+    expect(out).toEqual([]);
   });
 
   it('matches against an allergen tag', () => {

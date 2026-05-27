@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ImageOff, Layers, MoreVertical } from 'lucide-react';
-import { AllergenPill, KeyTagPill } from './AllergenBadge';
+import { AllergenPill } from './AllergenBadge';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
-import { getRecipeKeyTags } from '../../core/recipes/recipeShape';
 import type { AllergenTag } from '../../core/types';
 
 // Names of ingredients the chef flagged with a given allergen tag.
@@ -323,18 +322,15 @@ function OverflowMenu({ recipe, onDuplicate, onDelete, onCoverPhotoChange }: Ove
 }
 
 function RecipeAnalysisRow({ recipe }: { recipe: Recipe }) {
-  const keyTags = getRecipeKeyTags(recipe);
-  // Union: recipe-level catch-all + per-ingredient flags. Both are user-
-  // declared; the LLM no longer participates in allergen tagging.
+  // Union: recipe-level catch-all + per-ingredient flags. Chef-declared
+  // only — the LLM never participates in allergen tagging. The previous
+  // keyIngredientTags pill row was dropped 2026-05-28.
   const allergens = getRecipeAllergens(recipe);
-  if (keyTags.length === 0 && allergens.length === 0) return null;
+  if (allergens.length === 0) return null;
   return (
-    <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe tags">
+    <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe allergens">
       {allergens.map((a) => (
         <AllergenPill key={a} tag={a} ingredients={ingredientsFlaggedWith(recipe, a)} />
-      ))}
-      {keyTags.slice(0, 2).map((t) => (
-        <KeyTagPill key={t}>{t}</KeyTagPill>
       ))}
     </section>
   );

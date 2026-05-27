@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
-import { getRecipeAllergenList, getRecipeKeyTags } from '../../core/recipes/recipeShape';
+import { getRecipeAllergenList } from '../../core/recipes/recipeShape';
 import type { AllergenTag, Ingredient, Recipe } from '../../core/types';
 import { randomId } from '../../core/util/id';
 import { getRecipe } from '../../db/recipesRepo';
@@ -25,23 +25,21 @@ const VOLUME_UNITS = ['ml', 'L', 'tsp', 'tbsp', 'cup', 'fl oz', 'pt', 'qt', 'gal
 
 export default function IngredientRow({ index, value, onChange, onRemove, currentRecipeId, allergenMatches }: Props) {
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
-  // Inherited tags from the linked sub-recipe (when this is a `#` ingredient).
-  // Empty list when this isn't a sub-recipe link, or the sub-recipe has no
-  // analysis yet. Read-only — chefs edit the sub-recipe to change them.
+  // Inherited allergens from the linked sub-recipe (when this is a `#`
+  // ingredient). Empty list when this isn't a sub-recipe link. Read-only —
+  // chefs edit the sub-recipe to change them. (keyIngredientTags
+  // inheritance was dropped 2026-05-28 along with the feature.)
   const [inheritedAllergens, setInheritedAllergens] = useState<AllergenTag[]>([]);
-  const [inheritedKeyTags, setInheritedKeyTags] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     if (!value.componentRecipeId) {
       setInheritedAllergens([]);
-      setInheritedKeyTags([]);
       return;
     }
     void getRecipe(value.componentRecipeId).then((sub) => {
       if (cancelled || !sub) return;
       setInheritedAllergens(getRecipeAllergenList(sub));
-      setInheritedKeyTags(getRecipeKeyTags(sub));
     });
     return () => { cancelled = true; };
   }, [value.componentRecipeId]);
@@ -186,17 +184,9 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
                 {ALLERGEN_LABEL[tag]}
               </span>
             ))}
-            {inheritedKeyTags.map((t) => (
-              <span
-                key={`inh-t-${t}`}
-                className="inline-flex items-center rounded-full border border-slate-900 dark:border-slate-200
-                           text-slate-900 dark:text-slate-200 px-2 py-0.5 text-xs"
-                title="Inherited from sub-recipe"
-                data-testid={`ingredient-inherited-key-${t}`}
-              >
-                {t}
-              </span>
-            ))}
+            {/* keyIngredientTags inheritance pills removed 2026-05-28 —
+                feature scrapped along with the broader keyIngredientTags
+                data model. */}
             {availableToAdd.length > 0 && (
               <>
                 <select

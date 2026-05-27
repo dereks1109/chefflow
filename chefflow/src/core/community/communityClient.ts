@@ -38,13 +38,11 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe. Optional for backward-compat
    *  with summaries cached before this field was added. */
   originalYield?: number;
-  /** Tags surfaced on the card — key ingredient tags only. Allergens were
-   *  previously projected here too but were removed: ChefFlow doesn't
-   *  display allergen claims about another chef's recipe (the publishing
-   *  chef remains the food business operator under FIR 2014). */
-  tags?: {
-    keyIngredientTags?: string[];
-  };
+  // Tags previously projected on each summary card (allergens, then later
+  // just keyIngredientTags) were dropped 2026-05-28. The publishing chef
+  // remains the food business operator under FIR 2014, and the
+  // keyIngredientTags feature itself was scrapped — community cards now
+  // show title + author + likes/copies only.
 }
 
 export class CommunityClientError extends Error {

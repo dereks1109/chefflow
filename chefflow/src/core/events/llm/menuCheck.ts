@@ -16,7 +16,6 @@ import type {
   Recipe,
 } from '../../types';
 import { complete } from '../../llm/llmClient';
-import { getRecipeAllergenList, getRecipeKeyTags } from '../../recipes/recipeShape';
 import { stripMarkdownFences } from '../../llm/stripMarkdownFences';
 import {
   buildMenuCheckSystemPrompt,
@@ -64,15 +63,14 @@ function computeTotalCost(
 }
 
 export async function checkMenu(input: CheckMenuInput): Promise<MenuAnalysis> {
-  const dishes = input.event.dishes.map((d) => {
-    const recipe = d.recipeId ? input.recipes[d.recipeId] : undefined;
-    return {
-      name: d.name,
-      portions: d.portions,
-      allergens: recipe ? getRecipeAllergenList(recipe) : undefined,
-      keyIngredients: recipe ? getRecipeKeyTags(recipe) : undefined,
-    };
-  });
+  // 2026-05-28: allergens + keyIngredients no longer fed to the LLM. The
+  // menu suitability check reasons about DIETARY PREFERENCES only (vegan,
+  // vegetarian, halal, kosher, religious / cultural). Allergen analysis
+  // is the chef's per-recipe responsibility — see AllergensSection.
+  const dishes = input.event.dishes.map((d) => ({
+    name: d.name,
+    portions: d.portions,
+  }));
 
   const systemPrompt = buildMenuCheckSystemPrompt();
   const userPrompt = buildMenuCheckUserPrompt({

@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { Download, Heart, ImageOff } from 'lucide-react';
-import { KeyTagPill } from './AllergenBadge';
 import { resolveCoverPhoto } from '../../core/demos/demoPhotoMap';
 import type { CommunityRecipeSummary } from '../../core/community/communityClient';
 
@@ -92,17 +91,9 @@ export default function CommunityRecipeCard({ recipe }: Props) {
         </div>
       </dl>
 
-      <CommunityCardTags tags={recipe.tags} />
+      {/* CommunityCardTags + KeyTagPill row removed 2026-05-28 along with
+          the keyIngredientTags feature. Cards now show title + author +
+          like/copy metadata only. */}
     </article>
-  );
-}
-
-function CommunityCardTags({ tags }: { tags?: CommunityRecipeSummary['tags'] }) {
-  const keyTags = tags?.keyIngredientTags ?? [];
-  if (keyTags.length === 0) return null;
-  return (
-    <div className="mt-1.5 flex flex-wrap gap-1">
-      {keyTags.map((t) => <KeyTagPill key={`k-${t}`}>{t}</KeyTagPill>)}
-    </div>
   );
 }

@@ -113,7 +113,7 @@ describe('analyzeRecipe', () => {
     updatedAt: 0,
   };
 
-  it('returns a RecipeAnalysis with source=llm-text stamped (calories + key tags only)', async () => {
+  it('returns a RecipeAnalysis with source=llm-text stamped (calories only — keyIngredientTags dropped 2026-05-28)', async () => {
     const json = JSON.stringify({
       caloriesPerPortion: 600,
       caloriesTotal: 2400,
@@ -127,7 +127,7 @@ describe('analyzeRecipe', () => {
     });
     expect(analysis.caloriesPerPortion).toBe(600);
     expect(analysis.caloriesTotal).toBe(2400);
-    expect(analysis.keyIngredientTags).toEqual(['beef', 'red wine']);
+    expect((analysis as { keyIngredientTags?: unknown }).keyIngredientTags).toBeUndefined();
     expect(analysis.allergens).toBeUndefined();
     expect(analysis.source).toBe('llm-text');
     expect(analysis.analyzedAt).toBeGreaterThan(0);
@@ -141,19 +141,19 @@ describe('analyzeRecipe', () => {
       fetchImpl: fetchReturning('{}'),
     });
     expect(analysis.allergens).toBeUndefined();
-    expect(analysis.keyIngredientTags).toEqual([]);
     expect(analysis.caloriesPerPortion).toBeUndefined();
   });
 
-  it('strips markdown fences before parsing', async () => {
-    const fenced = '```json\n{"keyIngredientTags":["beef"],"allergens":[]}\n```';
+  it('strips markdown fences before parsing — calorie fields land even when emitted alongside dropped fields', async () => {
+    const fenced = '```json\n{"keyIngredientTags":["beef"],"caloriesPerPortion":612,"allergens":[]}\n```';
     const analysis = await analyzeRecipe({
       recipe: sampleRecipe,
       apiKey: 'k',
       model: 'm',
       fetchImpl: fetchReturning(fenced),
     });
-    expect(analysis.keyIngredientTags).toEqual(['beef']);
+    expect(analysis.caloriesPerPortion).toBe(612);
+    expect((analysis as { keyIngredientTags?: unknown }).keyIngredientTags).toBeUndefined();
   });
 
   it('throws LlmRecipeValidationError on totally invalid JSON', async () => {
@@ -167,11 +167,13 @@ describe('analyzeRecipe', () => {
     ).rejects.toBeInstanceOf(LlmRecipeValidationError);
   });
 
-  it('ignores any allergens or uncertainIngredients fields the LLM might still emit (legal de-risk)', async () => {
-    // The model is no longer asked to produce allergens, but a stale or
-    // off-spec response might include them. Both fields must be silently
-    // discarded so they never become user-visible allergen claims.
+  it('ignores any allergens, uncertainIngredients, or keyIngredientTags fields the LLM might still emit (legal de-risk + dropped feature)', async () => {
+    // The model is no longer asked to produce allergens. keyIngredientTags
+    // was dropped entirely in 2026-05-28. Any stale or off-spec response
+    // emitting these fields must be silently discarded so they never become
+    // user-visible.
     const json = JSON.stringify({
+      caloriesPerPortion: 612,
       keyIngredientTags: ['beef'],
       allergens: ['milk', 'gluten'],
       uncertainIngredients: ['house chilli paste'],
@@ -184,7 +186,9 @@ describe('analyzeRecipe', () => {
     });
     expect((analysis as { allergens?: unknown }).allergens).toBeUndefined();
     expect((analysis as { uncertainIngredients?: unknown }).uncertainIngredients).toBeUndefined();
-    expect(analysis.keyIngredientTags).toEqual(['beef']);
+    expect((analysis as { keyIngredientTags?: unknown }).keyIngredientTags).toBeUndefined();
+    // Calories still come through unchanged.
+    expect(analysis.caloriesPerPortion).toBe(612);
   });
 });
 

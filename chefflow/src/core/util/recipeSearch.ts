@@ -1,5 +1,5 @@
 import type { Recipe } from '../types';
-import { getRecipeAllergenList, getRecipeKeyTags } from '../recipes/recipeShape';
+import { getRecipeAllergenList } from '../recipes/recipeShape';
 
 export function filterRecipes(recipes: Recipe[], query: string): Recipe[] {
   const needle = query.trim().toLowerCase();
@@ -19,9 +19,6 @@ function matchesRecipe(recipe: Recipe, needle: string): boolean {
   if (recipe.title && recipe.title.toLowerCase().includes(needle)) return true;
   for (const ing of recipe.ingredients) {
     if (ing.name && ing.name.toLowerCase().includes(needle)) return true;
-  }
-  for (const tag of getRecipeKeyTags(recipe)) {
-    if (tag.toLowerCase().includes(needle)) return true;
   }
   for (const a of getRecipeAllergenList(recipe)) {
     if (a.toLowerCase().includes(needle)) return true;

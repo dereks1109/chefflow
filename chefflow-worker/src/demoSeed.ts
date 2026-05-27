@@ -66,6 +66,12 @@ export type DemoEvent = {
   contactEmail: string;
   contactPhone: string;
   notes: string;
+  /** Raw customer email this event was extracted from, retained so the
+   *  notes-provenance hover popover can highlight which bullets came
+   *  verbatim from the customer vs. were paraphrased by the LLM.
+   *  Demo-only: real events get this populated by GenerateEventSheet.
+   *  Bumped to v5 marker (demos.ts) so existing demo users repick it up. */
+  notesOriginal: string;
   dishes: Array<{ id: string; name: string; recipeId: string; portions: number; startAt: string }>;
   sections: Array<{ id: string; name: string; dishIds: string[] }>;
   createdAt: number;
@@ -560,6 +566,23 @@ export function buildDemoEvents(now: number): DemoEvent[] {
         'Dave (birthday) loves a classic steak with peppercorn sauce.',
         'Budget is generous (~£600 total food cost) — go for a five-dish lineup.',
         'Casual ambience, no formal courses needed.',
+      ].join('\n'),
+      // Raw email the chef would have pasted into GenerateEventSheet. The
+      // popover on each parsed bullet matches against this text and
+      // highlights the source line in amber. Three bullets above appear
+      // verbatim ("8 guests", peanut allergy, vegetarian) — the rest are
+      // chef-side paraphrases, which surface as "AI paraphrase" badges.
+      notesOriginal: [
+        'Hi chef!',
+        '',
+        "Just confirming details for our birthday do on the 24th — we'll be 8 guests for a birthday dinner. Anna and Ben are vegetarian (no meat or fish). Carla has a confirmed peanut allergy, so please be strict about cross-contamination.",
+        '',
+        "Dave is the birthday boy and absolutely loves a classic steak with peppercorn sauce, so we're keen to have something like that as the main.",
+        '',
+        "Budget-wise we'd like to spend up to about £600 total food cost. Five small courses feels right rather than three big ones. Casual ambience — no need for anything too formal.",
+        '',
+        'Looking forward!',
+        '— Sam',
       ].join('\n'),
       dishes: [salad, calamari, tikka, lamb, ribeye],
       sections: [

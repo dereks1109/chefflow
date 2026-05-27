@@ -4,7 +4,8 @@ import { Sparkles } from 'lucide-react';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
-import AnalysisSection from '../components/AnalysisSection';
+import AllergensSection from '../components/AllergensSection';
+import CalorieAnalysisSection from '../components/CalorieAnalysisSection';
 import AllergenHistorySection from '../components/AllergenHistorySection';
 import SubRecipeStepsPanel from '../components/SubRecipeStepsPanel';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
@@ -342,13 +343,10 @@ export default function RecipeEditor() {
       )}
 
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-        <AnalysisSection
-          recipe={r}
-          onChange={updateRecipeFromSection}
-          onAllergenAudit={() => setAuditRefreshKey((k) => k + 1)}
-        />
-        <AllergenHistorySection recipeId={r.id} refreshKey={auditRefreshKey} />
-
+        {/* Field order (2026-05-28): name first, then chef-declared
+            allergens (so the safety-critical metadata is captured before
+            the chef gets into the ingredient/step weeds), then the AI
+            calorie estimate, then the rest. */}
         <label className="block">
           <span className="text-sm font-medium">Name of Dish</span>
           <input
@@ -359,6 +357,18 @@ export default function RecipeEditor() {
             data-testid="recipe-editor-title-input"
           />
         </label>
+
+        <AllergensSection
+          recipe={r}
+          onChange={updateRecipeFromSection}
+          onAllergenAudit={() => setAuditRefreshKey((k) => k + 1)}
+        />
+        <AllergenHistorySection recipeId={r.id} refreshKey={auditRefreshKey} />
+
+        <CalorieAnalysisSection
+          recipe={r}
+          onChange={updateRecipeFromSection}
+        />
 
         <label className="block">
           <span className="text-sm font-medium">Description</span>

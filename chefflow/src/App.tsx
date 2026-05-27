@@ -23,6 +23,7 @@ import AuthGateRunner from './ui/components/AuthGateRunner';
 import SyncRunner from './ui/components/SyncRunner';
 import ReloadOnFirstSignIn from './ui/components/ReloadOnFirstSignIn';
 import OnboardingGate from './ui/components/OnboardingGate';
+import TosReacceptanceGate from './ui/components/TosReacceptanceGate';
 import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
@@ -48,6 +49,7 @@ function PublicApp() {
       <SyncRunner />
       <ReloadOnFirstSignIn />
       <OnboardingGate>
+        <TosReacceptanceGate>
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/" element={<Navigate to="/recipes" replace />} />
@@ -70,6 +72,7 @@ function PublicApp() {
             <Route path="*" element={<div className="p-6">Not found.</div>} />
           </Route>
         </Routes>
+        </TosReacceptanceGate>
       </OnboardingGate>
     </>
   );

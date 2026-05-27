@@ -106,11 +106,11 @@ describe('provisionDemosForUser', () => {
     expect(Array.from(rows.values()).some((r) => r.id === 'e_demo_main')).toBe(true);
   });
 
-  it('second call is a no-op (KV v4 marker fast-skips)', async () => {
+  it('second call is a no-op (KV v5 marker fast-skips)', async () => {
     const { db } = makeStubDb();
     const { kv, store } = makeStubKv();
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
-    expect(store.get('demos:provisioned:v4:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
     const second = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(second.alreadyProvisioned).toBe(true);
     expect(second.recipesInserted).toBe(0);
@@ -146,7 +146,7 @@ describe('provisionDemosForUser', () => {
     expect(userIds.filter((u) => u === 'user_bob').length).toBe(15);
   });
 
-  it('v2-marker users get re-provisioned for v4: mango sorbet tombstoned, allergens stripped from existing demos', async () => {
+  it('v2-marker users get re-provisioned for v5: mango sorbet tombstoned, allergens stripped from existing demos', async () => {
     const { db, rows } = makeStubDb();
     const { kv, store } = makeStubKv();
     // Pre-seed the v2 marker (chef was provisioned in the previous version).
@@ -181,7 +181,7 @@ describe('provisionDemosForUser', () => {
     expect(out.recipesTombstoned).toBe(1);
     expect(out.recipesUpdated).toBe(1);
     // V3 marker is now set.
-    expect(store.get('demos:provisioned:v4:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
 
     // Mango sorbet → tombstoned.
     const mango = rows.get('recipes::user_alice::r_demo_mango_sorbet');
@@ -255,5 +255,22 @@ describe('provisionDemosForUser', () => {
     expect(payload.contactName).toBe('Priscilla Morgan');
     expect(payload.contactEmail).toBe('priscilla.morgan@example.com');
     expect(payload.contactPhone).toBe('+44 7700 900456');
+  });
+
+  it('v5 demo event ships a notesOriginal email so the hover-provenance demo works out-of-the-box', async () => {
+    const { db, rows } = makeStubDb();
+    const { kv } = makeStubKv();
+    await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+    const eventRow = rows.get('events::user_alice::e_demo_main');
+    expect(eventRow).toBeDefined();
+    const payload = JSON.parse(eventRow!.payload) as { notes: string; notesOriginal: string };
+    expect(typeof payload.notesOriginal).toBe('string');
+    // The raw email mentions key details the parsed notes also reference,
+    // so the popover can highlight matches.
+    expect(payload.notesOriginal).toContain('peanut allergy');
+    expect(payload.notesOriginal).toContain('vegetarian');
+    expect(payload.notesOriginal).toContain('£600');
+    // Long-form prose (not the bullet-list shape).
+    expect(payload.notesOriginal.length).toBeGreaterThan(payload.notes.length);
   });
 });

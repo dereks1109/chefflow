@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   getRecipeAllergenList,
-  getRecipeKeyTags,
   promoteLegacyRecipeFields,
 } from './recipeShape';
 import type { Recipe } from '../types';
@@ -30,8 +29,6 @@ describe('getRecipeAllergenList', () => {
     expect(getRecipeAllergenList(mkRecipe())).toEqual([]);
   });
   it('top-level wins over legacy when both set', () => {
-    // Both shapes during the transition; top-level is authoritative because
-    // it's what new writes produce.
     expect(getRecipeAllergenList(mkRecipe({
       allergens: ['milk'],
       analysis: { allergens: ['eggs'] },
@@ -39,48 +36,40 @@ describe('getRecipeAllergenList', () => {
   });
 });
 
-describe('getRecipeKeyTags', () => {
-  it('returns top-level keyIngredientTags when present', () => {
-    expect(getRecipeKeyTags(mkRecipe({ keyIngredientTags: ['beef'] }))).toEqual(['beef']);
-  });
-  it('falls back to legacy analysis.keyIngredientTags', () => {
-    expect(getRecipeKeyTags(mkRecipe({ analysis: { keyIngredientTags: ['fish'] } }))).toEqual(['fish']);
-  });
-  it('returns empty when neither set', () => {
-    expect(getRecipeKeyTags(mkRecipe())).toEqual([]);
-  });
-});
-
 describe('promoteLegacyRecipeFields', () => {
-  it('lifts legacy fields to top-level and clears the analysis copies', () => {
+  it('lifts legacy allergens to top-level and clears the analysis copy', () => {
     const out = promoteLegacyRecipeFields(mkRecipe({
-      analysis: { allergens: ['milk'], keyIngredientTags: ['beef'], caloriesPerPortion: 500 },
+      analysis: { allergens: ['milk'], caloriesPerPortion: 500 },
     }));
     expect(out.allergens).toEqual(['milk']);
-    expect(out.keyIngredientTags).toEqual(['beef']);
     expect(out.analysis?.allergens).toBeUndefined();
-    expect(out.analysis?.keyIngredientTags).toBeUndefined();
     expect(out.analysis?.caloriesPerPortion).toBe(500); // calories untouched
   });
+
+  it('strips legacy analysis.keyIngredientTags (feature removed 2026-05-28)', () => {
+    // Build a recipe whose analysis carries the now-removed
+    // keyIngredientTags field — older rows persisted before the drop.
+    const legacy = mkRecipe({
+      analysis: { caloriesPerPortion: 100 } as Recipe['analysis'],
+    });
+    (legacy.analysis as { keyIngredientTags?: string[] }).keyIngredientTags = ['beef', 'butter'];
+    const out = promoteLegacyRecipeFields(legacy);
+    expect((out.analysis as { keyIngredientTags?: unknown }).keyIngredientTags).toBeUndefined();
+    // Calories survive.
+    expect(out.analysis?.caloriesPerPortion).toBe(100);
+  });
+
   it('is a no-op when no legacy fields exist', () => {
-    const input = mkRecipe({ allergens: ['eggs'], keyIngredientTags: ['eggs'] });
+    const input = mkRecipe({ allergens: ['eggs'] });
     expect(promoteLegacyRecipeFields(input)).toBe(input);
   });
-  it('preserves existing top-level values when both shapes are present', () => {
+
+  it('preserves existing top-level allergens when both shapes are present', () => {
     const out = promoteLegacyRecipeFields(mkRecipe({
       allergens: ['milk'],
       analysis: { allergens: ['eggs'] },
     }));
     expect(out.allergens).toEqual(['milk']);
     expect(out.analysis?.allergens).toBeUndefined();
-  });
-  it('removes analysis entirely if it was empty after stripping', () => {
-    // Edge: an analysis object that ONLY held the legacy tags loses its
-    // last fields. We keep it as an empty object rather than deleting —
-    // simpler invariants, no UI checks for `analysis === undefined`.
-    const out = promoteLegacyRecipeFields(mkRecipe({
-      analysis: { allergens: ['milk'] },
-    }));
-    expect(out.analysis).toEqual({});
   });
 });

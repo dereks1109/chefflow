@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
-import { useAuth, useClerk, useUser } from '@clerk/clerk-react';
-import { CURRENT_TOS_VERSION, CURRENT_DISCLAIMER_VERSION } from '../../core/legal/versions';
-import { completeOnboarding as completeOnboardingClient } from '../../core/onboarding/onboardingClient';
+import { useClerk, useUser } from '@clerk/clerk-react';
 import { useTierStore } from '../../state/useTierStore';
 import { TIER_LABEL, TIER_LIMITS, TIER_PRICE_GBP } from '../../core/tier/limits';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
@@ -188,6 +186,19 @@ export default function SettingsPage() {
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
       >
         <h2 id="settings-profile-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Profile</h2>
+        {/* Email row (2026-05-28) — surfaces which Clerk account is signed
+            in. Especially useful when the chef has both a personal Gmail
+            account and admin@chefflow.uk and wants to know which one is
+            active. Read-only here; managed via Clerk's hosted profile. */}
+        {user?.primaryEmailAddress?.emailAddress && (
+          <p
+            className="mt-2 text-xs text-slate-600 dark:text-slate-400"
+            data-testid="settings-profile-email"
+          >
+            <span className="text-slate-500">Signed in as:</span>{' '}
+            <span className="font-mono">{user.primaryEmailAddress.emailAddress}</span>
+          </p>
+        )}
         <div className="mt-3 flex items-start gap-4">
           <div className="shrink-0">
             {avatarDataUrl ? (
@@ -586,9 +597,6 @@ function LegalAcceptanceSection({ user }: { user: UserLike | null }) {
     disclaimerVersion?: string;
   };
   const accepted = !!meta.tosAcceptedAt;
-  const versionsMatch =
-    meta.tosVersion === CURRENT_TOS_VERSION &&
-    meta.disclaimerVersion === CURRENT_DISCLAIMER_VERSION;
   const acceptedDate = meta.tosAcceptedAt
     ? new Date(meta.tosAcceptedAt).toLocaleDateString(undefined, {
         year: 'numeric',
@@ -597,34 +605,11 @@ function LegalAcceptanceSection({ user }: { user: UserLike | null }) {
       })
     : null;
 
-  const { getToken } = useAuth();
-  const [reAccepted, setReAccepted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleReAccept() {
-    if (!reAccepted) return;
-    setError(null);
-    setSubmitting(true);
-    try {
-      await completeOnboardingClient({
-        getToken,
-        fields: {
-          tosAcceptedAt: new Date().toISOString(),
-          tosVersion: CURRENT_TOS_VERSION,
-          disclaimerVersion: CURRENT_DISCLAIMER_VERSION,
-        },
-      });
-      // Force Clerk to refetch publicMetadata so the banner clears
-      // immediately without a page reload.
-      await user?.reload?.();
-      setReAccepted(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not re-accept — please retry');
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  // 2026-05-28: re-acceptance flow moved to TosReacceptanceGate (a
+  // login-time popup) — this section is now a passive status display
+  // only. When versions mismatch the chef sees the gate popup BEFORE
+  // they reach Settings, so the inline checkbox + button here would be
+  // dead UI.
 
   return (
     <section
@@ -645,53 +630,14 @@ function LegalAcceptanceSection({ user }: { user: UserLike | null }) {
         </p>
       ) : (
         <p className="mt-2 text-xs text-amber-700 dark:text-amber-300" data-testid="settings-legal-missing">
-          No acceptance record found on this account. Please re-accept below.
+          No acceptance record found on this account.
         </p>
       )}
 
-      {(!accepted || !versionsMatch) && (
-        <div className="mt-3 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 p-3">
-          <p className="text-xs font-medium text-amber-900 dark:text-amber-200">
-            {accepted
-              ? `We've updated the Terms (now v${CURRENT_TOS_VERSION}) / Disclaimer (now v${CURRENT_DISCLAIMER_VERSION}). Please re-accept to continue using community + publish features.`
-              : 'Please accept the current Terms and Disclaimer.'}
-          </p>
-          <label className="mt-2 flex items-start gap-2 text-xs cursor-pointer">
-            <input
-              type="checkbox"
-              checked={reAccepted}
-              onChange={(e) => setReAccepted(e.target.checked)}
-              data-testid="settings-legal-reaccept-checkbox"
-              className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-accent focus:ring-accent"
-            />
-            <span className="text-slate-700 dark:text-slate-200 leading-snug">
-              I have read and accept the{' '}
-              <Link to="/terms" target="_blank" className="text-accent hover:underline">
-                Terms of Service
-              </Link>
-              {' '}and the{' '}
-              <Link to="/disclaimer" target="_blank" className="text-accent hover:underline">
-                Disclaimer
-              </Link>
-              .
-            </span>
-          </label>
-          <button
-            type="button"
-            onClick={() => void handleReAccept()}
-            disabled={!reAccepted || submitting}
-            data-testid="settings-legal-reaccept-button"
-            className="mt-3 inline-flex items-center gap-2 px-3 h-9 rounded-md text-sm font-medium border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitting ? 'Saving…' : 'Re-accept current Terms + Disclaimer'}
-          </button>
-          {error && (
-            <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
+      <p className="mt-2 text-xs text-slate-500">
+        ChefFlow will ask you to re-accept when we update the Terms or
+        Disclaimer — you don't need to do anything here.
+      </p>
 
       <p className="mt-3 text-xs text-slate-500">
         <Link to="/terms" className="hover:underline">View current Terms</Link>

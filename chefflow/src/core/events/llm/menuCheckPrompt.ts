@@ -2,26 +2,23 @@
 // Prompt builders for the LLM "menu suitability" check on an event.
 //
 // Input: freeform guest dietary requirements + a dish summary derived from
-// the event (dish names + portions, and — when a dish links to a recipe —
-// that recipe's declared allergens + key ingredient tags).
+// the event (dish names + portions only).
 //
 // Output: a structured verdict the SPA renders as a panel of issues +
-// suggestions. The closed UK-14 allergen taxonomy is included so the LLM has
-// a stable vocabulary to reason about.
+// suggestions. The LLM reasons about DIETARY PREFERENCES only — vegan,
+// vegetarian, halal, kosher, pescatarian, religious / cultural restrictions.
+// Allergen analysis was removed 2026-05-28: ChefFlow has never positioned
+// AI as a competent allergen reasoner, and the chef declares allergens
+// themselves on each recipe (where the closed UK-14 picker enforces the
+// taxonomy and the publish gate captures their attestation under FIR 2014).
 // ---------------------------------------------------------------------------
 
-import { ALLERGEN_TAGS, ALLERGEN_LABEL } from '../../recipes/llm/allergens';
-
-function buildAllergenList(): string {
-  return ALLERGEN_TAGS
-    .map((tag) => `- "${tag}" — ${ALLERGEN_LABEL[tag]}`)
-    .join('\n');
-}
-
 export function buildMenuCheckSystemPrompt(): string {
-  return `You are a food-service safety reviewer for ChefFlow. Given a freeform "notes / dietary requirements" string for an event (which may also contain general event notes alongside the dietary information) and a list of dishes with their key ingredients + known allergens, decide whether the menu suits the guests.
+  return `You are a menu-suitability reviewer for ChefFlow. Given a freeform "notes / dietary requirements" string for an event (which may also contain general event notes alongside the dietary information) and a list of dishes, decide whether the menu suits the guests' DIETARY PREFERENCES.
 
-Extract the dietary signal from the notes — ignore unrelated event logistics (timing, venue, ambience). Look for: number of guests, dietary types (vegan, vegetarian, halal, kosher, pescatarian), allergies, religious or cultural restrictions, and any "no X" preferences.
+Extract the dietary signal from the notes — ignore unrelated event logistics (timing, venue, ambience). Look for: number of guests, dietary types (vegan, vegetarian, halal, kosher, pescatarian), religious or cultural restrictions, and any "no X" preferences.
+
+DO NOT analyse allergens. The chef declares allergens directly on each recipe through ChefFlow's closed UK-14 picker — the menu check has no information about them and must never speculate. If the notes mention an allergy (e.g. "Carla has a peanut allergy"), you may surface it as a SUGGESTION to verify supplier labels, but never produce an "issue" or "verdict" turning on allergen presence.
 
 Output a single JSON object — no prose, no markdown fences, no comments.
 
@@ -32,42 +29,39 @@ JSON SCHEMA:
     { "severity": "warning" | "blocker", "message": "string" }
   ],
   "suggestions": [
-    { "category": "allergy" | "budget" | "other", "text": "string" }
+    { "category": "dietary" | "budget" | "other", "text": "string" }
   ]
 }
 
 VERDICT RULES:
-- "ok"       — every guest can eat at least one dish safely AND the menu broadly suits the declared requirements.
-- "warnings" — soft conflicts (limited choice for a dietary subgroup, marginal options) — guests can still eat.
-- "blocked"  — at least one guest cannot eat ANY dish safely (e.g. allergen present in every dish; vegan with only meat dishes).
+- "ok"       — the menu broadly suits the declared dietary requirements; every guest has at least one option.
+- "warnings" — soft conflicts (limited choice for a dietary subgroup, marginal options) — guests can still eat something.
+- "blocked"  — at least one guest cannot eat ANY dish under their declared dietary preference (e.g. a strict vegan with only meat dishes).
 
 ISSUE RULES:
-- Each issue is ONE concrete conflict between a guest requirement and the menu.
-- "blocker" — a guest has NO safe option.
+- Each issue is ONE concrete conflict between a guest dietary requirement and the menu.
+- "blocker" — a guest has NO option matching their dietary preference.
 - "warning" — a guest has limited or marginal options.
 - Be specific: name the dietary group AND the dishes that conflict.
+- NEVER raise an allergen-driven issue — that's the chef's per-recipe responsibility, not the menu check.
 
 SUGGESTION RULES:
 - Return EXACTLY 5 suggestions — not more, not fewer.
 - Each suggestion is ONE concrete actionable change, one short sentence.
 - Each suggestion carries a "category" tag:
-  - "allergy" — anything driven by the declared allergies / dietary restrictions (add a vegan main, remove peanut garnish, label nut-free options, etc.).
-  - "budget" — anything driven by the event's food budget (swap an ingredient for a cheaper cut, reduce portion size, drop a high-cost garnish, etc.).
-  - "other" — general improvements (presentation, service flow, beverage pairing, leftover handling, etc.).
-- Aim for coverage across all 3 categories where possible. If allergy or budget concerns truly don't apply to this event, you may use "other" instead — but always exactly 5 total.
-- Don't repeat issues already listed in "issues" — suggestions are forward-looking actions, not restatements.
-
-ALLERGEN VOCABULARY (the closed UK-14 set — use these names in messages):
-${buildAllergenList()}
+  - "dietary" — anything driven by declared dietary preferences (add a vegan main, swap the protein on one dish for fish to suit pescatarians, etc.).
+  - "budget"  — anything driven by the event's food budget (swap an ingredient for a cheaper cut, reduce portion size, drop a high-cost garnish).
+  - "other"   — general improvements (presentation, service flow, beverage pairing, "verify supplier labels for declared allergies").
+- Aim for coverage across all 3 categories where possible. Always exactly 5.
+- Don't repeat issues already listed in "issues" — suggestions are forward-looking actions.
 
 CONSERVATIVE STANCE:
-- If a guest declares an allergy matching one of the 14 allergens above, treat any dish carrying that allergen as unsafe for them.
 - If dietary intent is ambiguous, prefer "warnings" over "ok".
 - If the dish list is empty, return verdict "warnings" with one issue saying the menu has no dishes yet.
 
 BUDGET RULES:
 - If both a budget AND a total cost are provided, evaluate whether the menu fits the budget.
-- If total cost > budget: add ONE issue with severity "warning" naming the overage in GBP and percent (e.g. "Menu is £15.00 over the £100.00 budget (15% over)."). Budget alone never sets the verdict to "blocked" — keep dietary safety as the dominant factor.
+- If total cost > budget: add ONE issue with severity "warning" naming the overage in GBP and percent (e.g. "Menu is £15.00 over the £100.00 budget (15% over)."). Budget alone never sets the verdict to "blocked" — keep dietary fit as the dominant factor.
 - If total cost ≤ budget: do not add a budget issue. You MAY mention the budget headroom briefly in suggestions if useful.
 - If either budget or total cost is missing, ignore cost entirely.
 
@@ -77,8 +71,6 @@ Return ONLY the JSON object.`;
 export interface MenuCheckDish {
   name: string;
   portions: number;
-  allergens?: readonly string[];
-  keyIngredients?: readonly string[];
 }
 
 export interface MenuCheckUserInput {
@@ -96,16 +88,9 @@ export interface MenuCheckUserInput {
 export function buildMenuCheckUserPrompt(input: MenuCheckUserInput): string {
   const dishLines = input.dishes.length === 0
     ? '(no dishes yet)'
-    : input.dishes.map((d, i) => {
-        const parts = [`${i + 1}. ${d.name || '(untitled dish)'} (${d.portions} portion${d.portions === 1 ? '' : 's'})`];
-        if (d.allergens && d.allergens.length > 0) {
-          parts.push(`   allergens: [${d.allergens.join(', ')}]`);
-        }
-        if (d.keyIngredients && d.keyIngredients.length > 0) {
-          parts.push(`   key ingredients: [${d.keyIngredients.join(', ')}]`);
-        }
-        return parts.join('\n');
-      }).join('\n');
+    : input.dishes.map((d, i) => (
+        `${i + 1}. ${d.name || '(untitled dish)'} (${d.portions} portion${d.portions === 1 ? '' : 's'})`
+      )).join('\n');
   const reqs = input.dietaryRequirements.trim() || '(none specified)';
   const budgetSection = formatBudgetSection(input.budget, input.totalCost);
   return `Dietary requirements:

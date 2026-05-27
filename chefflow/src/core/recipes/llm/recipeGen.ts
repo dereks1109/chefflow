@@ -122,10 +122,13 @@ export async function analyzeRecipe(input: AnalyzeRecipeInput): Promise<RecipeAn
     throw new LlmRecipeValidationError(`LLM did not return valid JSON: ${message}`, 'root');
   }
   const llmAnalysis = parseLlmAnalysis(parsed);
+  // keyIngredientTags removed from the data model 2026-05-28 — destructure
+  // it out so the LLM's emission is silently dropped without polluting the
+  // returned analysis.
+  void llmAnalysis.keyIngredientTags;
   return {
     caloriesPerPortion: llmAnalysis.caloriesPerPortion,
     caloriesTotal: llmAnalysis.caloriesTotal,
-    keyIngredientTags: llmAnalysis.keyIngredientTags,
     analyzedAt: Date.now(),
     source: 'llm-text',
   };
@@ -191,11 +194,10 @@ function buildRecipe(llm: LlmRecipe, source: 'llm-text' | 'llm-vision'): Recipe 
     steps,
     createdAt: now,
     updatedAt: now,
-    // LLM-suggested keyIngredientTags go to top-level so the data shape
-    // doesn't imply ChefFlow ran allergen detection (allergens are NEVER
-    // emitted by the LLM — see recipeGenPrompt.ts). The chef can edit /
-    // remove the suggestions in the Tags section like any chef-declared tag.
-    keyIngredientTags: llm.analysis.keyIngredientTags,
+    // keyIngredientTags removed entirely 2026-05-28 — feature scrapped to
+    // keep the chef-declared allergens as the only safety-relevant tag.
+    // LLM may still emit the field (the prompt hasn't been re-tightened);
+    // we ignore it on the way through.
     analysis: {
       caloriesPerPortion: llm.analysis.caloriesPerPortion,
       caloriesTotal: llm.analysis.caloriesTotal,

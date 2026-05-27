@@ -71,15 +71,12 @@ export type AllergenTag =
 export interface RecipeAnalysis {
   caloriesPerPortion?: number;
   caloriesTotal?: number;
-  /** @deprecated since 2026-05-27 — moved to top-level Recipe.keyIngredientTags
-   *  so the "Analysis" object stays AI-only (calories) and the chef-declared
-   *  tags don't look auto-generated. Reads use `getKeyTags()` from
-   *  `core/recipes/recipeShape.ts`; writes go to top-level only; legacy rows
-   *  are promoted opportunistically on save. Remove once telemetry confirms
-   *  no remaining legacy rows. */
-  keyIngredientTags?: string[];
-  /** @deprecated since 2026-05-27 — moved to top-level Recipe.allergens for
-   *  the same reason as keyIngredientTags. See note above. */
+  /** @deprecated since 2026-05-27 — moved to top-level Recipe.allergens
+   *  for the same reason; legacy reads use `getRecipeAllergenList()` from
+   *  `core/recipes/recipeShape.ts`. Legacy rows promote on save. The
+   *  `keyIngredientTags` field that lived here was removed entirely on
+   *  2026-05-28 — the feature was scrapped (chef-declared allergens are
+   *  the only safety-relevant tag). */
   allergens?: AllergenTag[];
   analyzedAt?: number;              // epoch ms
   source?: 'llm-text' | 'llm-vision' | 'manual';
@@ -121,11 +118,6 @@ export interface Recipe extends SyncMeta {
   /** Chef-declared UK Top-14 allergen tags. Top-level (NOT under `analysis`)
    *  so the data model itself signals "chef-declared, not AI-generated". */
   allergens?: AllergenTag[];
-  /** Chef-or-LLM-suggested headline ingredients (2–6 lowercase, e.g. "beef").
-   *  Top-level for the same reason as `allergens` — even though the LLM may
-   *  suggest these, they're displayed alongside the chef's edits and never
-   *  imply a safety claim. */
-  keyIngredientTags?: string[];
   analysis?: RecipeAnalysis;
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().
