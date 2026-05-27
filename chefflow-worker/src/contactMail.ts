@@ -32,6 +32,13 @@ export interface ContactNotificationInput {
   fromAddress?: string;
   /** Optional injected fetch for tests. */
   fetchImpl?: typeof fetch;
+  /** Override the auto-built subject. Used by the daily digest (which
+   *  isn't a "Contact form: <name>" submission). */
+  subjectOverride?: string;
+  /** Override the auto-built HTML body. Used by the daily digest. */
+  htmlBodyOverride?: string;
+  /** Override the auto-built text body. Used by the daily digest. */
+  textBodyOverride?: string;
 }
 
 const DEFAULT_TO = 'admin@chefflow.uk';
@@ -95,9 +102,9 @@ export async function sendContactNotification(input: ContactNotificationInput): 
   const payload = {
     from,
     to: [to],
-    subject: `Contact form: ${input.name}`,
-    text: textBody,
-    html: htmlBody,
+    subject: input.subjectOverride ?? `Contact form: ${input.name}`,
+    text: input.textBodyOverride ?? textBody,
+    html: input.htmlBodyOverride ?? htmlBody,
     reply_to: input.email,
   };
 

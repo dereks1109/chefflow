@@ -53,6 +53,7 @@ import {
 import { provisionDemosForUser } from './demos';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
+import { runContactDigest } from './contactDigest';
 import {
   submitReport as takedownSubmitReport,
   listReports as takedownListReports,
@@ -809,5 +810,34 @@ function finiteOrNull(n: number): number | null {
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     return handleRequest(req, env);
+  },
+  /**
+   * Cloudflare cron trigger. Schedules live in `wrangler.toml [triggers]`.
+   * Currently one job:
+   *   - Daily 08:00 UTC: email admin@chefflow.uk a digest of the past
+   *     24h of contact-form submissions (zero-submission days are
+   *     skipped — no noise on quiet days).
+   *
+   * We dispatch by the schedule's cron expression so adding a second
+   * job later (say, a weekly takedown digest) is a simple case branch.
+   * `event.cron` is the literal string from wrangler.toml.
+   */
+  async scheduled(
+    event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    const handlers: Record<string, () => Promise<void>> = {
+      '0 8 * * *': async () => {
+        const result = await runContactDigest(env);
+        console.log('[cron:contact-digest]', JSON.stringify(result));
+      },
+    };
+    const handler = handlers[event.cron];
+    if (!handler) {
+      console.warn('[cron] unknown schedule', event.cron);
+      return;
+    }
+    ctx.waitUntil(handler());
   },
 };

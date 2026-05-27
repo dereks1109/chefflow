@@ -33,3 +33,14 @@ DAILY_LIMIT = "30"
 #   wrangler secret put STRIPE_PRICE_ID_PRO_MONTHLY   # price_… (£12/mo)
 #   wrangler secret put STRIPE_PRICE_ID_PRO_ANNUAL    # price_… (£108/yr)
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Cron triggers — see `scheduled()` in src/index.ts. Dispatch is keyed by
+# the literal cron string so adding a new schedule means appending here
+# AND adding a case branch in scheduled().
+#
+#   - "0 8 * * *" — daily 08:00 UTC contact-submissions digest to
+#     admin@chefflow.uk. Skipped silently on zero-submission days.
+# ---------------------------------------------------------------------------
+[triggers]
+crons = ["0 8 * * *"]
