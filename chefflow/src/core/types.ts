@@ -116,8 +116,19 @@ export interface Recipe extends SyncMeta {
   updatedAt: number;
   isPinned?: boolean;
   /** Chef-declared UK Top-14 allergen tags. Top-level (NOT under `analysis`)
-   *  so the data model itself signals "chef-declared, not AI-generated". */
+   *  so the data model itself signals "chef-declared, not AI-generated".
+   *  Post-2026-05-28: this field is effectively a per-recipe AGGREGATION
+   *  of the union of every `Ingredient.allergenFlags` — the chef adds
+   *  allergens at the INGREDIENT row (with the 5-second cooldown gate)
+   *  and the recipe-level UI reads from this aggregation. Direct
+   *  recipe-level adds were removed to push allergen verification into
+   *  the per-ingredient flow where the supplier label is closest at hand. */
   allergens?: AllergenTag[];
+  /** Chef-declared free-form labels — cuisine, occasion, dietary
+   *  preference names ("vegan", "gluten-free option"), prep style, etc.
+   *  NOT safety-relevant — these never imply allergen claims. Allergens
+   *  live ingredient-by-ingredient on `Ingredient.allergenFlags`. */
+  otherTags?: string[];
   analysis?: RecipeAnalysis;
   // Cost per portion in GBP. Optional — older recipes leave this undefined and
   // the event-total math treats them as zero. UI formats with formatGBP().

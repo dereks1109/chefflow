@@ -115,4 +115,22 @@ describe('NotesList', () => {
     render(<NotesList notes={'something the chef typed\nanother line'} />);
     expect(screen.queryByTestId('notes-list-paraphrase-0')).toBeNull();
   });
+
+  it('with notesOriginal: paraphrased bullets get a visible tint AND data-paraphrase=true; matched ones do not', () => {
+    // First bullet matches the source verbatim → no tint.
+    // Second bullet is paraphrased → tint + data-paraphrase=true.
+    render(
+      <NotesList
+        notes={'3 vegans at the table\nThree vegetarians guests'}
+        notesOriginal={'Hi chef, we have 3 vegans at the table. The night is themed.'}
+      />,
+    );
+    const matched = screen.getByTestId('notes-list-item-0');
+    const paraphrase = screen.getByTestId('notes-list-item-1');
+    expect(matched.getAttribute('data-paraphrase')).toBe('false');
+    expect(paraphrase.getAttribute('data-paraphrase')).toBe('true');
+    // Tailwind class includes "purple" only on the paraphrased bullet.
+    expect(matched.className).not.toContain('purple');
+    expect(paraphrase.className).toContain('purple');
+  });
 });

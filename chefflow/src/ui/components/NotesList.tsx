@@ -132,9 +132,18 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
             key={i}
             tabIndex={0}
             data-testid={`notes-list-item-${i}`}
+            data-paraphrase={isParaphrase ? 'true' : 'false'}
             className={[
               'relative group rounded px-1 -mx-1 cursor-default',
               'transition-colors duration-100',
+              // Visible in-list tint for AI-paraphrased bullets (2026-05-28).
+              // Standalone visual cue alongside the existing 'AI paraphrase'
+              // badge so the chef can scan the list without hovering each
+              // bullet. The hover-amber bg below overrides this on
+              // interaction so the hover-trigger stays consistent.
+              isParaphrase
+                ? 'bg-purple-50 dark:bg-purple-900/15 border-l-2 border-purple-300 dark:border-purple-700 pl-2'
+                : '',
               'hover:bg-amber-100 dark:hover:bg-amber-900/30',
               'focus:bg-amber-100 dark:focus:bg-amber-900/30',
               'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400',

@@ -2,36 +2,35 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { AlertTriangle, Plus, X } from 'lucide-react';
 import { useProfileStore } from '../../state/useProfileStore';
-import {
-  ALLERGEN_LABEL,
-  ALLERGEN_EXAMPLES,
-  ALLERGEN_TAGS,
-} from '../../core/recipes/llm/allergens';
+import { ALLERGEN_LABEL, ALLERGEN_EXAMPLES } from '../../core/recipes/llm/allergens';
 import { getRecipeAllergenList } from '../../core/recipes/recipeShape';
 import { addEntry as addAuditEntry, markSynced as markAuditSynced } from '../../db/allergenAuditsRepo';
 import { pushAllergenAudit } from '../../core/audit/allergenAuditClient';
 import { getRecipe } from '../../db/recipesRepo';
 import { randomId } from '../../core/util/id';
+import { applyRecipeAllergenRemove } from '../../core/recipes/llm/allergens';
 import AllergenRemovalModal from './AllergenRemovalModal';
-import AllergenAdditionModal from './AllergenAdditionModal';
 import type { AllergenTag, AllergenRemovalReason, Recipe } from '../../core/types';
 
 // ---------------------------------------------------------------------------
-// AllergensSection — chef-declared allergen pills only. No AI, no
-// text-classifier, no inference. The chef picks from a closed UK-14 list
-// via the "Add allergen" picker; removal goes through the 5-second
-// cooldown + reason-capture modal.
+// AllergensSection — chef-declared allergens (aggregated from ingredient
+// flags) + free-form "other tags" for non-safety labels (cuisine, occasion,
+// dietary preferences like "vegan", etc.).
 //
-// Replaces the bundled tags+allergens UX previously in AnalysisSection
-// (2026-05-28 split). The free-text chip input + "type 'milk' → matches
-// Milk allergen" classifier was removed for the same reason we never let
-// the LLM tag allergens: the input pattern reads as AI-inference, which
-// blurs the "chef-declared, ChefFlow doesn't detect" framing.
+// 2026-05-28 redesign: allergens are no longer added at the recipe level.
+// The chef adds them on the specific ingredient row (where the 5-second
+// cooldown modal lives and where the supplier label is closest at hand);
+// this section displays the UNION as a read-only-add aggregation. The X
+// on each recipe-level pill still opens AllergenRemovalModal (preserving
+// the audit + reason + cooldown), and confirmation cascades — stripping
+// the tag from every ingredient that carried it.
+//
+// "Other tags" is the new free-form chef-declared slot that lives where
+// the closed UK-14 picker used to. Explicitly non-safety: cuisine,
+// occasion, prep style. The UI copy + section label make it clear that
+// allergens belong on ingredients, not here.
 // ---------------------------------------------------------------------------
 
-// Inline replacement for the deleted `findIngredientsForAllergen` helper.
-// Returns names of ingredients the chef manually flagged with a given tag —
-// used by the audit log + removal modal to record context.
 function ingredientsFlaggedWith(recipe: Recipe, tag: AllergenTag): string[] {
   return recipe.ingredients
     .filter((i) => i.allergenFlags?.includes(tag))
@@ -51,16 +50,15 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
   const profileDisplayName = useProfileStore((s) => s.displayName);
   const { user } = useUser();
 
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingRemovalTag, setPendingRemovalTag] = useState<AllergenTag | null>(null);
-  const [pendingAddAllergen, setPendingAddAllergen] = useState<AllergenTag | null>(null);
+  const [newOtherTagDraft, setNewOtherTagDraft] = useState('');
   const [auditError, setAuditError] = useState<string | null>(null);
 
   // Reads through the shim so legacy rows (where allergens may still live
   // under `analysis.allergens`) continue to render until the next save
   // promotes them to top-level.
   const allergens = getRecipeAllergenList(recipe);
-  const availableToAdd = ALLERGEN_TAGS.filter((t) => !allergens.includes(t));
+  const otherTags = recipe.otherTags ?? [];
 
   function requestRemoveAllergen(tag: AllergenTag) {
     setPendingRemovalTag(tag);
@@ -90,7 +88,11 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
       setPendingRemovalTag(null);
       return;
     }
-    onChange({ ...recipe, allergens: allergens.filter((a) => a !== tag) });
+    // Cascade: removes the tag from recipe.allergens AND every ingredient
+    // that carries it (see applyRecipeAllergenRemove). The chef's audit
+    // entry above documents the rationale + 5-second cooldown gate covers
+    // the entire operation.
+    onChange(applyRecipeAllergenRemove(recipe, tag));
     setPendingRemovalTag(null);
     onAllergenAudit?.();
     void pushAllergenAudit(entry).then((ok) => {
@@ -98,22 +100,31 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
     });
   }
 
-  function commitAddAllergen() {
-    if (!pendingAddAllergen) return;
-    if (!allergens.includes(pendingAddAllergen)) {
-      onChange({ ...recipe, allergens: [...allergens, pendingAddAllergen] });
+  function addOtherTag() {
+    const raw = newOtherTagDraft.trim();
+    if (!raw) return;
+    const lower = raw.toLowerCase();
+    if (otherTags.includes(lower)) {
+      setNewOtherTagDraft('');
+      return;
     }
-    setPendingAddAllergen(null);
-    setPickerOpen(false);
+    onChange({ ...recipe, otherTags: [...otherTags, lower] });
+    setNewOtherTagDraft('');
+  }
+
+  function removeOtherTag(tag: string) {
+    onChange({ ...recipe, otherTags: otherTags.filter((t) => t !== tag) });
   }
 
   return (
     <>
     <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
-      <legend className="text-sm font-medium px-1">Allergens (chef-declared)</legend>
+      <legend className="text-sm font-medium px-1">Allergens (chef-declared) and other tags</legend>
       <p className="mt-1 text-xs text-slate-500">
-        ChefFlow does not detect allergens. Anything below is what you have
-        explicitly tagged — supplier labels remain authoritative.
+        Allergens come from the ingredient rows below. To tag an allergen,
+        flag it on the specific ingredient — the union shows here. Use
+        <strong> Add other tags </strong>for non-safety labels (cuisine,
+        occasion, dietary preferences). ChefFlow never detects allergens.
       </p>
 
       {auditError && (
@@ -122,13 +133,16 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Recipe allergens">
-        {allergens.length === 0 && (
-          <span className="text-xs text-slate-500 italic">None tagged.</span>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Recipe allergens and tags">
+        {allergens.length === 0 && otherTags.length === 0 && (
+          <span className="text-xs text-slate-500 italic">
+            No allergens flagged yet. Flag them on ingredient rows; add other tags below.
+          </span>
         )}
         {allergens.map((a) => (
           <span
-            key={a}
+            key={`a-${a}`}
+            data-testid={`allergens-pill-${a}`}
             className="inline-flex items-center gap-1 rounded-full border border-red-600
                        text-red-700 dark:text-red-300 dark:border-red-500 px-2 py-0.5 text-xs"
             title={`${ALLERGEN_LABEL[a]} — ${ALLERGEN_EXAMPLES[a]}`}
@@ -145,60 +159,54 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
             </button>
           </span>
         ))}
+        {otherTags.map((t) => (
+          <span
+            key={`o-${t}`}
+            data-testid={`other-tag-pill-${t}`}
+            className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600
+                       text-slate-700 dark:text-slate-200 px-2 py-0.5 text-xs"
+          >
+            {t}
+            <button
+              type="button"
+              onClick={() => removeOtherTag(t)}
+              aria-label={`Remove tag ${t}`}
+              className="ml-0.5 opacity-60 hover:opacity-100"
+            >
+              <X className="h-3 w-3" aria-hidden="true" />
+            </button>
+          </span>
+        ))}
         <SubRecipeInheritedChips recipe={recipe} />
       </div>
 
-      {availableToAdd.length > 0 && (
-        <div className="mt-3">
-          {!pickerOpen ? (
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              data-testid="allergen-picker-open"
-              className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-medium border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-surface-2"
-            >
-              <Plus className="h-4 w-4" aria-hidden="true" />
-              Add allergen
-            </button>
-          ) : (
-            <div
-              role="region"
-              aria-label="Add allergen picker"
-              data-testid="allergen-picker"
-              className="rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-surface-2 p-3"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Pick from the 14 UK declared allergens
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setPickerOpen(false)}
-                  aria-label="Close allergen picker"
-                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </div>
-              <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                {availableToAdd.map((t) => (
-                  <li key={t}>
-                    <button
-                      type="button"
-                      onClick={() => setPendingAddAllergen(t)}
-                      data-testid={`allergen-picker-option-${t}`}
-                      title={ALLERGEN_EXAMPLES[t]}
-                      className="w-full text-left px-2 py-1.5 rounded-md text-xs bg-white dark:bg-surface-1 border border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 hover:border-amber-300 dark:hover:border-amber-700"
-                    >
-                      {ALLERGEN_LABEL[t]}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="mt-3 flex gap-2">
+        <input
+          type="text"
+          value={newOtherTagDraft}
+          onChange={(e) => setNewOtherTagDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addOtherTag();
+            }
+          }}
+          placeholder="e.g. italian, vegan-friendly, weeknight…"
+          className="input flex-1 text-sm"
+          aria-label="Add other tag"
+          data-testid="other-tag-input"
+        />
+        <button
+          type="button"
+          onClick={addOtherTag}
+          disabled={newOtherTagDraft.trim().length === 0}
+          data-testid="other-tag-add"
+          className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50"
+        >
+          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          Add other tags
+        </button>
+      </div>
     </fieldset>
     <AllergenRemovalModal
       open={pendingRemovalTag !== null}
@@ -206,12 +214,6 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
       ingredientsAtTime={pendingRemovalTag ? ingredientsFlaggedWith(recipe, pendingRemovalTag) : []}
       onCancel={() => setPendingRemovalTag(null)}
       onConfirm={(reasons, otherText) => void confirmRemoveAllergen(reasons, otherText)}
-    />
-    <AllergenAdditionModal
-      open={pendingAddAllergen !== null}
-      allergenLabel={pendingAddAllergen ? ALLERGEN_LABEL[pendingAddAllergen] : ''}
-      onCancel={() => setPendingAddAllergen(null)}
-      onConfirm={commitAddAllergen}
     />
     </>
   );
@@ -221,10 +223,6 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
 // SubRecipeInheritedChips — read-only allergen chips lifted from each
 // `@`-linked sub-recipe. Visually identical to the editable allergen pills
 // above but no remove X (chef edits the SOURCE sub-recipe to change them).
-// `title` attribute names the source so hover/long-press surfaces it.
-//
-// We don't dedup against the parent's own tags — both can coexist (e.g.
-// "Milk" appearing twice because both this recipe and the sauce contribute).
 // ---------------------------------------------------------------------------
 interface InheritedChip {
   id: string;

@@ -110,10 +110,21 @@ export function applyRecipeAllergenAdd(recipe: Recipe, tag: AllergenTag): Recipe
   return { ...recipe, allergens: Array.from(declared) };
 }
 
-/** Remove a tag from the recipe-level catch-all. Does NOT touch ingredients. */
+/** Remove a tag wherever it lives on the recipe: the recipe-level
+ *  catch-all AND every ingredient's `allergenFlags`. Pre-2026-05-28 this
+ *  function only cleared the recipe-level catch-all (the chef had to also
+ *  un-flag each ingredient manually), but with the move to "allergens are
+ *  aggregated from ingredient flags" the recipe-level X must do a true
+ *  remove-from-anywhere. The audit row (captured by `AllergenRemovalModal`)
+ *  records the rationale + 5-second cooldown gate for the entire operation. */
 export function applyRecipeAllergenRemove(recipe: Recipe, tag: AllergenTag): Recipe {
   const declared = readDeclared(recipe).filter((a) => a !== tag);
-  return { ...recipe, allergens: declared };
+  const nextIngredients = recipe.ingredients.map((ing) => {
+    if (!ing.allergenFlags?.includes(tag)) return ing;
+    const stripped = ing.allergenFlags.filter((a) => a !== tag);
+    return { ...ing, allergenFlags: stripped.length > 0 ? stripped : undefined };
+  });
+  return { ...recipe, allergens: declared, ingredients: nextIngredients };
 }
 
 /**

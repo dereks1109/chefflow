@@ -42,10 +42,11 @@ import type {
 } from '../../core/types';
 
 type WorkflowStatus =
-  | { kind: 'idle' }            // initial — before we know what to do
-  | { kind: 'needs-key' }       // event ready, no snapshot, no API key
+  | { kind: 'idle' }              // initial — before we know what to do
+  | { kind: 'needs-key' }         // event ready, no snapshot, no API key
   | { kind: 'generating' }
   | { kind: 'error'; message: string }
+  | { kind: 'quota-exceeded' }    // chef hit the daily LLM cap — show inline upgrade prompt
   | { kind: 'ready' };
 
 // ---------------------------------------------------------------------------
@@ -288,11 +289,13 @@ export default function Workflow() {
       // Show the LLM error (more user-actionable) when present; otherwise
       // the local one.
       const stratErr = err instanceof StrategyError ? (err.llmError ?? err.localError) : err;
-      // Daily LLM-quota exhaustion → open the upgrade sheet (conversion
-      // surface) instead of surfacing a confusing "rate limited" message.
+      // Daily LLM-quota exhaustion → open the upgrade sheet AND set an
+      // inline status so the page shows an explanation even if the chef
+      // dismisses the modal. Pre-2026-05-28 this set 'ready' with an
+      // empty scheduled list, which left the page blank.
       if (stratErr instanceof LlmDailyQuotaExceededError) {
         useUpgradeSheetStore.getState().openWith('llm');
-        setWorkflowStatus({ kind: 'ready' });
+        setWorkflowStatus({ kind: 'quota-exceeded' });
         return;
       }
       setWorkflowStatus({ kind: 'error', message: friendlyError(stratErr) });
@@ -533,6 +536,29 @@ export default function Workflow() {
           </div>
         )}
 
+        {workflowStatus.kind === 'quota-exceeded' && (
+          <div
+            role="status"
+            data-testid="workflow-quota-exceeded"
+            className="mb-3 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200"
+          >
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1">
+              <p className="font-medium">Daily AI workflow generation limit reached.</p>
+              <p className="mt-1 text-xs">
+                Free accounts get a limited number of AI calls per day. Upgrade to keep generating workflows today, or try again after UTC midnight.
+              </p>
+              <button
+                type="button"
+                onClick={() => useUpgradeSheetStore.getState().openWith('llm')}
+                className="mt-2 inline-flex items-center gap-1 px-3 h-8 rounded-md text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                Upgrade to Pro
+              </button>
+            </div>
+          </div>
+        )}
+
         {isFallback && workflowStatus.kind === 'ready' && (
           <div
             role="status"
@@ -576,6 +602,22 @@ export default function Workflow() {
         {!hasDishes && (
           <p className="text-sm text-slate-500 italic mb-3">
             This event has no dishes yet — add some in the Events tab and the workflow will populate automatically.
+          </p>
+        )}
+
+        {/* Successful schedule with NO steps — happens when every dish is
+            either `isPrepared` or has no `recipeId` (so the scheduler has
+            nothing to plan). Pre-2026-05-28 this rendered as a blank page
+            because `showWorkflowBody` was false and there was no fallback
+            message. */}
+        {workflowStatus.kind === 'ready' && hasDishes && scheduled.length === 0 && (
+          <p
+            className="text-sm text-slate-500 italic mb-3"
+            data-testid="workflow-empty-fallback"
+          >
+            Every dish in this event is marked as prepared (or has no recipe
+            linked) — there's nothing for the scheduler to plan. Link a recipe
+            to a dish (or untick "prepared") then tap <strong>Regenerate</strong>.
           </p>
         )}
 

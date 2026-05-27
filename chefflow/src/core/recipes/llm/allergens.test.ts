@@ -88,20 +88,44 @@ describe('applyRecipeAllergenAdd', () => {
 });
 
 describe('applyRecipeAllergenRemove', () => {
-  it('removes the tag from recipe.allergens and does NOT touch ingredients', () => {
+  it('removes the tag from recipe.allergens AND every ingredient that carries it (cascade, 2026-05-28)', () => {
     const r = makeRecipe({
       allergens: ['milk', 'gluten'],
       ingredients: [
         { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
-        { id: 'i2', raw: '', amount: 200, unit: 'g', name: 'flour', isLocked: false, allergenFlags: ['gluten'] },
+        { id: 'i2', raw: '', amount: 50, unit: 'g', name: 'cream', isLocked: false, allergenFlags: ['milk'] },
+        { id: 'i3', raw: '', amount: 200, unit: 'g', name: 'flour', isLocked: false, allergenFlags: ['gluten'] },
       ],
     });
     const next = applyRecipeAllergenRemove(r, 'milk');
     expect(next.allergens).toEqual(['gluten']);
-    // Per-ingredient flags untouched — chef removes them via the row chip
-    // separately. Removal at recipe level is a catch-all removal only.
-    expect(next.ingredients[0].allergenFlags).toEqual(['milk']);
-    expect(next.ingredients[1].allergenFlags).toEqual(['gluten']);
+    // Every ingredient that carried 'milk' has it stripped.
+    expect(next.ingredients[0].allergenFlags).toBeUndefined();
+    expect(next.ingredients[1].allergenFlags).toBeUndefined();
+    // Other allergens on other ingredients are untouched.
+    expect(next.ingredients[2].allergenFlags).toEqual(['gluten']);
+  });
+
+  it('clears the flag entirely (not as an empty array) when the ingredient had no other allergens', () => {
+    const r = makeRecipe({
+      allergens: ['milk'],
+      ingredients: [
+        { id: 'i1', raw: '', amount: 100, unit: 'g', name: 'butter', isLocked: false, allergenFlags: ['milk'] },
+      ],
+    });
+    const next = applyRecipeAllergenRemove(r, 'milk');
+    expect(next.ingredients[0].allergenFlags).toBeUndefined();
+  });
+
+  it('keeps the OTHER flags on an ingredient that carried multiple', () => {
+    const r = makeRecipe({
+      allergens: ['milk', 'eggs'],
+      ingredients: [
+        { id: 'i1', raw: '', amount: 50, unit: 'g', name: 'butter+eggs paste', isLocked: false, allergenFlags: ['milk', 'eggs'] },
+      ],
+    });
+    const next = applyRecipeAllergenRemove(r, 'milk');
+    expect(next.ingredients[0].allergenFlags).toEqual(['eggs']);
   });
 });
 
