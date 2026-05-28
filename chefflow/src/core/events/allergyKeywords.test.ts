@@ -49,21 +49,47 @@ describe('findAllergyKeywords', () => {
     expect(out).toEqual([]);
   });
 
-  it('matches multi-word phrases like "no nuts"', () => {
-    const out = findAllergyKeywords('Strict NO NUTS at the table please.');
+  it('matches each word in "STRICT NO NUTS" (case-insensitive, including the standalone "no")', () => {
+    const out = findAllergyKeywords('NO NUTS at the table please.');
     const kws = out.map((m) => m.keyword);
-    expect(kws).toContain('no nuts');
-    expect(kws).toContain('strict');
+    expect(kws).toContain('no');
+    expect(kws).toContain('nuts');
   });
 
-  it('multi-word phrase wins over its single-word prefix (longest-first overlap)', () => {
-    // 'no' isn't a default but 'no gluten' is — the matcher should produce
-    // ONE match for 'no gluten' and not a redundant 'no' match (which we
-    // don't have anyway). The point of this test is to pin the
-    // longest-first merge behavior in case 'no' is ever added.
-    const out = findAllergyKeywords('We have a no gluten request.');
+  it('longest-first wins when keywords could overlap', () => {
+    // Both 'no' and 'must' are defaults. Make sure neighbouring matches
+    // produce two distinct ranges with no duplicate / nested marks.
+    const out = findAllergyKeywords('no peanut, must avoid alcohol');
     const kws = out.map((m) => m.keyword);
-    expect(kws).toContain('no gluten');
+    expect(kws).toContain('no');
+    expect(kws).toContain('peanut');
+    expect(kws).toContain('must');
+    expect(kws).toContain('avoid');
+    expect(kws).toContain('alcohol');
+  });
+
+  it('matches the new mandatory-allergen keywords (UK-14 + specifics)', () => {
+    const text = 'Carla cannot have hazelnut, pecan, lobster, mussel, or sulphite.';
+    const kws = findAllergyKeywords(text).map((m) => m.keyword);
+    for (const want of ['hazelnut', 'pecan', 'lobster', 'mussel', 'sulphite']) {
+      expect(kws).toContain(want);
+    }
+  });
+
+  it('matches the new dietary & religious keywords', () => {
+    const text = 'Two halal guests, one kosher, one vegan. No pork, gelatine, or rennet.';
+    const kws = findAllergyKeywords(text).map((m) => m.keyword);
+    for (const want of ['halal', 'kosher', 'vegan', 'pork', 'gelatine', 'rennet']) {
+      expect(kws).toContain(want);
+    }
+  });
+
+  it('matches the new risk & urgency keywords', () => {
+    const text = 'Severe nut allergy — anaphylaxis risk, EpiPen on site.';
+    const kws = findAllergyKeywords(text).map((m) => m.keyword);
+    for (const want of ['severe', 'allergy', 'anaphylaxis', 'epipen']) {
+      expect(kws).toContain(want);
+    }
   });
 
   it('extra keywords additive on top of defaults', () => {

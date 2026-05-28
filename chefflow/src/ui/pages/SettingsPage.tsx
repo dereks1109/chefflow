@@ -290,7 +290,7 @@ export default function SettingsPage() {
             </label>
             <div className="mt-3" data-testid="settings-home-address-input">
               <span className="text-xs text-slate-500 block">
-                Home address (used to compute commute time on the workflow page)
+                Address of home/your restaurant (used to compute commute time on the workflow page)
               </span>
               <div className="mt-1">
                 <LocationAutocomplete
@@ -304,7 +304,7 @@ export default function SettingsPage() {
                     setHomeAddress(next.trim());
                   }}
                   placeholder="Start typing an address — Google Places suggestions appear inline"
-                  ariaLabel="Home address"
+                  ariaLabel="Address of home or your restaurant"
                 />
               </div>
               <span className="block mt-1 text-xs text-slate-500">
@@ -704,13 +704,24 @@ function AllergyKeywordsSection() {
       className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
     >
       <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-        Allergy keyword highlights
+        Allergy and other keywords highlight
       </h2>
       <p className="mt-2 text-xs text-slate-500">
-        ChefFlow highlights these words in red when they appear in a customer's
-        email or your event notes, so you don't miss an allergy mention. These
-        never run through AI — it's just text search. The default list is
-        always on; add your own below.
+        ChefFlow highlights every match below in <strong>red</strong> wherever
+        it appears in a customer's email or your event notes — so you don't
+        miss an allergy, intolerance, dietary, or negation cue. Four
+        categories ship by default:
+      </p>
+      <ul className="mt-2 ml-4 list-disc text-xs text-slate-500 space-y-0.5">
+        <li><strong>Mandatory allergens</strong> — UK Top-14 + common specifics (celery, gluten, wheat, eggs, nuts, peanut, sesame, soy, sulphites…).</li>
+        <li><strong>Dietary &amp; religious</strong> — halal, haram, kosher, vegan, vegetarian, gelatine…</li>
+        <li><strong>Logic &amp; negation</strong> — no, not, avoid, never, without, free, must, prohibited…</li>
+        <li><strong>Risk &amp; urgency</strong> — anaphylaxis, EpiPen, severe, intolerant, reaction, warning…</li>
+      </ul>
+      <p className="mt-2 text-xs text-slate-500">
+        Everything is text-search only — never sent to AI. The default list
+        is the safety baseline and can't be removed; add your own keywords
+        below.
       </p>
 
       <div className="mt-3">
@@ -894,6 +905,18 @@ function PinSection() {
                 className="btn-secondary text-sm"
               >
                 Remove PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  usePinStore.getState().lock();
+                  setStatus('Session locked. The PIN gate will fire on your next recipe / event edit.');
+                }}
+                data-testid="settings-pin-lock-now"
+                className="btn-secondary text-sm"
+                title="Re-arm the gate without signing out. Useful when walking away from this device."
+              >
+                Lock now
               </button>
             </>
           ) : (

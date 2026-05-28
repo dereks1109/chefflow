@@ -104,10 +104,18 @@ export const usePinStore = create<PinStoreState>()(
         }
         const saltBytes = crypto.getRandomValues(new Uint8Array(16));
         const hash = await derive(pin, saltBytes);
+        // 2026-05-28: do NOT auto-unlock the session after setPin. Before
+        // this fix, setting a PIN immediately flipped unlockedThisSession
+        // to true, so the chef could set a PIN, click Edit, and skip the
+        // gate they'd just configured — surprising for testing AND for
+        // the "I'm walking away from my laptop" use case. The chef now
+        // has to enter the PIN once after setting it, like any fresh
+        // session. (The Lock-now button in SettingsPage's PinSection
+        // provides a manual re-arm path mid-session.)
         set({
           hash,
           salt: bytesToBase64(saltBytes),
-          unlockedThisSession: true,
+          unlockedThisSession: false,
         });
       },
       verifyPin: async (pin) => {

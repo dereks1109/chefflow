@@ -38,11 +38,15 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe. Optional for backward-compat
    *  with summaries cached before this field was added. */
   originalYield?: number;
-  // Tags previously projected on each summary card (allergens, then later
-  // just keyIngredientTags) were dropped 2026-05-28. The publishing chef
-  // remains the food business operator under FIR 2014, and the
-  // keyIngredientTags feature itself was scrapped — community cards now
-  // show title + author + likes/copies only.
+  /** Card tags — reversed the 1bc960d carve-out on 2026-05-28: the
+   *  publishing chef's allergen attestation is now displayed alongside
+   *  their free-form otherTags. The community-library
+   *  CommunityDisclaimerBanner is the legal mitigation: "Community
+   *  recipes are author-declared and not verified by ChefFlow". */
+  tags?: {
+    allergens?: string[];
+    otherTags?: string[];
+  };
 }
 
 export class CommunityClientError extends Error {

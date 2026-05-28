@@ -19,35 +19,39 @@
 //     render double-wrapped <mark>s.
 
 export const DEFAULT_ALLERGY_KEYWORDS: readonly string[] = [
-  'allergy',
-  'allergic',
-  'allergies',
-  'intolerance',
-  'intolerant',
-  'avoid',
-  'cannot eat',
-  "can't eat",
-  "can't have",
-  'cannot have',
-  'no nuts',
-  'no dairy',
-  'no gluten',
-  'no shellfish',
-  'no eggs',
-  'no fish',
-  'no peanuts',
-  'no sesame',
-  'no soy',
-  'severe',
-  'anaphylactic',
-  'anaphylaxis',
-  'epipen',
-  'strict',
-  'free from',
-  'free-from',
-  'gluten-free',
-  'dairy-free',
-  'nut-free',
+  // ---- Mandatory UK-14 allergens + common specifics --------------------
+  'celery',
+  'gluten',
+  'wheat', 'rye', 'barley', 'oats',
+  'crustacean', 'crustaceans', 'prawn', 'prawns', 'crab', 'lobster',
+  'egg', 'eggs',
+  'fish',
+  'lupin',
+  'milk', 'dairy',
+  'mollusc', 'molluscs', 'mussel', 'mussels', 'oyster', 'oysters', 'squid',
+  'mustard',
+  'nut', 'nuts',
+  'almond', 'almonds', 'hazelnut', 'hazelnuts',
+  'walnut', 'walnuts', 'cashew', 'cashews', 'pecan', 'pecans',
+  'brazil', 'pistachio', 'pistachios', 'macadamia', 'macadamias',
+  'peanut', 'peanuts',
+  'sesame',
+  'soya', 'soy', 'soybean', 'soybeans',
+  'sulphite', 'sulphites', 'sulphur', 'sulfite', 'sulfites',
+  // ---- Dietary & religious ---------------------------------------------
+  'halal', 'haram', 'kosher',
+  'vegan', 'vegetarian', 'plant-based',
+  'pork', 'alcohol', 'gelatine', 'gelatin', 'rennet',
+  // ---- Logic & negation -----------------------------------------------
+  // "no" / "not" highlight on their own — paired with food words by the
+  // chef's eye, not by the matcher. The risk of false positives ("no
+  // problem") is acceptable for safety-critical scanning.
+  'no', 'not', 'avoid', 'never', 'zero', 'without', 'free', 'except',
+  'must', 'have to', 'prohibited',
+  // ---- Risk & urgency --------------------------------------------------
+  'anaphylaxis', 'anaphylactic', 'epipen', 'adrenaline',
+  'allergy', 'allergic', 'allergies',
+  'reaction', 'intolerant', 'intolerance', 'sensitivity', 'severe', 'warning',
 ] as const;
 
 export interface KeywordMatch {

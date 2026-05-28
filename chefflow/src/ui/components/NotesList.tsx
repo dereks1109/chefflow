@@ -77,46 +77,125 @@ function findSourceIndex(haystack: string, needle: string): number {
   return m ? m.index : -1;
 }
 
+type HighlightKind = 'bullet' | 'allergy' | 'paraphrase-source';
+
 interface RangedHighlight {
   start: number;
   end: number;
-  kind: 'bullet' | 'allergy';
+  kind: HighlightKind;
 }
 
-/** Render `original` with bullet-source ranges in amber and allergy-keyword
- *  ranges in red. On overlap the allergy range wins (safety-critical).
- *  Multiple ranges of the same kind that touch get merged into one mark. */
-function renderHighlightedOriginal(
+/** Split `original` into sentence ranges by `.`, `!`, `?` boundaries
+ *  AND newlines. Empty / whitespace-only ranges are dropped. Used by
+ *  the paraphrase-source highlighter — when at least one bullet was
+ *  paraphrased, every source sentence NOT covered by a matched bullet
+ *  range is flagged as "this is the part of the email the LLM was
+ *  likely synthesising from". */
+function sentenceRanges(original: string): Array<{ start: number; end: number }> {
+  const out: Array<{ start: number; end: number }> = [];
+  const re = /[.!?]+\s+|\n+/g;
+  let lastEnd = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(original)) !== null) {
+    const end = m.index + m[0].length;
+    const slice = original.slice(lastEnd, end);
+    if (slice.trim().length > 0) {
+      out.push({ start: lastEnd, end });
+    }
+    lastEnd = end;
+  }
+  if (lastEnd < original.length) {
+    const slice = original.slice(lastEnd, original.length);
+    if (slice.trim().length > 0) out.push({ start: lastEnd, end: original.length });
+  }
+  return out;
+}
+
+/** Compute the paraphrase-source sentence ranges once, from the FULL
+ *  bullet list. Returns the sentences in `original` that aren't fully
+ *  covered by any verbatim-matched bullet, WHEN at least one bullet
+ *  was paraphrased. The caller passes the result into
+ *  `renderHighlightedOriginal` so every bullet's popover shows the
+ *  same purple ranges — they're a property of the source, not of any
+ *  particular bullet. */
+function computeParaphraseSourceRanges(
   original: string,
   bullets: ParsedLine[],
+): Array<{ start: number; end: number }> {
+  const matchedBulletRanges: Array<{ start: number; end: number }> = [];
+  let paraphraseCount = 0;
+  for (const b of bullets) {
+    const idx = findSourceIndex(original, b.cleaned);
+    if (idx < 0) {
+      paraphraseCount += 1;
+      continue;
+    }
+    matchedBulletRanges.push({ start: idx, end: idx + b.cleaned.length });
+  }
+  if (paraphraseCount === 0) return [];
+  const out: Array<{ start: number; end: number }> = [];
+  for (const s of sentenceRanges(original)) {
+    const fullyCovered = matchedBulletRanges.some(
+      (b) => b.start <= s.start && b.end >= s.end,
+    );
+    if (fullyCovered) continue;
+    out.push(s);
+  }
+  return out;
+}
+
+/** Render `original` with the hovered bullet's source range in amber,
+ *  allergy-keyword ranges in red, AND the precomputed paraphrase-source
+ *  sentences in purple. Overlap precedence: allergy > paraphrase-source
+ *  > bullet > plain. */
+function renderHighlightedOriginal(
+  original: string,
+  hoveredBullets: ParsedLine[],
   allergyMatches: ReadonlyArray<{ start: number; end: number }> = [],
+  paraphraseSourceRanges: ReadonlyArray<{ start: number; end: number }> = [],
 ): React.ReactNode {
   const ranges: RangedHighlight[] = [];
-  for (const b of bullets) {
+  // The HOVERED bullet's source range (amber). Only the bullet whose
+  // popover this is — never the global list.
+  for (const b of hoveredBullets) {
     const idx = findSourceIndex(original, b.cleaned);
     if (idx < 0) continue;
     ranges.push({ start: idx, end: idx + b.cleaned.length, kind: 'bullet' });
   }
+  // Paraphrase-source sentences (purple) — precomputed.
+  for (const s of paraphraseSourceRanges) {
+    ranges.push({ start: s.start, end: s.end, kind: 'paraphrase-source' });
+  }
+  // Allergy keywords (red — safety-critical, wins overlap).
   for (const m of allergyMatches) {
     ranges.push({ start: m.start, end: m.end, kind: 'allergy' });
   }
-  // Walk left-to-right, emitting plain spans for gaps and a <mark> for
-  // each highlight range. Resolve conflicts character-by-character:
-  // 'allergy' > 'bullet' > nothing.
+
   if (ranges.length === 0) {
     return <span className="opacity-80">{original}</span>;
   }
-  const winnerAt: Array<'allergy' | 'bullet' | null> = new Array(original.length).fill(null);
+
+  // Resolve conflicts character-by-character.
+  // Precedence: allergy > paraphrase-source > bullet > plain.
+  const winnerAt: Array<HighlightKind | null> = new Array(original.length).fill(null);
+  const PRECEDENCE: Record<HighlightKind, number> = {
+    allergy: 3,
+    'paraphrase-source': 2,
+    bullet: 1,
+  };
   for (const r of ranges) {
     for (let i = r.start; i < Math.min(r.end, original.length); i++) {
-      if (winnerAt[i] === 'allergy') continue;
-      winnerAt[i] = r.kind;
+      const current = winnerAt[i];
+      if (current === null || PRECEDENCE[r.kind] > PRECEDENCE[current]) {
+        winnerAt[i] = r.kind;
+      }
     }
   }
+
   const out: React.ReactNode[] = [];
   let cursor = 0;
   let segStart = 0;
-  let segKind: 'allergy' | 'bullet' | null = winnerAt[0] ?? null;
+  let segKind: HighlightKind | null = winnerAt[0] ?? null;
   function flushSegment(end: number, key: string) {
     if (end <= segStart) return;
     const slice = original.slice(segStart, end);
@@ -127,6 +206,17 @@ function renderHighlightedOriginal(
           data-testid="notes-list-allergy-mark"
           data-allergy="true"
           className="bg-red-300 dark:bg-red-500 text-slate-900 dark:text-slate-900 rounded px-0.5"
+        >
+          {slice}
+        </mark>,
+      );
+    } else if (segKind === 'paraphrase-source') {
+      out.push(
+        <mark
+          key={key}
+          data-testid="notes-list-paraphrase-source-mark"
+          data-paraphrase-source="true"
+          className="bg-purple-200 dark:bg-purple-700/60 text-slate-900 dark:text-slate-100 rounded px-0.5"
         >
           {slice}
         </mark>,
@@ -166,6 +256,13 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
   // for the popover overlay; EventDetailCard runs a separate scan to
   // populate the banner count.
   const allergyMatches = hasOriginal ? findAllergyKeywords(notesOriginal!, extras) : [];
+  // Paraphrase-source sentence ranges — computed once over the full
+  // bullet list (NOT per-hovered-bullet) so every popover shows the
+  // same purple ranges. These are the bits of the source the LLM had
+  // to synthesise from.
+  const paraphraseSourceRanges = hasOriginal
+    ? computeParaphraseSourceRanges(notesOriginal!, lines)
+    : [];
   if (lines.length === 1) {
     // Single-line: no popover needed — what you see is what was typed.
     return <p className={`whitespace-pre-wrap ${className}`}>{lines[0].cleaned}</p>;
@@ -224,7 +321,7 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
                 {hasOriginal ? 'Source — customer text (highlighted = this bullet)' : 'Original'}
               </span>
               {hasOriginal
-                ? renderHighlightedOriginal(notesOriginal!, [line], allergyMatches)
+                ? renderHighlightedOriginal(notesOriginal!, [line], allergyMatches, paraphraseSourceRanges)
                 : line.raw}
             </span>
           </li>

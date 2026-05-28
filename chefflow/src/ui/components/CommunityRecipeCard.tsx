@@ -91,9 +91,38 @@ export default function CommunityRecipeCard({ recipe }: Props) {
         </div>
       </dl>
 
-      {/* CommunityCardTags + KeyTagPill row removed 2026-05-28 along with
-          the keyIngredientTags feature. Cards now show title + author +
-          like/copy metadata only. */}
+      <CommunityCardTags tags={recipe.tags} />
     </article>
+  );
+}
+
+// Pill row at the bottom of each community card: red allergen pills +
+// neutral otherTags pills. Re-introduced 2026-05-28 after the prior
+// 1bc960d carve-out — the CommunityDisclaimerBanner on the
+// /community list view carries the "author-declared, not verified"
+// caveat that makes this safe to surface.
+function CommunityCardTags({ tags }: { tags?: CommunityRecipeSummary['tags'] }) {
+  const allergens = tags?.allergens ?? [];
+  const otherTags = tags?.otherTags ?? [];
+  if (allergens.length === 0 && otherTags.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-1" data-testid="community-card-tags">
+      {allergens.map((a) => (
+        <span
+          key={`a-${a}`}
+          className="inline-flex items-center gap-0.5 rounded-full border border-red-600 text-red-700 dark:text-red-300 dark:border-red-500 px-1.5 py-0 text-[10px]"
+        >
+          {a}
+        </span>
+      ))}
+      {otherTags.map((t) => (
+        <span
+          key={`t-${t}`}
+          className="inline-flex items-center rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-1.5 py-0 text-[10px]"
+        >
+          {t}
+        </span>
+      ))}
+    </div>
   );
 }

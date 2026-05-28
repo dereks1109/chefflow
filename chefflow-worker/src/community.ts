@@ -60,10 +60,16 @@ export interface CommunityRecipeSummary {
   /** Portion count from the source recipe — surfaced on the card so chefs
    *  see "yields 4" at a glance. */
   originalYield: number;
-  // Tags previously projected on each summary card (allergens, then later
-  // just keyIngredientTags) were dropped 2026-05-28. The publishing chef
-  // remains the food business operator under FIR 2014, and the
-  // keyIngredientTags feature itself was scrapped.
+  /** Tags surfaced on the card. 2026-05-28 reversal of the prior 1bc960d
+   *  carve-out: the publishing chef's allergen attestation is now shown
+   *  to the viewing chef alongside their otherTags. Legal mitigation:
+   *  the existing CommunityDisclaimerBanner on /community makes "author-
+   *  declared, not verified" explicit, and the per-recipe view requires
+   *  the chef to attest before publish. */
+  tags?: {
+    allergens?: string[];
+    otherTags?: string[];
+  };
 }
 
 interface IndexEntry {
@@ -218,6 +224,35 @@ export async function unpublish(
   } while (cursor);
 }
 
+// Project the published recipe's allergens + otherTags into the card-
+// summary `tags` field. Reads both the top-level fields (post-2026-05-27
+// data model) and the legacy `analysis.allergens` (pre-2026-05-27 rows
+// — the read shim that powers the SPA also applies here for backward
+// compat). Returns undefined when nothing useful to show — keeps the
+// summary payload smaller for the common case.
+function projectCardTags(r: unknown): CommunityRecipeSummary['tags'] | undefined {
+  const rec = r as {
+    allergens?: unknown;
+    otherTags?: unknown;
+    analysis?: { allergens?: unknown };
+  };
+  const rawAllergens = rec.allergens ?? rec.analysis?.allergens;
+  const allergens = Array.isArray(rawAllergens)
+    ? rawAllergens.filter((x): x is string => typeof x === 'string')
+    : undefined;
+  const rawOther = rec.otherTags;
+  const otherTags = Array.isArray(rawOther)
+    ? rawOther.filter((x): x is string => typeof x === 'string')
+    : undefined;
+  if ((!allergens || allergens.length === 0) && (!otherTags || otherTags.length === 0)) {
+    return undefined;
+  }
+  return {
+    ...(allergens && allergens.length > 0 ? { allergens } : {}),
+    ...(otherTags && otherTags.length > 0 ? { otherTags } : {}),
+  };
+}
+
 export async function listRecent(
   kv: KVNamespace,
   limit = 50,
@@ -239,6 +274,7 @@ export async function listRecent(
       copies: r.copies,
       publishedAt: r.publishedAt,
       originalYield: r.originalYield,
+      tags: projectCardTags(r),
     });
   }
   return out;
@@ -271,6 +307,7 @@ export async function listByAuthor(
       copies: r.copies,
       publishedAt: r.publishedAt,
       originalYield: r.originalYield,
+      tags: projectCardTags(r),
     });
     if (out.length >= limit) break;
   }

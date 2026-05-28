@@ -323,14 +323,25 @@ function OverflowMenu({ recipe, onDuplicate, onDelete, onCoverPhotoChange }: Ove
 
 function RecipeAnalysisRow({ recipe }: { recipe: Recipe }) {
   // Union: recipe-level catch-all + per-ingredient flags. Chef-declared
-  // only — the LLM never participates in allergen tagging. The previous
-  // keyIngredientTags pill row was dropped 2026-05-28.
+  // only — the LLM never participates in allergen tagging. otherTags
+  // (re-introduced 2026-05-28 in the post-keyIngredientTags-drop redesign)
+  // render alongside as neutral pills.
   const allergens = getRecipeAllergens(recipe);
-  if (allergens.length === 0) return null;
+  const otherTags = recipe.otherTags ?? [];
+  if (allergens.length === 0 && otherTags.length === 0) return null;
   return (
-    <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe allergens">
+    <section className="mt-1.5 flex flex-wrap gap-1" aria-label="Recipe allergens and tags">
       {allergens.map((a) => (
         <AllergenPill key={a} tag={a} ingredients={ingredientsFlaggedWith(recipe, a)} />
+      ))}
+      {otherTags.map((t) => (
+        <span
+          key={`t-${t}`}
+          data-testid={`recipe-card-other-tag-${t}`}
+          className="inline-flex items-center rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-1.5 py-0 text-[10px]"
+        >
+          {t}
+        </span>
       ))}
     </section>
   );

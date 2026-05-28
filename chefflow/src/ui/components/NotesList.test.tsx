@@ -131,6 +131,34 @@ describe('NotesList', () => {
     expect(haystack).toMatch(/no nuts|allergy|strict/);
   });
 
+  it('with notesOriginal + paraphrased bullet: source sentences NOT covered by a matched bullet get a purple <mark>', () => {
+    // Two bullets:
+    //   - "Three vegans guests"  — paraphrased (not in source)
+    //   - "no nuts please"       — verbatim
+    // Source has TWO sentences. The first sentence is the source for the
+    // verbatim bullet → amber. The second sentence isn't covered by any
+    // matched bullet → purple (paraphrase-source).
+    render(
+      <NotesList
+        notes={'Three vegans guests\nno nuts please'}
+        notesOriginal={'no nuts please. We have three vegetarian guests at the table.'}
+      />,
+    );
+    // At least one paraphrase-source mark exists in the popover.
+    const purpleMarks = screen.getAllByTestId('notes-list-paraphrase-source-mark');
+    expect(purpleMarks.length).toBeGreaterThan(0);
+  });
+
+  it('with all bullets matched (no paraphrases): NO paraphrase-source marks appear', () => {
+    render(
+      <NotesList
+        notes={'no nuts please\nthree vegan guests'}
+        notesOriginal={'no nuts please. three vegan guests.'}
+      />,
+    );
+    expect(screen.queryByTestId('notes-list-paraphrase-source-mark')).toBeNull();
+  });
+
   it('with notesOriginal: paraphrased bullets get a visible tint AND data-paraphrase=true; matched ones do not', () => {
     // First bullet matches the source verbatim → no tint.
     // Second bullet is paraphrased → tint + data-paraphrase=true.
