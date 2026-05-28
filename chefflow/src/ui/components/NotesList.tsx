@@ -111,37 +111,65 @@ function sentenceRanges(original: string): Array<{ start: number; end: number }>
   return out;
 }
 
-/** Compute the paraphrase-source sentence ranges once, from the FULL
- *  bullet list. Returns the sentences in `original` that aren't fully
- *  covered by any verbatim-matched bullet, WHEN at least one bullet
- *  was paraphrased. The caller passes the result into
- *  `renderHighlightedOriginal` so every bullet's popover shows the
- *  same purple ranges — they're a property of the source, not of any
- *  particular bullet. */
-function computeParaphraseSourceRanges(
+// Stopwords screened out of the paraphrase-source token-overlap match
+// so a bullet like "Three vegans guests" doesn't get matched to a
+// sentence on the strength of "have" / "the" alone. Conservative list
+// — only words that show up everywhere in customer emails.
+const PARAPHRASE_MATCH_STOPWORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'to', 'of', 'for', 'in', 'on',
+  'with', 'at', 'by', 'is', 'are', 'was', 'were', 'be', 'we', 'us',
+  'our', 'my', 'me', 'you', 'your', 'i', 'it', 'this', 'that', 'these',
+  'those', 'have', 'has', 'had', 'will', 'can', 'could', 'would',
+  'should', 'please', 'also', 'hi', 'hello', 'chef', 'thanks', 'thank',
+]);
+
+function tokenizeForMatch(text: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const t of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (t.length < 3) continue;
+    if (PARAPHRASE_MATCH_STOPWORDS.has(t)) continue;
+    tokens.add(t);
+  }
+  return tokens;
+}
+
+/** Find the SINGLE source sentence with the highest token-overlap
+ *  (Jaccard) with the paraphrased bullet text. Returns null when no
+ *  sentence is similar enough to be considered the LLM's source.
+ *
+ *  Replaces the prior "mark every uncovered sentence" approach which
+ *  lit up the entire email when ALL bullets were paraphrased (because
+ *  every sentence was technically "not verbatim-covered"). Now we mark
+ *  at most ONE sentence per paraphrased bullet — the chef sees exactly
+ *  the line of the email the LLM was paraphrasing from, not a sea of
+ *  purple.
+ *
+ *  Threshold (0.15 Jaccard with ≥1 shared content token) is
+ *  conservative: prefers false negatives (no purple mark) over false
+ *  positives (purple on a sentence that wasn't actually the source). */
+function bestParaphraseSourceSentence(
+  bulletText: string,
   original: string,
-  bullets: ParsedLine[],
-): Array<{ start: number; end: number }> {
-  const matchedBulletRanges: Array<{ start: number; end: number }> = [];
-  let paraphraseCount = 0;
-  for (const b of bullets) {
-    const idx = findSourceIndex(original, b.cleaned);
-    if (idx < 0) {
-      paraphraseCount += 1;
-      continue;
+  sentences: ReadonlyArray<{ start: number; end: number }>,
+): { start: number; end: number } | null {
+  const bulletTokens = tokenizeForMatch(bulletText);
+  if (bulletTokens.size === 0) return null;
+  let best: { idx: number; score: number } | null = null;
+  for (let i = 0; i < sentences.length; i++) {
+    const sentenceText = original.slice(sentences[i].start, sentences[i].end);
+    const sentenceTokens = tokenizeForMatch(sentenceText);
+    if (sentenceTokens.size === 0) continue;
+    let intersection = 0;
+    for (const t of bulletTokens) {
+      if (sentenceTokens.has(t)) intersection++;
     }
-    matchedBulletRanges.push({ start: idx, end: idx + b.cleaned.length });
+    if (intersection === 0) continue;
+    const union = bulletTokens.size + sentenceTokens.size - intersection;
+    const score = intersection / union;
+    if (!best || score > best.score) best = { idx: i, score };
   }
-  if (paraphraseCount === 0) return [];
-  const out: Array<{ start: number; end: number }> = [];
-  for (const s of sentenceRanges(original)) {
-    const fullyCovered = matchedBulletRanges.some(
-      (b) => b.start <= s.start && b.end >= s.end,
-    );
-    if (fullyCovered) continue;
-    out.push(s);
-  }
-  return out;
+  if (!best || best.score < 0.15) return null;
+  return sentences[best.idx];
 }
 
 /** Render `original` with the hovered bullet's source range in amber,
@@ -256,13 +284,9 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
   // for the popover overlay; EventDetailCard runs a separate scan to
   // populate the banner count.
   const allergyMatches = hasOriginal ? findAllergyKeywords(notesOriginal!, extras) : [];
-  // Paraphrase-source sentence ranges — computed once over the full
-  // bullet list (NOT per-hovered-bullet) so every popover shows the
-  // same purple ranges. These are the bits of the source the LLM had
-  // to synthesise from.
-  const paraphraseSourceRanges = hasOriginal
-    ? computeParaphraseSourceRanges(notesOriginal!, lines)
-    : [];
+  // Sentence ranges of the source — used per-bullet below to find the
+  // single best-matching source sentence for each paraphrased bullet.
+  const sourceSentences = hasOriginal ? sentenceRanges(notesOriginal!) : [];
   if (lines.length === 1) {
     // Single-line: no popover needed — what you see is what was typed.
     return <p className={`whitespace-pre-wrap ${className}`}>{lines[0].cleaned}</p>;
@@ -272,6 +296,17 @@ export default function NotesList({ notes, notesOriginal, className = '' }: Prop
       {lines.map((line, i) => {
         const matchedIdx = hasOriginal ? findSourceIndex(notesOriginal!, line.cleaned) : -1;
         const isParaphrase = hasOriginal && matchedIdx < 0;
+        // Per-bullet purple range: the single source sentence the LLM
+        // most likely paraphrased FROM. Only computed for paraphrased
+        // bullets so verbatim-matched bullets' popovers stay amber-
+        // only.
+        const paraphraseSourceForThisBullet =
+          isParaphrase && hasOriginal
+            ? bestParaphraseSourceSentence(line.cleaned, notesOriginal!, sourceSentences)
+            : null;
+        const paraphraseSourceRanges = paraphraseSourceForThisBullet
+          ? [paraphraseSourceForThisBullet]
+          : [];
         return (
           <li
             key={i}

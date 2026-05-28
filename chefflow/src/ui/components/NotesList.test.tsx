@@ -149,6 +149,50 @@ describe('NotesList', () => {
     expect(purpleMarks.length).toBeGreaterThan(0);
   });
 
+  it('regression: paraphrased bullet with zero source-token overlap produces NO purple marks (was lighting up the whole email)', () => {
+    // The pre-fix behaviour marked EVERY source sentence not covered
+    // by a verbatim bullet match, so when ALL bullets were paraphrased
+    // the entire email went purple. Now we require a Jaccard token
+    // overlap with the bullet; with no shared content words the
+    // sentence stays plain.
+    render(
+      <NotesList
+        notes={'Birthday party for Sarah'}
+        notesOriginal={'Hi chef, can you do a tasting menu for ten? Cheers, Tom.'}
+      />,
+    );
+    expect(screen.queryByTestId('notes-list-paraphrase-source-mark')).toBeNull();
+  });
+
+  it('with notesOriginal + paraphrased bullet: highlights ONLY the best-matching source sentence (not every uncovered sentence)', () => {
+    // Three source sentences, ONE bullet that's paraphrased:
+    //   "Tom is bringing three guests to the table." — semantic source
+    //                                                  of bullet 0.
+    //   "He wants a fixed price menu." — unrelated, should stay plain.
+    //   "Booking is for Saturday evening." — unrelated, should stay
+    //                                        plain.
+    // The fix marks ONLY the first sentence. The pre-fix version
+    // would mark all three (every uncovered sentence).
+    //
+    // Source text deliberately avoids allergy keywords so the purple
+    // range isn't fragmented by red allergy <mark>s — that's a
+    // separate (correct) interaction tested elsewhere.
+    render(
+      <NotesList
+        notes={'Three vegan guests\nfixed price menu'}
+        notesOriginal={'Tom is bringing three guests to the table. He wants a fixed price menu. Booking is for Saturday evening.'}
+      />,
+    );
+    const purpleMarks = screen.getAllByTestId('notes-list-paraphrase-source-mark');
+    expect(purpleMarks.length).toBeGreaterThan(0);
+    const haystack = purpleMarks.map((m) => m.textContent ?? '').join(' | ');
+    // The bullet's semantic source IS marked.
+    expect(haystack).toMatch(/three guests to the table/i);
+    // The two unrelated sentences are NOT marked.
+    expect(haystack).not.toMatch(/fixed price menu/i);
+    expect(haystack).not.toMatch(/Saturday evening/i);
+  });
+
   it('with all bullets matched (no paraphrases): NO paraphrase-source marks appear', () => {
     render(
       <NotesList
