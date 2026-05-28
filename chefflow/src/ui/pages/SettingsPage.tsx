@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/clerk-react';
+import LocationAutocomplete from '../components/LocationAutocomplete';
 import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
 import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
 import { usePinStore } from '../../state/usePinStore';
@@ -287,24 +288,30 @@ export default function SettingsPage() {
                 </span>
               </span>
             </label>
-            <label className="block mt-3">
-              <span className="text-xs text-slate-500">
+            <div className="mt-3" data-testid="settings-home-address-input">
+              <span className="text-xs text-slate-500 block">
                 Home address (used to compute commute time on the workflow page)
               </span>
-              <input
-                type="text"
-                value={homeAddressDraft}
-                onChange={(e) => setHomeAddressDraft(e.target.value)}
-                onBlur={(e) => setHomeAddress(e.target.value.trim())}
-                placeholder="e.g. 221B Baker Street, London NW1 6XE"
-                data-testid="settings-home-address-input"
-                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
-              />
+              <div className="mt-1">
+                <LocationAutocomplete
+                  value={homeAddressDraft}
+                  onChange={(next) => {
+                    setHomeAddressDraft(next);
+                    // The autocomplete writes both on keystroke + on
+                    // pick. Persist on every change so the workflow page
+                    // sees the address immediately when the chef picks a
+                    // suggestion (the input has no blur-after-pick).
+                    setHomeAddress(next.trim());
+                  }}
+                  placeholder="Start typing an address — Google Places suggestions appear inline"
+                  ariaLabel="Home address"
+                />
+              </div>
               <span className="block mt-1 text-xs text-slate-500">
                 Sent to Google Maps when you open an event's workflow. Leave
                 empty to hide the commute banner.
               </span>
-            </label>
+            </div>
           </div>
         </div>
       </section>
