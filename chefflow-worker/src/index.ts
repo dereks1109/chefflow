@@ -243,6 +243,39 @@ export async function handleRequest(
     }
   }
 
+  // POST /admin/cron/run?name=gmail-digest|contact-digest — fire a
+  // cron handler on-demand for testing. Gated by the same
+  // ADMIN_BOOTSTRAP_TOKEN secret as /admin/bootstrap (set + delete
+  // around the call). Wrangler v4 dropped the `triggers cron` CLI so
+  // this is the only way to validate a new cron without waiting for
+  // the scheduled firing.
+  if (req.method === 'POST' && url.pathname === '/admin/cron/run') {
+    const presentToken = env.ADMIN_BOOTSTRAP_TOKEN;
+    if (!presentToken) {
+      return json({ error: 'admin trigger disabled — set ADMIN_BOOTSTRAP_TOKEN secret first' }, 503);
+    }
+    const auth = req.headers.get('Authorization') ?? '';
+    const supplied = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (supplied !== presentToken) {
+      return json({ error: 'invalid bootstrap token' }, 401);
+    }
+    const name = url.searchParams.get('name') ?? '';
+    try {
+      if (name === 'gmail-digest') {
+        const result = await runGmailDigest(env);
+        return json({ ok: true, name, result }, 200);
+      }
+      if (name === 'contact-digest') {
+        const result = await runContactDigest(env);
+        return json({ ok: true, name, result }, 200);
+      }
+      return json({ error: `unknown cron name: ${name}` }, 400);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'cron run failed';
+      return json({ error: msg, name }, 500);
+    }
+  }
+
   // Auth gates every other route in this worker. Pull userId once up front.
   let userId: string;
   try {
