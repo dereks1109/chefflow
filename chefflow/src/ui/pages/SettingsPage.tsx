@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, ChevronDown, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
 import { useClerk, useUser } from '@clerk/clerk-react';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
@@ -703,10 +703,32 @@ function AllergyKeywordsSection() {
       data-testid="settings-allergy-keywords-section"
       className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
     >
-      <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-        Allergy and other keywords highlight
-      </h2>
-      <p className="mt-2 text-xs text-slate-500">
+      {/* Collapsed by default — the defaults pill grid is ~80 items
+          tall and the chef rarely interacts with this section
+          (additions are infrequent). `<details>` gets keyboard +
+          screen-reader support for free; the [&_summary]: selectors
+          hide the native disclosure marker so we can supply our own
+          chevron. */}
+      <details className="group [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
+        <summary
+          className="cursor-pointer flex items-center justify-between gap-2 -m-1 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+          data-testid="settings-allergy-keywords-toggle"
+        >
+          <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+            Allergy and other keywords highlight
+          </h2>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span data-testid="settings-allergy-keywords-counts">
+              {defaults.length} defaults · {extras.length} custom
+            </span>
+            <ChevronDown
+              className="h-4 w-4 transition-transform duration-150 group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </div>
+        </summary>
+
+      <p className="mt-3 text-xs text-slate-500">
         ChefFlow highlights every match below in <strong>red</strong> wherever
         it appears in a customer's email or your event notes — so you don't
         miss an allergy, intolerance, dietary, or negation cue. Four
@@ -791,6 +813,7 @@ function AllergyKeywordsSection() {
           Add keyword
         </button>
       </div>
+      </details>
     </section>
   );
 }
