@@ -42,12 +42,19 @@ export const DEFAULT_ALLERGY_KEYWORDS: readonly string[] = [
   'halal', 'haram', 'kosher',
   'vegan', 'vegetarian', 'plant-based',
   'pork', 'alcohol', 'gelatine', 'gelatin', 'rennet',
-  // ---- Logic & negation -----------------------------------------------
+  // ---- Logic, Negation & Requests --------------------------------------
   // "no" / "not" highlight on their own — paired with food words by the
   // chef's eye, not by the matcher. The risk of false positives ("no
-  // problem") is acceptable for safety-critical scanning.
+  // problem") is acceptable for safety-critical scanning. Request verbs
+  // (request/prefer/ask/require/insist/please) light up the polite
+  // scaffolding around the actual constraint so the chef can see it at
+  // a glance instead of reading the whole email.
   'no', 'not', 'avoid', 'never', 'zero', 'without', 'free', 'except',
   'must', 'have to', 'prohibited',
+  'request', 'requested', 'prefer', 'preferred', 'preference',
+  'ask', 'asked', 'require', 'required', 'requirement',
+  'demand', 'insist', 'exclude', 'excluded',
+  'instead', 'alternative', 'option', 'please',
   // ---- Risk & urgency --------------------------------------------------
   'anaphylaxis', 'anaphylactic', 'epipen', 'adrenaline',
   'allergy', 'allergic', 'allergies',

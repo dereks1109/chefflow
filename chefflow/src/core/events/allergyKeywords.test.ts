@@ -45,7 +45,10 @@ describe('findAllergyKeywords', () => {
   });
 
   it('respects word boundaries (no false positive on "ignore" for "no")', () => {
-    const out = findAllergyKeywords('Please ignore the mess in the kitchen.');
+    // "ignore" must not register as the "no" keyword. Note: "please" is
+    // itself a default keyword (Requests category) so we avoid it in
+    // the boundary test text.
+    const out = findAllergyKeywords('Kindly ignore the mess in the kitchen.');
     expect(out).toEqual([]);
   });
 
@@ -80,6 +83,19 @@ describe('findAllergyKeywords', () => {
     const text = 'Two halal guests, one kosher, one vegan. No pork, gelatine, or rennet.';
     const kws = findAllergyKeywords(text).map((m) => m.keyword);
     for (const want of ['halal', 'kosher', 'vegan', 'pork', 'gelatine', 'rennet']) {
+      expect(kws).toContain(want);
+    }
+  });
+
+  it('matches the new Logic, Negation & Requests keywords (request verbs)', () => {
+    // Six representative samples across the new request-verb words. The
+    // matcher already handles word boundaries for ≥3-char words via
+    // \b…\b — covered by the "respects word boundaries" test above — so
+    // this is a per-keyword presence spot-check, not a boundary
+    // regression suite.
+    const text = 'They requested a vegan option instead of beef, and prefer no peanut. Please exclude shellfish; allergy is severe. We can offer an alternative dessert.';
+    const kws = findAllergyKeywords(text).map((m) => m.keyword);
+    for (const want of ['requested', 'prefer', 'please', 'exclude', 'instead', 'alternative', 'option']) {
       expect(kws).toContain(want);
     }
   });

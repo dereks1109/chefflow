@@ -715,7 +715,7 @@ function AllergyKeywordsSection() {
       <ul className="mt-2 ml-4 list-disc text-xs text-slate-500 space-y-0.5">
         <li><strong>Mandatory allergens</strong> — UK Top-14 + common specifics (celery, gluten, wheat, eggs, nuts, peanut, sesame, soy, sulphites…).</li>
         <li><strong>Dietary &amp; religious</strong> — halal, haram, kosher, vegan, vegetarian, gelatine…</li>
-        <li><strong>Logic &amp; negation</strong> — no, not, avoid, never, without, free, must, prohibited…</li>
+        <li><strong>Logic, Negation &amp; Requests</strong> — no, not, avoid, without, must, request, prefer, require, please, exclude…</li>
         <li><strong>Risk &amp; urgency</strong> — anaphylaxis, EpiPen, severe, intolerant, reaction, warning…</li>
       </ul>
       <p className="mt-2 text-xs text-slate-500">
