@@ -16,6 +16,7 @@ import NestedDragDropBuilder, {
   type DndMilestone,
 } from '../components/NestedDragDropBuilder';
 import EventDetailCard from '../components/EventDetailCard';
+import CommuteBanner from '../components/CommuteBanner';
 import { swatchClassFor } from '../components/ColorPicker';
 import LlmSettingsSheet from '../components/LlmSettingsSheet';
 import { saveEvent } from '../../db/eventsRepo';
@@ -455,6 +456,8 @@ export default function Workflow() {
       </div>
 
       <EventDetailCard event={event} />
+
+      <CommuteBanner eventLocation={event.location} serveAt={event.serveAt} />
 
       <div>
         <div className="flex items-center justify-between mb-3 gap-2 print:hidden">

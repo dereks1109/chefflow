@@ -64,7 +64,10 @@ export default function SettingsPage() {
   const avatarDataUrl = useProfileStore((s) => s.avatarDataUrl);
   const setDisplayName = useProfileStore((s) => s.setDisplayName);
   const setAvatarDataUrl = useProfileStore((s) => s.setAvatarDataUrl);
+  const homeAddress = useProfileStore((s) => s.homeAddress);
+  const setHomeAddress = useProfileStore((s) => s.setHomeAddress);
   const [nameDraft, setNameDraft] = useState(displayName);
+  const [homeAddressDraft, setHomeAddressDraft] = useState(homeAddress);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -282,6 +285,24 @@ export default function SettingsPage() {
                 <span className="block text-slate-500">
                   When off, recipes you publish appear as "Anonymous chef".
                 </span>
+              </span>
+            </label>
+            <label className="block mt-3">
+              <span className="text-xs text-slate-500">
+                Home address (used to compute commute time on the workflow page)
+              </span>
+              <input
+                type="text"
+                value={homeAddressDraft}
+                onChange={(e) => setHomeAddressDraft(e.target.value)}
+                onBlur={(e) => setHomeAddress(e.target.value.trim())}
+                placeholder="e.g. 221B Baker Street, London NW1 6XE"
+                data-testid="settings-home-address-input"
+                className="mt-1 block w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+              <span className="block mt-1 text-xs text-slate-500">
+                Sent to Google Maps when you open an event's workflow. Leave
+                empty to hide the commute banner.
               </span>
             </label>
           </div>

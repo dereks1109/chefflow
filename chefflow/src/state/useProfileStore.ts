@@ -9,9 +9,16 @@ export interface ProfileState {
    *  recipe with "Anonymous chef". Default false — opt-in to publish under
    *  your real name. */
   showNameOnCommunity: boolean;
+  /** Chef's home / base-of-operations address. Used by the workflow page
+   *  to compute commute time to the event location (Google Maps
+   *  Distance Matrix via the worker). Free-form string — Google's
+   *  geocoder handles the parsing. Empty / undefined → commute banner
+   *  is hidden. */
+  homeAddress: string;
   setDisplayName: (next: string) => void;
   setAvatarDataUrl: (next: string | null) => void;
   setShowNameOnCommunity: (next: boolean) => void;
+  setHomeAddress: (next: string) => void;
   clear: () => void;
 }
 
@@ -21,10 +28,12 @@ export const useProfileStore = create<ProfileState>()(
       displayName: '',
       avatarDataUrl: null,
       showNameOnCommunity: false,
+      homeAddress: '',
       setDisplayName: (displayName) => set({ displayName }),
       setAvatarDataUrl: (avatarDataUrl) => set({ avatarDataUrl }),
       setShowNameOnCommunity: (showNameOnCommunity) => set({ showNameOnCommunity }),
-      clear: () => set({ displayName: '', avatarDataUrl: null, showNameOnCommunity: false }),
+      setHomeAddress: (homeAddress) => set({ homeAddress }),
+      clear: () => set({ displayName: '', avatarDataUrl: null, showNameOnCommunity: false, homeAddress: '' }),
     }),
     { name: 'chefflow:profile:v1' },
   ),

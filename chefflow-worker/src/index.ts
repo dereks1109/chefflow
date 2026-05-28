@@ -55,6 +55,7 @@ import { completeOnboarding, OnboardingError, type OnboardingProfile } from './o
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
 import { runGmailDigest } from './gmailDigest';
+import { estimateCommute, CommuteError } from './commute';
 import {
   submitReport as takedownSubmitReport,
   listReports as takedownListReports,
@@ -104,6 +105,11 @@ export interface Env {
   GOOGLE_OAUTH_CLIENT_ID?: string;
   GOOGLE_OAUTH_CLIENT_SECRET?: string;
   GOOGLE_OAUTH_REFRESH_TOKEN?: string;
+  // Google Maps Distance Matrix API key — powers POST /api/commute/estimate
+  // for the Workflow page commute banner. Optional: when unset the
+  // route returns 503 and the SPA hides the banner. Setup:
+  // docs/operations/google-maps-api-setup.md.
+  GOOGLE_MAPS_API_KEY?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -255,6 +261,39 @@ export async function handleRequest(
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sync pull failed';
       return json({ error: msg }, 500);
+    }
+  }
+
+  // POST /api/commute/estimate — driving-time + distance from the chef's
+  // home address to the event location. Powers the Workflow-page
+  // commute banner. Auth-required (any signed-in chef); body is
+  // { origin: string, destination: string }. Returns
+  // { durationSeconds, distanceMeters, resolvedOrigin, resolvedDestination }
+  // on success, or { error, fallback } on Maps failure / no-key state.
+  if (req.method === 'POST' && url.pathname === '/api/commute/estimate') {
+    if (!env.GOOGLE_MAPS_API_KEY) {
+      return json({ error: 'maps integration not configured', fallback: 'no-key' }, 503);
+    }
+    const body = (await readJson(req)) as { origin?: unknown; destination?: unknown } | null;
+    const origin = typeof body?.origin === 'string' ? body.origin.trim() : '';
+    const destination = typeof body?.destination === 'string' ? body.destination.trim() : '';
+    if (!origin || !destination) {
+      return json({ error: 'origin and destination must be non-empty strings' }, 400);
+    }
+    try {
+      const result = await estimateCommute({
+        apiKey: env.GOOGLE_MAPS_API_KEY,
+        origin,
+        destination,
+        fetchImpl,
+      });
+      return json(result, 200);
+    } catch (err) {
+      if (err instanceof CommuteError) {
+        return json({ error: err.message, fallback: 'maps-failed' }, err.status ?? 502);
+      }
+      const msg = err instanceof Error ? err.message : 'commute estimate failed';
+      return json({ error: msg, fallback: 'maps-failed' }, 500);
     }
   }
 
