@@ -134,7 +134,11 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
-function formatDigestHtml(payload: DigestPayload, dayLabel: string): string {
+// Inner HTML for the inbox section — h2 + priority groups, no doctype/
+// body wrapper. The standalone gmail-digest path wraps this in <html>
+// before sending; the combined daily-digest concatenates it with the
+// contact section under one wrapper.
+export function formatDigestSectionHtml(payload: DigestPayload, dayLabel: string): string {
   const groups = new Map<number, DigestItem[]>();
   for (const item of payload.items) {
     const arr = groups.get(item.priority) ?? [];
@@ -167,19 +171,14 @@ function formatDigestHtml(payload: DigestPayload, dayLabel: string): string {
       </ul>
     `);
   }
-  return `<!doctype html>
-<html>
-<body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937;">
-  <h2 style="margin: 0 0 12px 0;">Inbox digest — ${dayLabel}</h2>
-  <p style="margin: 0 0 16px 0; font-size: 13px; color: #6b7280;">
-    ${payload.items.length} email${payload.items.length === 1 ? '' : 's'} from the last 24 hours, ranked.
-  </p>
-  ${sections.join('\n')}
-</body>
-</html>`;
+  return `<h2 style="margin: 0 0 12px 0;">Inbox digest — ${dayLabel}</h2>
+<p style="margin: 0 0 16px 0; font-size: 13px; color: #6b7280;">
+  ${payload.items.length} email${payload.items.length === 1 ? '' : 's'} from the last 24 hours, ranked.
+</p>
+${sections.join('\n')}`;
 }
 
-function formatDigestText(payload: DigestPayload, dayLabel: string): string {
+export function formatDigestSectionText(payload: DigestPayload, dayLabel: string): string {
   const sorted = [...payload.items].sort((a, b) => a.priority - b.priority);
   const lines = [
     `Inbox digest — ${dayLabel}`,
@@ -196,19 +195,34 @@ function formatDigestText(payload: DigestPayload, dayLabel: string): string {
   return lines.join('\n');
 }
 
-/** Build + send the digest. Best-effort across every failure mode. */
-export async function runGmailDigest(
+export interface GmailDigestParts {
+  sectionHtml: string;
+  sectionText: string;
+  itemCount: number;
+}
+
+export type GmailDigestPartsResult =
+  | { ok: true; parts: GmailDigestParts; fetched: number }
+  | {
+      ok: false;
+      fetched: number;
+      skipReason: 'no-secrets' | 'no-messages' | 'gmail-failed' | 'llm-failed';
+    };
+
+/**
+ * Run the OAuth → Gmail → LLM pipeline and return rendered section HTML/
+ * text. Pure with respect to email transport: the caller decides whether
+ * to wrap + send (standalone gmail-digest) or stitch with another digest
+ * (combined daily-digest).
+ */
+export async function buildGmailDigestParts(
   env: GmailDigestEnv,
   now: number = Date.now(),
-): Promise<GmailDigestResult> {
+): Promise<GmailDigestPartsResult> {
   const { GOOGLE_OAUTH_CLIENT_ID: id, GOOGLE_OAUTH_CLIENT_SECRET: secret, GOOGLE_OAUTH_REFRESH_TOKEN: refresh } = env;
   if (!id || !secret || !refresh) {
     console.warn('[gmailDigest] OAuth secrets missing; skipping');
-    return { fetched: 0, sent: false, skipReason: 'no-secrets' };
-  }
-  if (!env.RESEND_API_KEY) {
-    console.warn('[gmailDigest] RESEND_API_KEY missing; skipping');
-    return { fetched: 0, sent: false, skipReason: 'no-api-key' };
+    return { ok: false, fetched: 0, skipReason: 'no-secrets' };
   }
 
   let access: string;
@@ -217,12 +231,12 @@ export async function runGmailDigest(
     access = await getAccessToken({ clientId: id, clientSecret: secret, refreshToken: refresh });
     const ids = await listMessageIds(access, GMAIL_QUERY, MAX_MESSAGES);
     if (ids.length === 0) {
-      return { fetched: 0, sent: false, skipReason: 'no-messages' };
+      return { ok: false, fetched: 0, skipReason: 'no-messages' };
     }
     summaries = await Promise.all(ids.map((m) => getMessage(access, m.id)));
   } catch (err) {
     console.warn('[gmailDigest] Gmail step failed:', err instanceof Error ? err.message : String(err));
-    return { fetched: 0, sent: false, skipReason: 'gmail-failed' };
+    return { ok: false, fetched: 0, skipReason: 'gmail-failed' };
   }
 
   let digest: DigestPayload;
@@ -234,25 +248,57 @@ export async function runGmailDigest(
     digest = parseDigestJson(raw);
   } catch (err) {
     console.warn('[gmailDigest] LLM step failed:', err instanceof Error ? err.message : String(err));
-    return { fetched: summaries.length, sent: false, skipReason: 'llm-failed' };
+    return { ok: false, fetched: summaries.length, skipReason: 'llm-failed' };
   }
 
+  const dayLabel = new Date(now).toISOString().slice(0, 10);
+  return {
+    ok: true,
+    fetched: summaries.length,
+    parts: {
+      sectionHtml: formatDigestSectionHtml(digest, dayLabel),
+      sectionText: formatDigestSectionText(digest, dayLabel),
+      itemCount: digest.items.length,
+    },
+  };
+}
+
+/** Build + send the standalone Gmail digest. Best-effort across every failure mode. */
+export async function runGmailDigest(
+  env: GmailDigestEnv,
+  now: number = Date.now(),
+): Promise<GmailDigestResult> {
+  if (!env.RESEND_API_KEY) {
+    console.warn('[gmailDigest] RESEND_API_KEY missing; skipping');
+    return { fetched: 0, sent: false, skipReason: 'no-api-key' };
+  }
+  const result = await buildGmailDigestParts(env, now);
+  if (!result.ok) {
+    return { fetched: result.fetched, sent: false, skipReason: result.skipReason };
+  }
+
+  const { parts, fetched } = result;
   const dayLabel = new Date(now).toISOString().slice(0, 10);
   try {
     await sendContactNotification({
       apiKey: env.RESEND_API_KEY,
       name: 'Inbox digest',
       email: 'noreply@chefflow.uk',
-      message: `Daily Gmail digest — see HTML body for ${digest.items.length} items.`,
+      message: `Daily Gmail digest — see HTML body for ${parts.itemCount} items.`,
       toAddress: ADMIN_RECIPIENT,
       fromAddress: DIGEST_FROM,
-      htmlBodyOverride: formatDigestHtml(digest, dayLabel),
-      textBodyOverride: formatDigestText(digest, dayLabel),
-      subjectOverride: `[ChefFlow Inbox] ${digest.items.length} email${digest.items.length === 1 ? '' : 's'} — ${dayLabel}`,
+      htmlBodyOverride: `<!doctype html>
+<html>
+<body style="font-family: -apple-system, system-ui, sans-serif; color: #1f2937;">
+${parts.sectionHtml}
+</body>
+</html>`,
+      textBodyOverride: parts.sectionText,
+      subjectOverride: `[ChefFlow Inbox] ${parts.itemCount} email${parts.itemCount === 1 ? '' : 's'} — ${dayLabel}`,
     });
-    return { fetched: summaries.length, sent: true };
+    return { fetched, sent: true };
   } catch (err) {
     console.warn('[gmailDigest] send failed:', err instanceof Error ? err.message : String(err));
-    return { fetched: summaries.length, sent: false, skipReason: 'send-failed' };
+    return { fetched, sent: false, skipReason: 'send-failed' };
   }
 }

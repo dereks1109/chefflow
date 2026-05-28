@@ -54,6 +54,7 @@ import { provisionDemosForUser } from './demos';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
+import { runDailyDigest } from './dailyDigest';
 import { runGmailDigest } from './gmailDigest';
 import { estimateCommute, CommuteError } from './commute';
 import {
@@ -243,12 +244,18 @@ export async function handleRequest(
     }
   }
 
-  // POST /admin/cron/run?name=gmail-digest|contact-digest — fire a
-  // cron handler on-demand for testing. Gated by the same
-  // ADMIN_BOOTSTRAP_TOKEN secret as /admin/bootstrap (set + delete
-  // around the call). Wrangler v4 dropped the `triggers cron` CLI so
-  // this is the only way to validate a new cron without waiting for
-  // the scheduled firing.
+  // POST /admin/cron/run?name=daily-digest|gmail-digest|contact-digest
+  // — fire a cron handler on-demand for testing. Gated by the
+  // ADMIN_BOOTSTRAP_TOKEN secret (set + delete around the call).
+  // Wrangler v4 dropped the `triggers cron` CLI so this is the only way
+  // to validate a cron without waiting for the scheduled firing.
+  //
+  //   - `daily-digest`   — the only cron the scheduler fires; combined
+  //                        Gmail inbox + contact submissions in ONE email.
+  //   - `gmail-digest`   — sends ONLY the inbox section as its own email
+  //                        (kept for ad-hoc partial testing).
+  //   - `contact-digest` — sends ONLY the contact section as its own email
+  //                        (kept for ad-hoc partial testing).
   if (req.method === 'POST' && url.pathname === '/admin/cron/run') {
     const presentToken = env.ADMIN_BOOTSTRAP_TOKEN;
     if (!presentToken) {
@@ -261,6 +268,10 @@ export async function handleRequest(
     }
     const name = url.searchParams.get('name') ?? '';
     try {
+      if (name === 'daily-digest') {
+        const result = await runDailyDigest(env);
+        return json({ ok: true, name, result }, 200);
+      }
       if (name === 'gmail-digest') {
         const result = await runGmailDigest(env);
         return json({ ok: true, name, result }, 200);
@@ -909,12 +920,8 @@ export default {
   ): Promise<void> {
     const handlers: Record<string, () => Promise<void>> = {
       '0 8 * * *': async () => {
-        const result = await runContactDigest(env);
-        console.log('[cron:contact-digest]', JSON.stringify(result));
-      },
-      '30 7 * * *': async () => {
-        const result = await runGmailDigest(env);
-        console.log('[cron:gmail-digest]', JSON.stringify(result));
+        const result = await runDailyDigest(env);
+        console.log('[cron:daily-digest]', JSON.stringify(result));
       },
     };
     const handler = handlers[event.cron];
