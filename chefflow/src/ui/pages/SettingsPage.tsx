@@ -703,32 +703,10 @@ function AllergyKeywordsSection() {
       data-testid="settings-allergy-keywords-section"
       className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
     >
-      {/* Collapsed by default — the defaults pill grid is ~80 items
-          tall and the chef rarely interacts with this section
-          (additions are infrequent). `<details>` gets keyboard +
-          screen-reader support for free; the [&_summary]: selectors
-          hide the native disclosure marker so we can supply our own
-          chevron. */}
-      <details className="group [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
-        <summary
-          className="cursor-pointer flex items-center justify-between gap-2 -m-1 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-          data-testid="settings-allergy-keywords-toggle"
-        >
-          <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
-            Allergy and other keywords highlight
-          </h2>
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span data-testid="settings-allergy-keywords-counts">
-              {defaults.length} defaults · {extras.length} custom
-            </span>
-            <ChevronDown
-              className="h-4 w-4 transition-transform duration-150 group-open:rotate-180"
-              aria-hidden="true"
-            />
-          </div>
-        </summary>
-
-      <p className="mt-3 text-xs text-slate-500">
+      <h2 id="settings-allergy-keywords-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+        Allergy and other keywords highlight
+      </h2>
+      <p className="mt-2 text-xs text-slate-500">
         ChefFlow highlights every match below in <strong>red</strong> wherever
         it appears in a customer's email or your event notes — so you don't
         miss an allergy, intolerance, dietary, or negation cue. Four
@@ -746,46 +724,70 @@ function AllergyKeywordsSection() {
         below.
       </p>
 
-      <div className="mt-3">
-        <p className="text-xs font-medium text-slate-500 mb-1.5">Defaults (always on)</p>
-        <div className="flex flex-wrap gap-1.5">
-          {defaults.map((w) => (
-            <span
-              key={`d-${w}`}
-              className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-800 dark:text-red-200 px-2 py-0.5 text-xs"
-            >
-              {w}
+      {/* Pill grids (defaults + your additions) collapsed by default —
+          the defaults grid alone is ~80 pills tall. Heading +
+          description + the add-keyword input stay visible above so
+          the chef can scan + add without expanding. */}
+      <details className="group mt-3 [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
+        <summary
+          className="cursor-pointer flex items-center justify-between gap-2 -m-1 p-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+          data-testid="settings-allergy-keywords-toggle"
+        >
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            Show keyword list
+          </span>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span data-testid="settings-allergy-keywords-counts">
+              {defaults.length} defaults · {extras.length} custom
             </span>
-          ))}
-        </div>
-      </div>
+            <ChevronDown
+              className="h-4 w-4 transition-transform duration-150 group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </div>
+        </summary>
 
-      <div className="mt-4">
-        <p className="text-xs font-medium text-slate-500 mb-1.5">Your additions</p>
-        {extras.length === 0 ? (
-          <p className="text-xs text-slate-500 italic">None yet — add your own keywords below.</p>
-        ) : (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-slate-500 mb-1.5">Defaults (always on)</p>
           <div className="flex flex-wrap gap-1.5">
-            {extras.map((w) => (
+            {defaults.map((w) => (
               <span
-                key={`x-${w}`}
-                data-testid={`allergy-keyword-extra-${w}`}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-2 py-0.5 text-xs"
+                key={`d-${w}`}
+                className="inline-flex items-center rounded-full border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/15 text-red-800 dark:text-red-200 px-2 py-0.5 text-xs"
               >
                 {w}
-                <button
-                  type="button"
-                  onClick={() => removeExtra(w)}
-                  aria-label={`Remove keyword ${w}`}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
-                >
-                  <XCircle className="h-3 w-3" aria-hidden="true" />
-                </button>
               </span>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+
+        <div className="mt-4">
+          <p className="text-xs font-medium text-slate-500 mb-1.5">Your additions</p>
+          {extras.length === 0 ? (
+            <p className="text-xs text-slate-500 italic">None yet — add your own keywords below.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {extras.map((w) => (
+                <span
+                  key={`x-${w}`}
+                  data-testid={`allergy-keyword-extra-${w}`}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-2 py-0.5 text-xs"
+                >
+                  {w}
+                  <button
+                    type="button"
+                    onClick={() => removeExtra(w)}
+                    aria-label={`Remove keyword ${w}`}
+                    className="ml-0.5 opacity-60 hover:opacity-100"
+                  >
+                    <XCircle className="h-3 w-3" aria-hidden="true" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </details>
 
       <div className="mt-3 flex gap-2">
         <input
@@ -813,7 +815,6 @@ function AllergyKeywordsSection() {
           Add keyword
         </button>
       </div>
-      </details>
     </section>
   );
 }
