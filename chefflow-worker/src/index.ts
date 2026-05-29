@@ -52,6 +52,13 @@ import {
   SyncValidationError,
 } from './sync';
 import { provisionDemosForUser } from './demos';
+import {
+  handleInvite as teamsHandleInvite,
+  handleAccept as teamsHandleAccept,
+  handleList as teamsHandleList,
+  handleDelete as teamsHandleDelete,
+  handleOwnersOfMe as teamsHandleOwnersOfMe,
+} from './teams';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
@@ -135,6 +142,15 @@ function json(body: unknown, status: number, extra: Record<string, string> = {})
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS, ...extra },
   });
+}
+
+/** Re-emit an existing Response with our CORS headers merged in. Used
+ *  for handlers that live in their own modules (e.g. teams.ts) and
+ *  return their own Responses — they don't know about CORS_HEADERS. */
+function withCors(res: Response): Response {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, headers });
 }
 
 function quotaExceededResponse(err: QuotaExceeded): Response {
@@ -399,6 +415,40 @@ export async function handleRequest(
       const msg = err instanceof Error ? err.message : 'Demo provision failed';
       return json({ error: msg }, 500);
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Teams (Enterprise) — invite / accept / list / delete / owners-of-me.
+  // Phase 2 of T3c. Phase 3 will plug owners-of-me into the sync layer.
+  // ---------------------------------------------------------------------
+  const teamsEnv = {
+    DB: env.DB,
+    RATE_LIMIT: env.RATE_LIMIT,
+    CLERK_SECRET_KEY: env.CLERK_SECRET_KEY,
+    RESEND_API_KEY: env.RESEND_API_KEY,
+    fetchImpl: fetchImpl as FetchLike,
+  };
+  if (req.method === 'POST' && url.pathname === '/api/teams/invite') {
+    const res = await teamsHandleInvite(req, teamsEnv, userId);
+    return withCors(res);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/teams/accept') {
+    const res = await teamsHandleAccept(req, teamsEnv, userId);
+    return withCors(res);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/teams/list') {
+    const res = await teamsHandleList(teamsEnv, userId);
+    return withCors(res);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/teams/owners-of-me') {
+    const res = await teamsHandleOwnersOfMe(teamsEnv, userId);
+    return withCors(res);
+  }
+  const teamsDeleteMatch = /^\/api\/teams\/(.+)$/.exec(url.pathname);
+  if (req.method === 'DELETE' && teamsDeleteMatch) {
+    const email = decodeURIComponent(teamsDeleteMatch[1]);
+    const res = await teamsHandleDelete(email, teamsEnv, userId);
+    return withCors(res);
   }
 
   // POST /api/onboarding/complete — marks the user's account-setup sheet as
