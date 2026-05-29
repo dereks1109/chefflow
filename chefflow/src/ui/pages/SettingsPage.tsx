@@ -23,6 +23,21 @@ import { downscaleToDataUrl } from '../../core/util/image';
 import { useTheme } from '../theme/useTheme';
 import AccountDataPanel from '../components/AccountDataPanel';
 
+// Settings tab IDs — mirrored to ?tab=… for deep-linking.
+type SettingsTab = 'profile' | 'plan' | 'preferences' | 'data' | 'account';
+
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'profile', label: 'Profile' },
+  { id: 'plan', label: 'Plan & billing' },
+  { id: 'preferences', label: 'Preferences' },
+  { id: 'data', label: 'Data & privacy' },
+  { id: 'account', label: 'Account' },
+];
+
+function isSettingsTab(v: string | null): v is SettingsTab {
+  return v === 'profile' || v === 'plan' || v === 'preferences' || v === 'data' || v === 'account';
+}
+
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const tier = useTierStore((s) => s.tier);
@@ -55,6 +70,22 @@ export default function SettingsPage() {
   }
   const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Tabbed Settings (shipped 2026-05-29 from the UX audit). Previously
+  // 12+ sections stacked vertically into a ~1700px page; tab routing
+  // lets the chef jump straight to one concern without scrolling.
+  // Tab state mirrored to ?tab=… so Settings pages are deep-linkable
+  // from email links, bookmarks, etc.
+  const rawTab = searchParams.get('tab');
+  const activeTab: SettingsTab = isSettingsTab(rawTab) ? rawTab : 'profile';
+  function setTab(next: SettingsTab) {
+    setSearchParams((prev) => {
+      const params = new URLSearchParams(prev);
+      if (next === 'profile') params.delete('tab'); // default; keep URL clean
+      else params.set('tab', next);
+      return params;
+    });
+  }
   const [portalRedirecting, setPortalRedirecting] = useState<'manage' | null>(null);
   const [portalError, setPortalError] = useState<string | null>(null);
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -163,6 +194,41 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500 mt-1">Manage your plan and see today's usage.</p>
       </header>
 
+      {/* Tab nav — horizontally scrollable on narrow viewports so all
+          5 destinations stay reachable on phone widths. The active tab
+          gets the orange accent treatment so it lines up visually with
+          the rest of the app's primary nav. */}
+      <nav
+        role="tablist"
+        aria-label="Settings sections"
+        data-testid="settings-tabs"
+        className="flex gap-1 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0 border-b border-slate-200 dark:border-slate-700"
+      >
+        {SETTINGS_TABS.map((t) => {
+          const isActive = activeTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-controls={`settings-tabpanel-${t.id}`}
+              onClick={() => setTab(t.id)}
+              data-testid={`settings-tab-${t.id}`}
+              className={[
+                'px-3 py-2 text-sm font-medium whitespace-nowrap',
+                'border-b-2 -mb-px transition-colors',
+                isActive
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100',
+              ].join(' ')}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+
       {justUpgraded && (
         <div
           role="status"
@@ -190,7 +256,10 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {activeTab === 'profile' && (
       <section
+        id="settings-tabpanel-profile"
+        role="tabpanel"
         aria-labelledby="settings-profile-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
       >
@@ -317,7 +386,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+      )}
 
+      {activeTab === 'plan' && (
       <section
         aria-labelledby="settings-plan-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
@@ -406,6 +477,7 @@ export default function SettingsPage() {
           <p role="alert" className="mt-2 text-xs text-red-600 dark:text-red-400">{portalError}</p>
         )}
       </section>
+      )}
 
       {cancelOpen && (
         <CancelConfirmDialog
@@ -417,6 +489,7 @@ export default function SettingsPage() {
         />
       )}
 
+      {activeTab === 'preferences' && (
       <section
         aria-labelledby="settings-theme-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
@@ -464,9 +537,11 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+      )}
 
-      <RestoreDemosSection />
+      {activeTab === 'preferences' && <RestoreDemosSection />}
 
+      {activeTab === 'plan' && (
       <section
         aria-labelledby="settings-usage-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
@@ -487,17 +562,18 @@ export default function SettingsPage() {
           Free accounts reset at UTC midnight. Limits: {TIER_LIMITS.free.maxRecipesPerDay} recipes / {TIER_LIMITS.free.maxEventsPerDay} event / {TIER_LIMITS.free.maxLlmCallsPerDay} AI calls per day.
         </p>
       </section>
+      )}
 
-      <AllergyKeywordsSection />
+      {activeTab === 'preferences' && <AllergyKeywordsSection />}
 
-      <PinSection />
+      {activeTab === 'preferences' && <PinSection />}
 
-      {(isSignedIn || isE2E) && <LegalAcceptanceSection user={user ?? null} />}
+      {activeTab === 'data' && (isSignedIn || isE2E) && <LegalAcceptanceSection user={user ?? null} />}
 
       {/* Sign-out moved here from the top nav so it's not a one-tap-away
           accident risk in the chrome and so it sits naturally beside the
           rest of the account controls (display name + avatar). */}
-      {!isE2E && isSignedIn && (
+      {activeTab === 'account' && !isE2E && isSignedIn && (
         <section
           aria-labelledby="settings-account-heading"
           className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
@@ -518,7 +594,7 @@ export default function SettingsPage() {
         </section>
       )}
 
-      {(isSignedIn || isE2E) && <AccountDataPanel />}
+      {activeTab === 'data' && (isSignedIn || isE2E) && <AccountDataPanel />}
 
       <p className="text-xs text-slate-500">
         Need help? <Link to="/disclaimer" className="text-accent hover:underline">Disclaimer</Link>

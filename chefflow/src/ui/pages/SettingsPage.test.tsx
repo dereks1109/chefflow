@@ -47,7 +47,7 @@ function renderPage(initialEntries: string[] = ['/settings']) {
 describe('SettingsPage', () => {
   it('shows the Free tier chip and Upgrade CTA for free users', async () => {
     useTierStore.setState({ tier: 'free' });
-    renderPage();
+    renderPage(['/settings?tab=plan']);
     expect(screen.getByTestId('settings-tier-chip')).toHaveTextContent(/free/i);
     expect(screen.getByTestId('settings-upgrade-cta')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-portal-cta')).toBeNull();
@@ -56,14 +56,14 @@ describe('SettingsPage', () => {
   it('Upgrade CTA opens the UpgradeSheet via the store', async () => {
     const user = userEvent.setup();
     useTierStore.setState({ tier: 'free' });
-    renderPage();
+    renderPage(['/settings?tab=plan']);
     await user.click(screen.getByTestId('settings-upgrade-cta'));
     expect(useUpgradeSheetStore.getState().open).toBe(true);
   });
 
   it('shows the Pro tier chip and Manage Billing CTA for pro users', () => {
     useTierStore.setState({ tier: 'pro' });
-    renderPage();
+    renderPage(['/settings?tab=plan']);
     expect(screen.getByTestId('settings-tier-chip')).toHaveTextContent(/pro/i);
     expect(screen.getByTestId('settings-portal-cta')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-upgrade-cta')).toBeNull();
@@ -71,7 +71,7 @@ describe('SettingsPage', () => {
 
   it("renders today's usage from the snapshot", async () => {
     useTierStore.setState({ tier: 'free' });
-    renderPage();
+    renderPage(['/settings?tab=plan']);
     await waitFor(() => {
       expect(screen.getByText('2 / 5')).toBeInTheDocument(); // recipes
       expect(screen.getByText('0 / 1')).toBeInTheDocument(); // events
@@ -174,10 +174,27 @@ describe('SettingsPage', () => {
   });
 
   it('renders the Theme section as a segmented Light/Dark radiogroup so chefs see both options at once', () => {
-    renderPage();
+    renderPage(['/settings?tab=preferences']);
     expect(screen.getByRole('heading', { name: /^theme$/i })).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: /theme/i })).toBeInTheDocument();
     expect(screen.getByTestId('settings-theme-light')).toBeInTheDocument();
     expect(screen.getByTestId('settings-theme-dark')).toBeInTheDocument();
+  });
+
+  it('tab nav renders 5 tabs and selects Profile by default', () => {
+    renderPage();
+    expect(screen.getByTestId('settings-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-tab-profile')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('settings-tab-plan')).toHaveAttribute('aria-selected', 'false');
+  });
+
+  it('clicking a tab swaps the visible section', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    // Profile tab default → Theme heading NOT visible (it's in Preferences).
+    expect(screen.queryByRole('heading', { name: /^theme$/i })).toBeNull();
+    // Click Preferences → Theme heading appears.
+    await user.click(screen.getByTestId('settings-tab-preferences'));
+    expect(screen.getByRole('heading', { name: /^theme$/i })).toBeInTheDocument();
   });
 });
