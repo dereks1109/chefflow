@@ -369,8 +369,20 @@ export async function handleRequest(
   // POST /api/demos/provision — idempotent first-sign-in demo seed. Any
   // signed-in user can call this; the worker fast-skips repeat calls via a
   // KV marker, and uses INSERT OR IGNORE so user edits/deletes are preserved.
+  //
+  // POST /api/demos/provision?force=1 — chef-triggered "restore demos"
+  // action from Settings. Clears the KV marker first so the seed runs
+  // again. Recipes still INSERT OR IGNORE (won't overwrite chef edits);
+  // events UPSERT (overwrites the demo event row even if tweaked, which
+  // is the intended behaviour — the chef explicitly asked to restore).
   if (req.method === 'POST' && url.pathname === '/api/demos/provision') {
     try {
+      const force = url.searchParams.get('force') === '1';
+      if (force) {
+        // The marker key format is owned by demos.ts; mirror its v5
+        // prefix here. (Kept in sync via tests.)
+        await env.RATE_LIMIT.delete(`demos:provisioned:v5:${userId}`);
+      }
       const result = await provisionDemosForUser({ DB: env.DB, RATE_LIMIT: env.RATE_LIMIT }, userId);
       return json(result, 200);
     } catch (err) {

@@ -18,6 +18,10 @@ export interface ProvisionDemosOpts {
   getToken: () => Promise<string | null>;
   fetchImpl?: typeof fetch;
   origin?: string;
+  /** When true, appends ?force=1 so the worker clears its KV marker
+   *  before re-seeding. Used by the Settings "Restore demo content"
+   *  button to recover from accidental deletes. */
+  force?: boolean;
 }
 
 function isE2E(): boolean {
@@ -32,7 +36,8 @@ export async function provisionDemos(opts: ProvisionDemosOpts): Promise<Provisio
   if (!token) throw new Error('Not signed in');
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const base = (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
-  const res = await fetchImpl(`${base}/api/demos/provision`, {
+  const path = opts.force ? `/api/demos/provision?force=1` : `/api/demos/provision`;
+  const res = await fetchImpl(`${base}${path}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
   });

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowUpRight, CheckCircle2, ChevronDown, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
-import { useClerk, useUser } from '@clerk/clerk-react';
+import { useAuth, useClerk, useUser } from '@clerk/clerk-react';
+import { provisionDemos } from '../../core/demos/provisionClient';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
 import { requestPinRecovery, verifyPinRecovery, PinRecoveryError } from '../../core/pin/pinRecoveryClient';
@@ -464,6 +465,8 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <RestoreDemosSection />
+
       <section
         aria-labelledby="settings-usage-heading"
         className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
@@ -624,6 +627,71 @@ function formatPeriodEnd(unix: number): string {
 interface UserLike {
   publicMetadata: Record<string, unknown>;
   reload?: () => Promise<unknown>;
+}
+
+// Re-runs the worker's demo-content seed (recipes + the Demo Event)
+// even when the per-user KV marker says "already provisioned". Recovery
+// for chefs who deleted demos and want them back. Hidden for guests
+// (they already see demos via the public worker endpoint).
+function RestoreDemosSection() {
+  const { isSignedIn, getToken } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!isSignedIn) return null;
+
+  async function handleRestore() {
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const result = await provisionDemos({ getToken, force: true });
+      setStatus(
+        `Restored. ${result.eventsInserted} event${result.eventsInserted === 1 ? '' : 's'} + ${result.recipesInserted} recipe${result.recipesInserted === 1 ? '' : 's'} seeded. Refresh /events to see the Demo Event.`,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Restore failed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="settings-restore-demos-heading"
+      data-testid="settings-restore-demos-section"
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+    >
+      <h2 id="settings-restore-demos-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+        Demo content
+      </h2>
+      <p className="mt-2 text-xs text-slate-500">
+        Restore the 15 demo recipes and the Demo Event that ChefFlow seeds for
+        every new chef. Safe to run more than once — your own recipes are
+        untouched. The Demo Event is overwritten with its canonical version.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleRestore()}
+        disabled={busy}
+        data-testid="settings-restore-demos"
+        className="mt-3 btn-secondary text-sm disabled:opacity-60"
+      >
+        {busy ? 'Restoring…' : 'Restore demo content'}
+      </button>
+      {status && (
+        <p data-testid="settings-restore-demos-status" className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">
+          {status}
+        </p>
+      )}
+      {error && (
+        <p role="alert" data-testid="settings-restore-demos-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </section>
+  );
 }
 
 function LegalAcceptanceSection({ user }: { user: UserLike | null }) {
