@@ -334,16 +334,28 @@ function formatMoney(minor: number, currency: string): string {
 }
 
 /**
- * Comp Pro to a user — flips Clerk publicMetadata.tier to 'pro'. Does NOT
+ * Comp a paid tier to a user — flips Clerk publicMetadata.tier. Does NOT
  * create a Stripe subscription (these are manual comps with no payment).
+ * If the user later subscribes / cancels via Stripe, the webhook will
+ * overwrite this tier — same as the legacy grant-pro behaviour.
  */
+export async function grantTier(
+  userId: string,
+  tier: 'pro' | 'enterprise',
+  env: AdminEnv,
+  fetchImpl: FetchLike = fetch,
+): Promise<void> {
+  await patchClerkTier(userId, env.CLERK_SECRET_KEY, fetchImpl, tier);
+  await invalidateTierCache(userId, env.RATE_LIMIT);
+}
+
+/** Back-compat thin wrapper. Existing /admin/.../grant-pro route keeps working. */
 export async function grantPro(
   userId: string,
   env: AdminEnv,
   fetchImpl: FetchLike = fetch,
 ): Promise<void> {
-  await patchClerkTier(userId, env.CLERK_SECRET_KEY, fetchImpl, 'pro');
-  await invalidateTierCache(userId, env.RATE_LIMIT);
+  await grantTier(userId, 'pro', env, fetchImpl);
 }
 
 export async function revokePro(

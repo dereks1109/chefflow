@@ -4,6 +4,7 @@ import { ArrowUpRight, CheckCircle2, ChevronDown, LogIn, LogOut, Lock, Moon, Spa
 import { useClerk, useUser } from '@clerk/clerk-react';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { defaultAllergyKeywords } from '../../core/events/allergyKeywords';
+import { requestPinRecovery, verifyPinRecovery, PinRecoveryError } from '../../core/pin/pinRecoveryClient';
 import { useAllergyKeywordsStore } from '../../state/useAllergyKeywordsStore';
 import { usePinStore } from '../../state/usePinStore';
 import { useTierStore } from '../../state/useTierStore';
@@ -719,6 +720,11 @@ function AllergyKeywordsSection() {
         <li><strong>Risk &amp; urgency</strong> — anaphylaxis, EpiPen, severe, intolerant, reaction, warning…</li>
       </ul>
       <p className="mt-2 text-xs text-slate-500">
+        Defaults also cover common typos and misspellings (e.g. "peenut",
+        "diary" for dairy, "celary") so customer fat-fingers don't slip
+        through.
+      </p>
+      <p className="mt-2 text-xs text-slate-500">
         Everything is text-search only — never sent to AI. The default list
         is the safety baseline and can't be removed; add your own keywords
         below.
@@ -824,20 +830,57 @@ function PinSection() {
   const setPin = usePinStore((s) => s.setPin);
   const clearPin = usePinStore((s) => s.clearPin);
   const verifyPin = usePinStore((s) => s.verifyPin);
-  const [mode, setMode] = useState<'idle' | 'set' | 'change' | 'remove'>('idle');
+  const [mode, setMode] = useState<'idle' | 'set' | 'change' | 'remove' | 'forgot-send' | 'forgot-verify'>('idle');
   const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [forgotCode, setForgotCode] = useState('');
+  const [forgotInfo, setForgotInfo] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
 
   function reset() {
     setOldPin('');
     setNewPin('');
     setConfirmPin('');
     setError(null);
+    setForgotCode('');
+    setForgotInfo(null);
+    setForgotError(null);
     setMode('idle');
+  }
+
+  async function handleSendForgotCode() {
+    setForgotError(null);
+    setForgotInfo(null);
+    setBusy(true);
+    try {
+      const out = await requestPinRecovery();
+      setForgotInfo(`Code sent to ${out.emailHint ?? 'your account email'}. Check your inbox + spam folder.`);
+      setMode('forgot-verify');
+    } catch (err) {
+      const msg = err instanceof PinRecoveryError ? err.message : 'Could not send code. Try again.';
+      setForgotError(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerifyForgotCode() {
+    setForgotError(null);
+    setBusy(true);
+    try {
+      await verifyPinRecovery(forgotCode);
+      clearPin();
+      setStatus('PIN cleared. The edit screen is no longer gated until you set a new PIN.');
+      reset();
+    } catch {
+      setForgotError('Invalid or expired code. Try again or send a new one.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleSetOrChange() {
@@ -932,15 +975,12 @@ function PinSection() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  usePinStore.getState().lock();
-                  setStatus('Session locked. The PIN gate will fire on your next recipe / event edit.');
-                }}
-                data-testid="settings-pin-lock-now"
-                className="btn-secondary text-sm"
-                title="Re-arm the gate without signing out. Useful when walking away from this device."
+                onClick={() => { setStatus(null); setForgotError(null); setForgotInfo(null); setMode('forgot-send'); }}
+                data-testid="settings-pin-forgot"
+                className="text-xs text-slate-500 hover:text-accent hover:underline self-center ml-1"
+                title="Recover by email — clears the PIN locally after you confirm a code sent to your account email."
               >
-                Lock now
+                Forgot PIN?
               </button>
             </>
           ) : (
@@ -1033,6 +1073,80 @@ function PinSection() {
               {busy ? 'Working…' : 'Save'}
             </button>
           )}
+        </div>
+      )}
+
+      {(mode === 'forgot-send' || mode === 'forgot-verify') && (
+        <div className="mt-3 space-y-2" data-testid="settings-pin-forgot-flow">
+          <p className="text-xs text-slate-500">
+            {mode === 'forgot-send'
+              ? "We'll email a 6-digit recovery code to your account email. The PIN is cleared locally only — your recipes, events, and notes are not touched."
+              : 'Enter the 6-digit code from the email.'}
+          </p>
+          {forgotInfo && (
+            <p data-testid="settings-pin-forgot-info" className="text-xs text-slate-500">{forgotInfo}</p>
+          )}
+          {mode === 'forgot-verify' && (
+            <input
+              type="text"
+              inputMode="numeric"
+              value={forgotCode}
+              onChange={(e) => setForgotCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && forgotCode.length === 6) void handleVerifyForgotCode();
+              }}
+              placeholder="------"
+              aria-label="6-digit recovery code"
+              data-testid="settings-pin-forgot-code"
+              className="w-40 text-center text-xl tracking-[0.4em] font-mono rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 py-2"
+            />
+          )}
+          {forgotError && (
+            <p role="alert" data-testid="settings-pin-forgot-error" className="text-xs text-red-600 dark:text-red-400">
+              {forgotError}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={reset}
+              className="btn-secondary text-sm"
+            >
+              Cancel
+            </button>
+            {mode === 'forgot-send' ? (
+              <button
+                type="button"
+                onClick={() => void handleSendForgotCode()}
+                disabled={busy}
+                data-testid="settings-pin-forgot-send"
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {busy ? 'Sending…' : 'Send recovery code'}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleSendForgotCode()}
+                  disabled={busy}
+                  data-testid="settings-pin-forgot-resend"
+                  className="text-xs text-slate-500 hover:text-accent hover:underline disabled:opacity-50"
+                >
+                  Resend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleVerifyForgotCode()}
+                  disabled={forgotCode.length !== 6 || busy}
+                  data-testid="settings-pin-forgot-confirm"
+                  className="btn-primary text-sm disabled:opacity-50"
+                >
+                  {busy ? 'Verifying…' : 'Verify & clear PIN'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
     </section>

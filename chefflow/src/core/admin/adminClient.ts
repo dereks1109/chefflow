@@ -158,6 +158,10 @@ export function grantPro(userId: string): Promise<{ ok: true; tier: 'pro' }> {
   return adminFetch(`/admin/members/${encodeURIComponent(userId)}/grant-pro`, { method: 'POST' });
 }
 
+export function grantEnterprise(userId: string): Promise<{ ok: true; tier: 'enterprise' }> {
+  return adminFetch(`/admin/members/${encodeURIComponent(userId)}/grant-enterprise`, { method: 'POST' });
+}
+
 export function revokePro(userId: string): Promise<{ ok: true; tier: 'free' }> {
   return adminFetch(`/admin/members/${encodeURIComponent(userId)}/revoke-pro`, { method: 'POST' });
 }

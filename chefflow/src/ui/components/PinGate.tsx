@@ -2,6 +2,11 @@ import { useState, type ReactNode } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { Lock, X } from 'lucide-react';
 import { usePinStore } from '../../state/usePinStore';
+import {
+  requestPinRecovery,
+  verifyPinRecovery,
+  PinRecoveryError,
+} from '../../core/pin/pinRecoveryClient';
 
 // ---------------------------------------------------------------------------
 // PinGate — wraps an editor page (RecipeEditor, EventEditor). When a PIN
@@ -9,12 +14,12 @@ import { usePinStore } from '../../state/usePinStore';
 // children behind a numeric-PIN entry modal. Once unlocked, the gate is
 // transparent for the rest of the browser session (refresh re-arms).
 //
-// "Forgot PIN" flow: chef types their Clerk-primary email to confirm
-// they're the account owner (they're already signed in — this is a
-// "yes-this-is-me" gesture rather than a fresh credential proof) and
-// the local PIN is wiped. Pragmatic compromise: no worker round-trip,
-// no Resend email, ships in a day. Strong-credentials flow can be
-// layered later if needed.
+// "Forgot PIN" flow: chef clicks Forgot PIN? → worker emails a 6-digit
+// code to their Clerk-primary email → chef enters it → worker verifies
+// → SPA clears the local PIN. The worker never sees the PIN itself;
+// the code is the proof-of-account-access. Server-side rate-limited
+// (3 sends per hour per user) so a hijacked Clerk session can't spam
+// the inbox.
 // ---------------------------------------------------------------------------
 
 interface Props {
@@ -30,6 +35,8 @@ export default function PinGate({ children }: Props) {
   return <PinGateModal />;
 }
 
+type ForgotStep = 'send' | 'verify';
+
 function PinGateModal() {
   const verifyPin = usePinStore((s) => s.verifyPin);
   const clearPin = usePinStore((s) => s.clearPin);
@@ -38,8 +45,11 @@ function PinGateModal() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'enter' | 'forgot'>('enter');
-  const [emailDraft, setEmailDraft] = useState('');
+  const [forgotStep, setForgotStep] = useState<ForgotStep>('send');
+  const [code, setCode] = useState('');
   const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotInfo, setForgotInfo] = useState<string | null>(null);
+  const primaryEmail = user?.primaryEmailAddress?.emailAddress ?? '';
 
   async function handleVerify() {
     setError(null);
@@ -50,28 +60,50 @@ function PinGateModal() {
         setError('Incorrect PIN. Try again, or use "Forgot PIN".');
         setPin('');
       }
-      // On success, the store flips unlockedThisSession=true and the
-      // gate's parent re-renders past the modal automatically.
     } finally {
       setBusy(false);
     }
   }
 
-  function handleForgotConfirm() {
+  async function handleSendCode() {
     setForgotError(null);
-    const primary = user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase() ?? '';
-    if (!primary) {
-      setForgotError('No account email available — please sign out and back in.');
-      return;
+    setForgotInfo(null);
+    setBusy(true);
+    try {
+      const out = await requestPinRecovery();
+      setForgotInfo(`Code sent to ${out.emailHint ?? primaryEmail}. Check your inbox + spam folder.`);
+      setForgotStep('verify');
+    } catch (err) {
+      const msg = err instanceof PinRecoveryError
+        ? err.message
+        : 'Could not send code. Try again.';
+      setForgotError(msg);
+    } finally {
+      setBusy(false);
     }
-    if (emailDraft.trim().toLowerCase() !== primary) {
-      setForgotError('Email did not match the account on file.');
-      return;
+  }
+
+  async function handleVerifyCode() {
+    setForgotError(null);
+    setBusy(true);
+    try {
+      await verifyPinRecovery(code);
+      // Burn the local PIN. The parent PinGate observes isPinSet=false
+      // on next render and the modal unmounts.
+      clearPin();
+    } catch {
+      setForgotError('Invalid or expired code. Try again or send a new one.');
+    } finally {
+      setBusy(false);
     }
-    clearPin();
-    // After clear, isPinSet flips to false → the parent PinGate renders
-    // children directly. No state cleanup needed here — the modal
-    // unmounts.
+  }
+
+  function backToEnter() {
+    setMode('enter');
+    setForgotStep('send');
+    setCode('');
+    setForgotError(null);
+    setForgotInfo(null);
   }
 
   return (
@@ -92,7 +124,9 @@ function PinGateModal() {
             <p className="mt-1 text-xs text-slate-500">
               {mode === 'enter'
                 ? 'This recipe / event is gated. You set a PIN in Settings — enter it to edit.'
-                : 'To clear your PIN, confirm your account email below. The PIN will be removed from this device.'}
+                : forgotStep === 'send'
+                  ? `We'll email a 6-digit recovery code to ${primaryEmail || 'your account email'}.`
+                  : 'Enter the 6-digit code from the email. Clearing the PIN only affects the lock screen — your recipes, events, and notes stay intact.'}
             </p>
           </div>
         </div>
@@ -138,17 +172,53 @@ function PinGateModal() {
               </button>
             </div>
           </>
+        ) : forgotStep === 'send' ? (
+          <>
+            {forgotError && (
+              <p role="alert" data-testid="pin-gate-forgot-error" className="mt-3 text-xs text-red-600 dark:text-red-400">
+                {forgotError}
+              </p>
+            )}
+            <div className="mt-4 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={backToEnter}
+                className="text-xs text-slate-500 hover:text-accent hover:underline inline-flex items-center gap-1"
+              >
+                <X className="h-3 w-3" aria-hidden="true" />
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSendCode()}
+                disabled={busy || !primaryEmail}
+                data-testid="pin-gate-forgot-send"
+                className="btn-secondary text-sm disabled:opacity-50"
+              >
+                {busy ? 'Sending…' : 'Send recovery code'}
+              </button>
+            </div>
+          </>
         ) : (
           <>
+            {forgotInfo && (
+              <p data-testid="pin-gate-forgot-info" className="mt-3 text-xs text-slate-500">
+                {forgotInfo}
+              </p>
+            )}
             <input
-              type="email"
+              type="text"
+              inputMode="numeric"
               autoFocus
-              value={emailDraft}
-              onChange={(e) => setEmailDraft(e.target.value)}
-              placeholder={user?.primaryEmailAddress?.emailAddress ?? 'you@example.com'}
-              aria-label="Confirm account email"
-              data-testid="pin-gate-forgot-email"
-              className="mt-4 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 px-3 py-2 text-sm"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && code.length === 6) void handleVerifyCode();
+              }}
+              placeholder="------"
+              aria-label="6-digit recovery code"
+              data-testid="pin-gate-forgot-code"
+              className="mt-3 w-full text-center text-2xl tracking-[0.4em] font-mono rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-surface-2 py-3"
             />
             {forgotError && (
               <p role="alert" data-testid="pin-gate-forgot-error" className="mt-2 text-xs text-red-600 dark:text-red-400">
@@ -158,21 +228,32 @@ function PinGateModal() {
             <div className="mt-4 flex items-center justify-between gap-2">
               <button
                 type="button"
-                onClick={() => { setMode('enter'); setForgotError(null); setEmailDraft(''); }}
+                onClick={backToEnter}
                 className="text-xs text-slate-500 hover:text-accent hover:underline inline-flex items-center gap-1"
               >
                 <X className="h-3 w-3" aria-hidden="true" />
                 Back
               </button>
-              <button
-                type="button"
-                onClick={handleForgotConfirm}
-                disabled={emailDraft.trim().length === 0}
-                data-testid="pin-gate-forgot-confirm"
-                className="btn-secondary text-sm disabled:opacity-50"
-              >
-                Clear PIN
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSendCode()}
+                  disabled={busy}
+                  data-testid="pin-gate-forgot-resend"
+                  className="text-xs text-slate-500 hover:text-accent hover:underline disabled:opacity-50"
+                >
+                  Resend
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleVerifyCode()}
+                  disabled={code.length !== 6 || busy}
+                  data-testid="pin-gate-forgot-confirm"
+                  className="btn-secondary text-sm disabled:opacity-50"
+                >
+                  {busy ? 'Verifying…' : 'Verify & clear PIN'}
+                </button>
+              </div>
             </div>
           </>
         )}

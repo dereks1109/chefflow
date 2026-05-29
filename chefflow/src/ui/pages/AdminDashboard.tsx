@@ -14,6 +14,7 @@ import {
   listContactSubmissions,
   listAllergenAudits,
   listD1AllergenAudits,
+  grantEnterprise,
   grantPro,
   revokePro,
   cancelSubscription,
@@ -708,20 +709,35 @@ function MemberDrawer({ member, onClose, onChange }: MemberDrawerProps) {
         <section className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
           <h3 className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Actions</h3>
 
-          {member.tier === 'free' ? (
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
-              disabled={busy !== null}
+              disabled={busy !== null || member.tier === 'pro'}
               onClick={() => void run('grant', () => grantPro(member.userId), () => {
                 onChange({ tier: 'pro' });
                 setActionInfo('Comp Pro granted. Clerk metadata updated.');
               })}
-              className="btn-primary w-full disabled:opacity-60"
+              className="btn-primary disabled:opacity-60"
               data-testid="admin-grant-pro"
+              title={member.tier === 'pro' ? 'Already on Pro' : 'Set this user to Pro tier'}
             >
               {busy === 'grant' ? 'Granting…' : 'Grant Pro (comp)'}
             </button>
-          ) : (
+            <button
+              type="button"
+              disabled={busy !== null || member.tier === 'enterprise'}
+              onClick={() => void run('grantEnt', () => grantEnterprise(member.userId), () => {
+                onChange({ tier: 'enterprise' });
+                setActionInfo('Comp Enterprise granted. Clerk metadata updated.');
+              })}
+              className="btn-primary disabled:opacity-60"
+              data-testid="admin-grant-enterprise"
+              title={member.tier === 'enterprise' ? 'Already on Enterprise' : 'Set this user to Enterprise tier'}
+            >
+              {busy === 'grantEnt' ? 'Granting…' : 'Grant Enterprise (comp)'}
+            </button>
+          </div>
+          {member.tier !== 'free' && (
             <button
               type="button"
               disabled={busy !== null}
@@ -732,9 +748,13 @@ function MemberDrawer({ member, onClose, onChange }: MemberDrawerProps) {
               className="btn-secondary w-full disabled:opacity-60"
               data-testid="admin-revoke-pro"
             >
-              {busy === 'revoke' ? 'Revoking…' : 'Revoke Pro'}
+              {busy === 'revoke' ? 'Revoking…' : 'Revoke (set Free)'}
             </button>
           )}
+          <p className="text-[11px] text-slate-500 italic">
+            Comp grants flip Clerk metadata only. Future Stripe events
+            (subscribe / cancel) will overwrite this tier.
+          </p>
 
           {member.stripeCustomerId && member.subscriptionStatus !== 'none' && member.subscriptionStatus !== 'canceled' && (
             <div className="rounded-md border border-slate-200 dark:border-slate-700 p-3 space-y-2">

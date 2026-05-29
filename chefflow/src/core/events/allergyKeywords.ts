@@ -59,6 +59,30 @@ export const DEFAULT_ALLERGY_KEYWORDS: readonly string[] = [
   'anaphylaxis', 'anaphylactic', 'epipen', 'adrenaline',
   'allergy', 'allergic', 'allergies',
   'reaction', 'intolerant', 'intolerance', 'sensitivity', 'severe', 'warning',
+  // ---- Common typos & misspellings ------------------------------------
+  // Customer-side fat-fingers / phonetic spellings of the most safety-
+  // critical allergens, gathered 2026-05-29 from an NLP review. The
+  // matcher is exact text-search only — without these, "no peenut
+  // please" silently passes through. Excludes real English words
+  // (e.g. "salary" for "celery") to avoid silent false positives;
+  // those can be added per-chef via the custom-keywords UI.
+  // dairy
+  'diary', 'daiery', 'dayri', 'dary', 'dairi',
+  // peanut / peanuts
+  'peenut', 'peenuts', 'peanutt', 'peanot', 'peaunt', 'penut', 'penuts',
+  'pnut', 'pnuts', 'peanunts', 'peannuts',
+  // nuts / tree nuts
+  'nutts', 'nutz', 'treenut', 'treenuts', 'tree-nut', 'tree-nuts',
+  // gluten
+  'glutten', 'glutin', 'glooten', 'glueten', 'gluen', 'glutton', 'gltn',
+  // wheat
+  'weat', 'wheet', 'whet', 'wheats', 'weath',
+  // sesame
+  'sesami', 'sesamy', 'seseme', 'sezame', 'sasame', 'sesmae',
+  // celery
+  'celary', 'cellery', 'celerie', 'sellery', 'cellary',
+  // request
+  'requst', 'reqeust', 'reqest', 'requets', 'rquest', 'requeest', 'requestt',
 ] as const;
 
 export interface KeywordMatch {

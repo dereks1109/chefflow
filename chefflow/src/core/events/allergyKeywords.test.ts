@@ -87,6 +87,19 @@ describe('findAllergyKeywords', () => {
     }
   });
 
+  it('matches common typo / misspelling variants (food-safety guardrail)', () => {
+    // The matcher is exact text-search; a customer-typed misspelling
+    // like "peenut" or "diary" would silently slip through unless the
+    // default list covers it. Spot-check a sample of the misspelling
+    // defaults across categories — phonetic, transposition, and fat-
+    // finger families.
+    const text = 'Severe peenut allergy. Diary intolerance. Glutten free. Celary makes her sick.';
+    const kws = findAllergyKeywords(text).map((m) => m.keyword);
+    for (const want of ['peenut', 'diary', 'glutten', 'celary']) {
+      expect(kws).toContain(want);
+    }
+  });
+
   it('matches the new Logic, Negation & Requests keywords (request verbs)', () => {
     // Six representative samples across the new request-verb words. The
     // matcher already handles word boundaries for ≥3-char words via

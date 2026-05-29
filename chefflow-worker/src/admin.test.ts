@@ -4,6 +4,7 @@ import {
   listMembers,
   getMetrics,
   grantPro,
+  grantTier,
   revokePro,
   cancelUserSubscription,
   refundLatestCharge,
@@ -185,6 +186,27 @@ describe('grantPro / revokePro', () => {
       public_metadata: { tier: 'pro', stripeCustomerId: 'cus_x' },
     });
     // KV cache for the user's tier should be cleared so the next /quota call re-reads.
+    expect(await env.RATE_LIMIT.get('tier:user_a')).toBeNull();
+  });
+
+  it('grantTier("enterprise") PATCHes Clerk metadata with tier=enterprise + invalidates KV cache', async () => {
+    const env = makeEnv();
+    await env.RATE_LIMIT.put('tier:user_a', 'pro');
+    let patchedBody: unknown = null;
+    const fetchImpl: FetchLike = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        patchedBody = init.body;
+        return new Response('{}', { status: 200 });
+      }
+      return new Response(JSON.stringify({ public_metadata: { tier: 'pro', stripeCustomerId: 'cus_x' } }), { status: 200 });
+    });
+
+    await grantTier('user_a', 'enterprise', env, fetchImpl);
+
+    // Preserves other metadata; only the tier flips.
+    expect(JSON.parse(patchedBody as string)).toEqual({
+      public_metadata: { tier: 'enterprise', stripeCustomerId: 'cus_x' },
+    });
     expect(await env.RATE_LIMIT.get('tier:user_a')).toBeNull();
   });
 

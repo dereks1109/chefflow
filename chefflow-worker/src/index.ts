@@ -11,6 +11,7 @@ import {
   getMetrics,
   getActivity,
   grantPro,
+  grantTier,
   revokePro,
   cancelUserSubscription,
   refundLatestCharge,
@@ -56,6 +57,7 @@ import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
 import { runDailyDigest } from './dailyDigest';
 import { runGmailDigest } from './gmailDigest';
+import { requestPinRecoveryCode, verifyPinRecoveryCode } from './pinRecovery';
 import { estimateCommute, CommuteError } from './commute';
 import {
   submitReport as takedownSubmitReport,
@@ -550,6 +552,40 @@ export async function handleRequest(
     return json({ tier, quotas: Object.fromEntries(snapshots) }, 200);
   }
 
+  // POST /pin/recovery/request — emails a 6-digit recovery code to the
+  // chef's primary Clerk email. The PIN itself lives only in the chef's
+  // localStorage; this endpoint exists so the chef can prove access to
+  // their account before the SPA clears the local PIN. Rate-limited
+  // server-side (3/hour/user) via KV counter.
+  if (req.method === 'POST' && url.pathname === '/pin/recovery/request') {
+    const out = await requestPinRecoveryCode(env, userId, fetchImpl);
+    if (out.sent) {
+      return json({ ok: true, emailHint: out.emailHint }, 200);
+    }
+    if (out.skipReason === 'rate-limited') {
+      return json({ error: 'Too many recovery attempts — try again in an hour.', reason: 'rate-limited' }, 429);
+    }
+    if (out.skipReason === 'no-email-on-clerk') {
+      return json({ error: 'No verified email on file for this account.', reason: 'no-email' }, 400);
+    }
+    // Catchall: don't leak the upstream skip reason.
+    return json({ error: 'Could not send recovery code.', reason: 'send-failed' }, 502);
+  }
+
+  // POST /pin/recovery/verify — body { code }. Returns ok=true on
+  // match; the SPA then clears the local PIN. The code is single-use
+  // (burned on success).
+  if (req.method === 'POST' && url.pathname === '/pin/recovery/verify') {
+    const body = (await readJson(req)) as { code?: unknown } | null;
+    const code = typeof body?.code === 'string' ? body.code : '';
+    const out = await verifyPinRecoveryCode(env, userId, code);
+    if (out.ok) return json({ ok: true }, 200);
+    // Map both "no-code" and "expired" to the same client-facing
+    // string so a session-stealing adversary can't enumerate code
+    // lifetimes.
+    return json({ ok: false, error: 'Invalid or expired code.' }, 400);
+  }
+
   // POST /billing/checkout-session — mint a Stripe Checkout URL.
   if (req.method === 'POST' && url.pathname === '/billing/checkout-session') {
     const body = (await readJson(req)) as { interval?: unknown; tier?: unknown } | null;
@@ -720,7 +756,7 @@ export async function handleRequest(
       }
     }
 
-    const memberActionMatch = /^\/admin\/members\/([^/]+)\/(grant-pro|revoke-pro|cancel-subscription|refund)$/.exec(url.pathname);
+    const memberActionMatch = /^\/admin\/members\/([^/]+)\/(grant-pro|grant-enterprise|revoke-pro|cancel-subscription|refund)$/.exec(url.pathname);
     if (req.method === 'POST' && memberActionMatch) {
       const targetUserId = memberActionMatch[1];
       const action = memberActionMatch[2];
@@ -728,6 +764,10 @@ export async function handleRequest(
         if (action === 'grant-pro') {
           await grantPro(targetUserId, env, fetchImpl);
           return json({ ok: true, tier: 'pro' }, 200);
+        }
+        if (action === 'grant-enterprise') {
+          await grantTier(targetUserId, 'enterprise', env, fetchImpl);
+          return json({ ok: true, tier: 'enterprise' }, 200);
         }
         if (action === 'revoke-pro') {
           await revokePro(targetUserId, env, fetchImpl);
