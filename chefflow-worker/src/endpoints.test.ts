@@ -1,4 +1,20 @@
 import { describe, it, expect, vi } from 'vitest';
+
+// Mock groqClient before importing endpoints so handleEndpoint sees the
+// mocked runGroq when the workflow path tries to use it.
+const runGroqMock = vi.hoisted(() => vi.fn(async () => '{"groq":"ok"}'));
+vi.mock('./groqClient', () => ({
+  runGroq: runGroqMock,
+  GROQ_WORKFLOW_MODEL: 'moonshotai/kimi-k2-instruct',
+  GroqError: class extends Error {
+    readonly status?: number;
+    constructor(message: string, status?: number) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
+
 import { handleEndpoint } from './endpoints';
 import { TEXT_MODEL, VISION_MODEL } from './types';
 
@@ -31,13 +47,54 @@ describe('handleEndpoint', () => {
     expect(captured.model).toBe(TEXT_MODEL);
   });
 
-  it('uses TEXT_MODEL for workflow', async () => {
+  it('workflow + NO GROQ_API_KEY → falls through to Workers AI Llama (TEXT_MODEL)', async () => {
+    runGroqMock.mockClear();
     const captured: { model?: string } = {};
     await handleEndpoint('workflow', fakeAi(captured), {
       systemPrompt: 'SYS',
       userPrompt: 'an event',
     });
     expect(captured.model).toBe(TEXT_MODEL);
+    expect(runGroqMock).not.toHaveBeenCalled();
+  });
+
+  it('workflow + GROQ_API_KEY → routes to Groq + Kimi K2 (NOT Workers AI)', async () => {
+    runGroqMock.mockClear();
+    runGroqMock.mockResolvedValueOnce('{"groq":"ok"}');
+    const captured: { model?: string } = {};
+    const out = await handleEndpoint(
+      'workflow',
+      fakeAi(captured),
+      { systemPrompt: 'SYS', userPrompt: 'an event' },
+      'gsk_test',
+    );
+    expect(out).toBe('{"groq":"ok"}');
+    expect(runGroqMock).toHaveBeenCalledTimes(1);
+    const callArgs = runGroqMock.mock.calls[0] as unknown as unknown[];
+    expect(callArgs[0]).toBe('gsk_test');
+    expect(callArgs[1]).toBe('moonshotai/kimi-k2-instruct');
+    // Workers AI was NOT called.
+    expect(captured.model).toBeUndefined();
+  });
+
+  it('workflow + Groq throws → falls back to Workers AI Llama (chef still gets a schedule)', async () => {
+    runGroqMock.mockClear();
+    runGroqMock.mockRejectedValueOnce(new Error('Groq 503: upstream busy'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const captured: { model?: string } = {};
+      const out = await handleEndpoint(
+        'workflow',
+        fakeAi(captured),
+        { systemPrompt: 'SYS', userPrompt: 'an event' },
+        'gsk_test',
+      );
+      expect(out).toBe('{"ok":true}');
+      expect(captured.model).toBe(TEXT_MODEL);
+      expect(runGroqMock).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('uses VISION_MODEL for photo and defaults jsonMode to false', async () => {

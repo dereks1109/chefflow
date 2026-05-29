@@ -114,6 +114,12 @@ export interface Env {
   // route returns 503 and the SPA hides the banner. Setup:
   // docs/operations/google-maps-api-setup.md.
   GOOGLE_MAPS_API_KEY?: string;
+  // Groq API key — when set, routes /api/llm/workflow through Groq +
+  // Kimi K2 for stronger reasoning + sub-second latency on workflow
+  // generation. Unset → falls back to Workers AI Llama (the previous
+  // behaviour). Setup: console.groq.com → API Keys → set via
+  // `wrangler secret put GROQ_API_KEY`.
+  GROQ_API_KEY?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
@@ -947,7 +953,7 @@ export async function handleRequest(
 
     let content: string;
     try {
-      content = await handleEndpoint(endpoint, env.AI, body);
+      content = await handleEndpoint(endpoint, env.AI, body, env.GROQ_API_KEY);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return json({ error: msg }, 502);
