@@ -83,10 +83,14 @@ describe('MobileTopBar', () => {
     expect(screen.getByTestId('nav-upgrade-button')).toBeInTheDocument();
   });
 
-  it('hides the Upgrade button for pro users', () => {
+  it('keeps the Upgrade button visible for Pro users with an upgrade-to-Enterprise label', () => {
+    // Behaviour shift: the Upgrade button used to self-hide on Pro+
+    // tiers. Now it stays mounted and re-labels so chefs can review /
+    // change plans without leaving the nav.
     useTierStore.setState({ tier: 'pro' });
     renderBar();
-    expect(screen.queryByTestId('nav-upgrade-button')).toBeNull();
+    const btn = screen.getByTestId('nav-upgrade-button');
+    expect(btn.textContent).toContain('Upgrade to Enterprise');
   });
 
   it('shows the signed-in avatar when the user is signed in', () => {

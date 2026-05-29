@@ -100,10 +100,21 @@ describe('TopNav', () => {
     expect(screen.getByTestId('nav-upgrade-button')).toBeInTheDocument();
   });
 
-  it('hides the Upgrade button for pro users', () => {
+  it('keeps the Upgrade button visible for Pro users with an upgrade-to-Enterprise label', () => {
+    // Behaviour shift: the Upgrade button used to self-hide on Pro+
+    // tiers. Now it stays mounted and re-labels so chefs can review /
+    // change plans without leaving the nav.
     useTierStore.setState({ tier: 'pro' });
     renderNav();
-    expect(screen.queryByTestId('nav-upgrade-button')).toBeNull();
+    const btn = screen.getByTestId('nav-upgrade-button');
+    expect(btn.textContent).toContain('Upgrade to Enterprise');
+  });
+
+  it('relabels to "Manage plan" for Enterprise users', () => {
+    useTierStore.setState({ tier: 'enterprise' });
+    renderNav();
+    const btn = screen.getByTestId('nav-upgrade-button');
+    expect(btn.textContent).toContain('Manage plan');
   });
 
   it('clicking the Upgrade button opens the UpgradeSheet with reason=general', async () => {
