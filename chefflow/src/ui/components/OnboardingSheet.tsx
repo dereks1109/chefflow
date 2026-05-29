@@ -200,7 +200,17 @@ export default function OnboardingSheet({ onDone }: Props) {
               >
                 Terms of Service
               </a>
-              {' '}and the{' '}
+              ,{' '}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noreferrer"
+                className="text-accent hover:underline"
+                data-testid="onboarding-privacy-link"
+              >
+                Privacy Policy
+              </a>
+              , and the{' '}
               <a
                 href="/disclaimer"
                 target="_blank"

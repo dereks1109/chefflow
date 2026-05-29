@@ -3,11 +3,17 @@ import { Link } from 'react-router-dom';
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" lastUpdated="2026-05-21">
+    <LegalLayout title="Privacy Policy" lastUpdated="2026-05-29">
       <p>
         This policy explains what personal data ChefFlow collects, why we collect it, where it goes,
         and what rights you have under UK GDPR. We have written it in plain English because you
         should be able to understand what you agreed to.
+      </p>
+      <p>
+        <strong>We never sell your personal data.</strong> ChefFlow does not sell, rent, or trade
+        any personal data to third parties for advertising, marketing, or any other commercial
+        purpose. The sub-processors listed below process your data on our behalf only, under data-
+        protection contracts.
       </p>
 
       <h2 id="controller" className="text-xl md:text-2xl font-semibold">1. Data controller</h2>
@@ -74,9 +80,10 @@ export default function PrivacyPage() {
         the community library.
       </p>
       <p>
-        <strong>Lawful basis:</strong> Article 6(1)(a) UK GDPR — consent (you opt in by choosing
-        to publish). [REVIEW: confirm this is implemented as a genuine opt-in action, not pre-ticked
-        or default-on.]
+        <strong>Lawful basis:</strong> Article 6(1)(a) UK GDPR — consent. Publishing is an explicit,
+        unticked action: the chef clicks "Publish to community" and is then shown an attestation
+        modal confirming the allergen tagging is accurate before the publish completes. There is no
+        default-on or pre-ticked consent — every publish is an affirmative action.
       </p>
 
       <h3 id="ai-data" className="text-lg md:text-xl font-semibold">AI feature content — Groq via Cloudflare Workers</h3>
@@ -188,8 +195,8 @@ export default function PrivacyPage() {
       <h2 id="your-rights" className="text-xl md:text-2xl font-semibold">5. Your rights under UK GDPR</h2>
       <p>
         You have the following rights in relation to personal data ChefFlow controls. To exercise
-        any right, email <a href="mailto:[REVIEW DPO email]">[REVIEW DPO email]</a>. We will respond
-        within 30 days. [REVIEW: confirm response-time SLA and DPO email address before launch.]
+        any right, email <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a>. We will respond
+        within 30 days as required by UK GDPR.
       </p>
       <ul>
         <li>
@@ -243,7 +250,7 @@ export default function PrivacyPage() {
         a complaint with the UK Information Commissioner's Office (ICO) at{' '}
         <a href="https://ico.org.uk/make-a-complaint/" target="_blank" rel="noreferrer">ico.org.uk/make-a-complaint</a>.
         We would, however, appreciate the opportunity to address your concern first — please contact
-        us at <a href="mailto:[REVIEW DPO email]">[REVIEW DPO email]</a> before escalating to the
+        us at <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a> before escalating to the
         ICO.
       </p>
 

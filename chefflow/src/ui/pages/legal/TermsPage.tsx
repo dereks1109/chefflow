@@ -2,9 +2,9 @@ import LegalLayout from './LegalLayout';
 
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms &amp; Conditions" lastUpdated="2026-05-21">
+    <LegalLayout title="Terms &amp; Conditions" lastUpdated="2026-05-29">
       <p>
-        Effective date: [REVIEW: insert effective date before launch]. Last updated: 2026-05-21.
+        Effective date: 2026-05-29. Last updated: 2026-05-29.
       </p>
       <p>
         These Terms and Conditions ("Terms") govern your access to and use of ChefFlow. Please read
@@ -307,7 +307,7 @@ export default function TermsPage() {
       </p>
       <p>
         If a dispute arises, we encourage you to contact us first at{' '}
-        <a href="mailto:chefflow.support@[REVIEW domain]">chefflow.support@[REVIEW domain]</a>{' '}
+        <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a>{' '}
         so we can try to resolve it informally.
       </p>
 
@@ -328,8 +328,7 @@ export default function TermsPage() {
         </li>
         <li>
           <strong>Contact:</strong>{' '}
-          <a href="mailto:chefflow.support@[REVIEW domain]">chefflow.support@[REVIEW domain]</a>.
-          [REVIEW: insert verified contact email before launch.]
+          <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a>.
         </li>
       </ul>
 

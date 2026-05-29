@@ -2,7 +2,7 @@ import LegalLayout from './LegalLayout';
 
 export default function CookiesPage() {
   return (
-    <LegalLayout title="Cookie Policy" lastUpdated="2026-05-19">
+    <LegalLayout title="Cookie Policy" lastUpdated="2026-05-29">
       <p>
         This policy describes the cookies and browser-storage keys ChefFlow uses, why we use them,
         and how to manage them. Under UK PECR we must obtain your consent before setting any

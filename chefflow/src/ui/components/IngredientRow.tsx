@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, X, Info } from 'lucide-react';
 import { ALLERGEN_LABEL, ALLERGEN_TAGS } from '../../core/recipes/llm/allergens';
 import { getRecipeAllergenList } from '../../core/recipes/recipeShape';
@@ -44,7 +44,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
     return () => { cancelled = true; };
   }, [value.componentRecipeId]);
 
-  // The autocomplete is open whenever the name starts with `#` AND the user
+  // The autocomplete is open whenever the name starts with `@` AND the user
   // hasn't already picked a recipe (componentRecipeId set). After pick, the
   // user can re-trigger it by clearing the name back to an `@`-prefixed string.
   const hasLinkPrefix = value.name.startsWith('@');
@@ -82,7 +82,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
   }
 
   const flags = allergenMatches ?? [];
-  const hasAllergens = flags.length > 0;
+  const hasAllergens = flags.length > 0 || inheritedAllergens.length > 0;
   const availableToAdd = ALLERGEN_TAGS.filter((t) => !flags.includes(t));
 
   function setAllergenFlags(next: AllergenTag[] | undefined) {
@@ -100,10 +100,24 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
   }
 
   // Adding goes through a 5-second cooldown modal (mirror of the removal
-  // gate — protects against a misclick on the dropdown silently adding a
-  // false-positive allergen). The select onChange opens the modal; the
-  // modal Confirm callback runs `commitAddFlag`.
+  // gate — protects against a misclick on the picker silently adding a
+  // false-positive allergen). The icon-button popover opens the modal;
+  // the modal Confirm callback runs `commitAddFlag`.
   const [pendingAddTag, setPendingAddTag] = useState<AllergenTag | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Outside-click closes the allergen picker popover so the chef can
+  // dismiss without taking an action.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    function onClick(e: MouseEvent) {
+      if (!pickerRef.current?.contains(e.target as Node)) setPickerOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [pickerOpen]);
+
   function commitAddFlag() {
     if (!pendingAddTag) return;
     setAllergenFlags([...flags, pendingAddTag]);
@@ -119,140 +133,172 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
   return (
     <li
       className={[
-        'py-2 pl-2',
+        'py-1.5 pl-2',
         hasAllergens ? 'border-l-2 border-red-500 bg-red-50/40 dark:bg-red-900/10' : '',
       ].join(' ')}
     >
-      <div className="flex items-start gap-2">
-        <span className="text-sm font-semibold w-6 pt-1.5">{index + 1}.</span>
-        <div className="flex-1 flex flex-col gap-2 min-w-0">
-          <div className="relative">
-            <div className="flex items-center gap-1">
-              <input
-                type="text"
-                value={value.name}
-                onChange={(e) => onNameChange(e.target.value)}
-                onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
-                className="input flex-1 min-w-0 text-sm py-1"
-                aria-label="Ingredient name"
-                placeholder="Ingredient  (type @ to link another recipe)"
-              />
-            </div>
-            {showAutocomplete && (
-              <RecipeAutocomplete
-                query={autocompleteQuery}
-                excludeRecipeId={currentRecipeId}
-                onSelect={selectComponentRecipe}
-                onClose={() => setAutocompleteOpen(false)}
-              />
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
-            {flags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 rounded-full border border-red-600
-                           text-red-700 dark:text-red-300 dark:border-red-500 px-2 py-0.5 text-xs"
-                title={`Contains: ${ALLERGEN_LABEL[tag]}`}
-              >
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                {ALLERGEN_LABEL[tag]}
-                <button
-                  type="button"
-                  onClick={() => removeFlag(tag)}
-                  aria-label={`Remove ${ALLERGEN_LABEL[tag]} flag from this ingredient`}
-                  className="ml-0.5 opacity-60 hover:opacity-100"
-                >
-                  <X className="h-3 w-3" aria-hidden="true" />
-                </button>
-              </span>
-            ))}
-            {/* Tags inherited from the linked sub-recipe (when `value` is a
-                #-ingredient). Same pill markup as the editable allergen flags
-                above, but READ-ONLY — no remove button, since chefs edit the
-                source sub-recipe to change them. Key-ingredient tags use the
-                neutral black-bordered pill from RecipeCard. */}
-            {inheritedAllergens.map((tag) => (
-              <span
-                key={`inh-a-${tag}`}
-                className="inline-flex items-center gap-1 rounded-full border border-red-600
-                           text-red-700 dark:text-red-300 dark:border-red-500 px-2 py-0.5 text-xs"
-                title={`Inherited from sub-recipe: ${ALLERGEN_LABEL[tag]}`}
-                data-testid={`ingredient-inherited-allergen-${tag}`}
-              >
-                <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                {ALLERGEN_LABEL[tag]}
-              </span>
-            ))}
-            {/* keyIngredientTags inheritance pills removed 2026-05-28 —
-                feature scrapped along with the broader keyIngredientTags
-                data model. */}
-            {availableToAdd.length > 0 && (
-              <>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    const v = e.target.value as AllergenTag | '';
-                    if (v) setPendingAddTag(v);
-                  }}
-                  className="text-xs rounded border border-slate-300 dark:border-slate-700
-                             bg-transparent text-slate-600 dark:text-slate-400 px-2 min-h-touch"
-                  aria-label="Flag an allergen on this ingredient"
-                >
-                  <option value="">{hasAllergens ? '+ add allergen' : '+ flag allergen'}</option>
-                  {availableToAdd.map((t) => (
-                    <option key={t} value={t}>{ALLERGEN_LABEL[t]}</option>
-                  ))}
-                </select>
-                {/* Belt-and-braces reminder that allergen tagging is the
-                    chef's responsibility, not ChefFlow's — surfacing the
-                    same framing here as the publish-time attestation modal
-                    means the chef sees it on every ingredient edit. */}
-                <span
-                  data-testid={`ingredient-allergen-reminder-${index}`}
-                  tabIndex={0}
-                  aria-label="Allergen tagging is chef-declared — supplier labels are authoritative"
-                  title="Tag allergens you can confirm from the ingredient's label. ChefFlow does not detect allergens automatically. Supplier labels are authoritative."
-                  className="inline-flex items-center justify-center h-5 w-5 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-help focus:outline-none focus:ring-1 focus:ring-accent"
-                >
-                  <Info className="h-3 w-3" aria-hidden="true" />
-                </span>
-              </>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              step="any"
-              value={value.amount}
-              onChange={(e) => update('amount', Number(e.target.value))}
-              className="input flex-1 text-sm py-1"
-              aria-label="Amount"
+      {/* Top row — single horizontal line on desktop. Wraps on narrow
+          viewports so the qty/unit drop under the name; the allergen
+          icon + delete stay on the top line so the chef can act on the
+          row without scrolling. */}
+      <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
+        <span className="text-sm font-semibold w-6 shrink-0 text-slate-500" aria-hidden="true">
+          {index + 1}.
+        </span>
+        <div className="relative flex-1 min-w-[10rem]">
+          <input
+            type="text"
+            value={value.name}
+            onChange={(e) => onNameChange(e.target.value)}
+            onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
+            className="input w-full text-sm py-1.5"
+            aria-label="Ingredient name"
+            placeholder="Ingredient (type @ to link another recipe)"
+          />
+          {showAutocomplete && (
+            <RecipeAutocomplete
+              query={autocompleteQuery}
+              excludeRecipeId={currentRecipeId}
+              onSelect={selectComponentRecipe}
+              onClose={() => setAutocompleteOpen(false)}
             />
-            <select
-              value={value.unit}
-              onChange={(e) => update('unit', e.target.value)}
-              className="input flex-1 text-sm py-1"
-              aria-label="Unit"
+          )}
+        </div>
+        <input
+          type="number"
+          step="any"
+          value={value.amount}
+          onChange={(e) => update('amount', Number(e.target.value))}
+          className="input w-20 text-sm py-1.5 text-right shrink-0"
+          aria-label="Amount"
+        />
+        <select
+          value={value.unit}
+          onChange={(e) => update('unit', e.target.value)}
+          className="input w-24 text-sm py-1.5 shrink-0"
+          aria-label="Unit"
+        >
+          <optgroup label="Weight">
+            {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </optgroup>
+          <optgroup label="Volume">
+            {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </optgroup>
+        </select>
+        {/* Allergen icon button — replaces the prior full-row select
+            picker. Click opens a small popover listing the available
+            allergens. Picking one triggers AllergenAdditionModal (the
+            same 5-second-cooldown confirmation as before). Red ring
+            when the row already carries allergen flags so the chef
+            can scan the column visually. */}
+        <div className="relative shrink-0" ref={pickerRef}>
+          <button
+            type="button"
+            onClick={() => setPickerOpen((o) => !o)}
+            data-testid={`ingredient-allergen-button-${index}`}
+            aria-label="Tag allergen on this ingredient"
+            aria-expanded={pickerOpen}
+            title="Tag allergen on this ingredient"
+            className={[
+              'inline-flex items-center justify-center h-8 w-8 rounded-md',
+              'border border-slate-300 dark:border-slate-700',
+              'hover:bg-red-50 dark:hover:bg-red-900/20',
+              hasAllergens ? 'ring-2 ring-red-300 dark:ring-red-700 text-red-600 dark:text-red-400' : 'text-slate-500',
+            ].join(' ')}
+          >
+            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+          </button>
+          {pickerOpen && (
+            <div
+              role="listbox"
+              aria-label="Allergens"
+              className="absolute z-20 right-0 mt-1 w-48 max-h-64 overflow-auto rounded-md
+                         border border-slate-200 dark:border-slate-700
+                         bg-white dark:bg-kitchen-ink shadow-lg"
             >
-              <optgroup label="Weight">
-                {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </optgroup>
-              <optgroup label="Volume">
-                {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </optgroup>
-            </select>
-          </div>
+              {availableToAdd.length === 0 ? (
+                <p className="px-3 py-1.5 text-xs text-slate-500 italic">
+                  All allergens already flagged.
+                </p>
+              ) : (
+                availableToAdd.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setPendingAddTag(t); setPickerOpen(false); }}
+                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    {ALLERGEN_LABEL[t]}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <button
           type="button"
           onClick={handleRemoveIngredient}
-          className="touch-target px-3 rounded-md text-lg bg-slate-100 dark:bg-slate-800 shrink-0 self-start"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-md text-lg bg-slate-100 dark:bg-slate-800 shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700"
           aria-label="Remove ingredient"
         >
           ✕
         </button>
       </div>
+
+      {/* Allergen pill row — rendered ONLY when the ingredient has
+          flagged or inherited allergens. Sits under the input row,
+          tightly packed, so the chef can read the tags at a glance
+          without consuming a third vertical row when no allergens
+          are present. */}
+      {(flags.length > 0 || inheritedAllergens.length > 0) && (
+        <div className="mt-1.5 ml-8 flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
+          {flags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-0.5 rounded-full border border-red-600
+                         text-red-700 dark:text-red-300 dark:border-red-500 px-1.5 py-0 text-[10px]"
+              title={`Contains: ${ALLERGEN_LABEL[tag]}`}
+            >
+              <AlertTriangle className="h-2.5 w-2.5" aria-hidden="true" />
+              {ALLERGEN_LABEL[tag]}
+              <button
+                type="button"
+                onClick={() => removeFlag(tag)}
+                aria-label={`Remove ${ALLERGEN_LABEL[tag]} flag from this ingredient`}
+                className="ml-0.5 opacity-60 hover:opacity-100"
+              >
+                <X className="h-2.5 w-2.5" aria-hidden="true" />
+              </button>
+            </span>
+          ))}
+          {inheritedAllergens.map((tag) => (
+            <span
+              key={`inh-a-${tag}`}
+              className="inline-flex items-center gap-0.5 rounded-full border border-red-600
+                         text-red-700 dark:text-red-300 dark:border-red-500 px-1.5 py-0 text-[10px]"
+              title={`Inherited from sub-recipe: ${ALLERGEN_LABEL[tag]}`}
+              data-testid={`ingredient-inherited-allergen-${tag}`}
+            >
+              <AlertTriangle className="h-2.5 w-2.5" aria-hidden="true" />
+              {ALLERGEN_LABEL[tag]}
+            </span>
+          ))}
+          {/* Belt-and-braces reminder that allergen tagging is the
+              chef's responsibility, not ChefFlow's — surfacing the
+              same framing here as the publish-time attestation modal
+              means the chef sees it on every allergen-flagged row. */}
+          <span
+            data-testid={`ingredient-allergen-reminder-${index}`}
+            tabIndex={0}
+            aria-label="Allergen tagging is chef-declared — supplier labels are authoritative"
+            title="Tag allergens you can confirm from the ingredient's label. ChefFlow does not detect allergens automatically. Supplier labels are authoritative."
+            className="inline-flex items-center justify-center h-4 w-4 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-help focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <Info className="h-2.5 w-2.5" aria-hidden="true" />
+          </span>
+        </div>
+      )}
+
       <AllergenAdditionModal
         open={pendingAddTag !== null}
         allergenLabel={pendingAddTag ? ALLERGEN_LABEL[pendingAddTag] : ''}

@@ -2,7 +2,7 @@ import LegalLayout from './LegalLayout';
 
 export default function DisclaimerPage() {
   return (
-    <LegalLayout title="Disclaimer" lastUpdated="2026-05-21">
+    <LegalLayout title="Disclaimer" lastUpdated="2026-05-29">
       <p>
         ChefFlow is a productivity tool for professional kitchens. Please read this disclaimer
         carefully. By using ChefFlow you acknowledge and accept the limitations described below.
@@ -125,7 +125,7 @@ export default function DisclaimerPage() {
 
       <h2 id="contact" className="text-xl md:text-2xl font-semibold">7. Contact</h2>
       <p>
-        Questions about this disclaimer: <a href="mailto:chefflow.support@[REVIEW domain]">chefflow.support@[REVIEW domain]</a>. [REVIEW: insert the verified support email address before public launch.]
+        Questions about this disclaimer: <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a>.
       </p>
 
       <p>
