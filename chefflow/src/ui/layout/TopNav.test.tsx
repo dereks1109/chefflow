@@ -47,12 +47,13 @@ beforeEach(() => {
 });
 
 describe('TopNav', () => {
-  it('renders the About nav link first among primary nav items', () => {
+  it('no longer renders an About nav link (About moved to / as marketing landing on 2026-05-29)', () => {
     renderNav();
     const nav = screen.getByRole('navigation', { name: /primary/i });
-    const links = nav.querySelectorAll('a');
-    // About is the first item in the navItems array
-    expect(links[0]).toHaveAttribute('href', '/about');
+    const links = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'));
+    expect(links).not.toContain('/about');
+    // Recipes is now the first primary nav item.
+    expect(links[0]).toBe('/recipes');
   });
 
   it('renders Recipes, Events, Workflows, and Community nav links', () => {

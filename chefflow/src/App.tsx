@@ -25,7 +25,7 @@ import SyncRunner from './ui/components/SyncRunner';
 import ReloadOnFirstSignIn from './ui/components/ReloadOnFirstSignIn';
 import OnboardingGate from './ui/components/OnboardingGate';
 import TosReacceptanceGate from './ui/components/TosReacceptanceGate';
-import { SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
 import CookiesPage from './ui/pages/legal/CookiesPage';
@@ -62,8 +62,13 @@ function PublicApp() {
       <ReloadOnFirstSignIn />
       <Routes>
         <Route element={<AppLayout />}>
-          {/* Always-public routes — guest-browseable */}
-          <Route path="/" element={<Navigate to="/recipes" replace />} />
+          {/* Always-public routes — guest-browseable.
+              `/` is the marketing landing (AboutPage content) for
+              signed-out visitors; signed-in chefs hit `/recipes`. The
+              `/about` route stays as a permanent redirect to `/` for
+              backward compat with bookmarks/external links. */}
+          <Route path="/" element={<LandingOrRedirect />} />
+          <Route path="/about" element={<Navigate to="/" replace />} />
           <Route path="/recipes" element={<RecipesLibrary />} />
           <Route path="/recipes/:id" element={<RecipeView />} />
           <Route path="/events" element={<EventsLibrary />} />
@@ -71,7 +76,6 @@ function PublicApp() {
           <Route path="/community" element={<CommunityLibrary />} />
           <Route path="/community/:id" element={<CommunityRecipeView />} />
           <Route path="/chef/:clerkId" element={<ChefProfile />} />
-          <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
 
@@ -92,6 +96,21 @@ function PublicApp() {
       </Routes>
     </>
   );
+}
+
+// `/` decides between marketing landing (signed-out) and the app
+// (signed-in). Avoids two near-identical pages — AboutPage is the
+// landing content; signed-in chefs skip it and land on /recipes.
+// E2E mode short-circuits to signed-in so Playwright doesn't see the
+// landing during route smoke tests.
+function LandingOrRedirect() {
+  const { isSignedIn, isLoaded } = useUser();
+  const isE2E = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
+  // Wait for Clerk to load so signed-in chefs don't see a flash of
+  // the marketing page before the redirect kicks in.
+  if (!isE2E && !isLoaded) return null;
+  if (isSignedIn || isE2E) return <Navigate to="/recipes" replace />;
+  return <AboutPage />;
 }
 
 // Auth-gated wrapper. Signed-in users pass through (with the standard

@@ -55,21 +55,8 @@ export default function MobileTopBar() {
 
         <UpgradeButton />
 
-        <NavLink
-          to="/about"
-          className={({ isActive }) =>
-            [
-              'flex items-center px-2 h-9 rounded-md text-sm font-medium',
-              'transition-colors duration-150',
-              'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-              isActive
-                ? 'text-accent'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
-            ].join(' ')
-          }
-        >
-          About
-        </NavLink>
+        {/* About link removed 2026-05-29 — `/about` is now the
+            marketing landing at `/`; the logo click reaches it. */}
 
         <NavLink
           to="/contact"

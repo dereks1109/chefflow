@@ -43,9 +43,9 @@ beforeEach(() => {
 });
 
 describe('MobileTopBar', () => {
-  it('renders the About text link', () => {
+  it('no longer renders an About link (moved to / as marketing landing on 2026-05-29)', () => {
     renderBar();
-    expect(screen.getByRole('link', { name: /^about$/i })).toHaveAttribute('href', '/about');
+    expect(screen.queryByRole('link', { name: /^about$/i })).toBeNull();
   });
 
   it('does not render a Plans CTA', () => {

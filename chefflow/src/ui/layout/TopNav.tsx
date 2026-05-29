@@ -1,13 +1,16 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Info, Mail, Settings, Shield } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Mail, Settings, Shield } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
 import { useAdminStore } from '../../state/useAdminStore';
 
+// About link removed 2026-05-29: `/about` content is now the
+// marketing landing at `/` (LandingOrRedirect in App.tsx). Logo
+// click takes signed-in chefs to /recipes and guests to the
+// landing — same destinations the About link used to reach.
 const navItems = [
-  { to: '/about', label: 'About', icon: Info },
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
