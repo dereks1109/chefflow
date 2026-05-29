@@ -30,11 +30,12 @@ import {
   buildGmailDigestParts,
   type GmailDigestEnv,
 } from './gmailDigest';
+import { sendDiscordDigest, type DiscordDigestEnv } from './discordDigest';
 
 const ADMIN_RECIPIENT = 'admin@chefflow.uk';
 const DIGEST_FROM = 'ChefFlow Daily Digest <noreply@chefflow.uk>';
 
-export type DailyDigestEnv = GmailDigestEnv & ContactDigestEnv;
+export type DailyDigestEnv = GmailDigestEnv & ContactDigestEnv & DiscordDigestEnv;
 
 export interface DailyDigestResult {
   /** Gmail-side outcome label — mirrors buildGmailDigestParts skipReason or 'ok'. */
@@ -49,6 +50,12 @@ export interface DailyDigestResult {
   sent: boolean;
   /** Reason the email was NOT sent — undefined on success. */
   skipReason?: 'quiet-day' | 'no-api-key' | 'send-failed';
+  /** Discord-side outcome — present only when at least one P1/P2 item
+   *  surfaced (the cadence the chef chose). 'sent' on success;
+   *  'no-webhook' when the secret isn't configured (silent skip);
+   *  'send-failed' when Discord returned non-2xx. Email is unaffected
+   *  by Discord failures — Discord is best-effort. */
+  discord?: 'sent' | 'no-webhook' | 'send-failed';
 }
 
 function gmailPlaceholderHtml(status: 'no-secrets' | 'no-messages' | 'gmail-failed' | 'llm-failed', dayLabel: string): string {
@@ -181,6 +188,24 @@ ${contactHtml}
   // from the notification preview alone.
   const subject = buildSubject(gmailStatus, gmailItems, contactStatus, contactCount, dayLabel);
 
+  // Discord: only fires when the Gmail digest contains at least one
+  // P1 (urgent + important) or P2 (important) item — chef's chosen
+  // cadence to keep the channel quiet on routine days. Runs BEFORE
+  // the email so it's independent of Resend's status; if Discord
+  // fails we still log + continue to the email path.
+  let discord: DailyDigestResult['discord'];
+  if (gmailRes.ok && gmailRes.parts.urgentItems.length > 0) {
+    const discordRes = await sendDiscordDigest(env, {
+      dayLabel,
+      urgentItems: gmailRes.parts.urgentItems,
+      inboxItemCount: gmailRes.parts.itemCount,
+      contactSubmissions: contactRes.ok ? contactRes.parts.submissions : undefined,
+    });
+    if (discordRes.sent) discord = 'sent';
+    else if (discordRes.skipReason === 'no-webhook') discord = 'no-webhook';
+    else discord = 'send-failed';
+  }
+
   try {
     await sendContactNotification({
       apiKey: env.RESEND_API_KEY,
@@ -199,6 +224,7 @@ ${contactHtml}
       gmailItems,
       contactCount,
       sent: true,
+      discord,
     };
   } catch (err) {
     console.warn('[dailyDigest] send failed:', err instanceof Error ? err.message : String(err));
@@ -209,6 +235,7 @@ ${contactHtml}
       contactCount,
       sent: false,
       skipReason: 'send-failed',
+      discord,
     };
   }
 }

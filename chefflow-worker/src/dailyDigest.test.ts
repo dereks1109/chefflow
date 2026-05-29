@@ -12,6 +12,11 @@ const getMessageMock = vi.hoisted(() => vi.fn(async (_t: string, id: string) => 
   from: 'sam@example.com',
   subject: `subj ${id}`,
 })));
+const sendDiscordMock = vi.hoisted(() =>
+  vi.fn<() => Promise<{ sent: boolean; skipReason?: string; status?: number }>>(
+    async () => ({ sent: true, status: 204 }),
+  ),
+);
 
 vi.mock('./contactMail', () => ({
   sendContactNotification: sendMock,
@@ -27,6 +32,9 @@ vi.mock('./gmail', () => ({
   GmailError: class extends Error {
     constructor(message: string, public status?: number) { super(message); }
   },
+}));
+vi.mock('./discordDigest', () => ({
+  sendDiscordDigest: sendDiscordMock,
 }));
 
 import { runDailyDigest } from './dailyDigest';
@@ -93,6 +101,8 @@ beforeEach(() => {
   listMessageIdsMock.mockClear();
   listMessageIdsMock.mockResolvedValue([]);
   getMessageMock.mockClear();
+  sendDiscordMock.mockClear();
+  sendDiscordMock.mockResolvedValue({ sent: true, status: 204 });
 });
 
 describe('runDailyDigest', () => {
@@ -206,5 +216,52 @@ describe('runDailyDigest', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  describe('Discord notification', () => {
+    it('does NOT fire Discord when there are no P1/P2 inbox items (chef-chosen cadence)', async () => {
+      listMessageIdsMock.mockResolvedValueOnce([{ id: 'm1', threadId: 't1' }]);
+      runAiMock.mockResolvedValueOnce(JSON.stringify({
+        items: [{ priority: 4, oneLine: 'low-value newsletter', from: 'acme', subject: 'Newsletter' }],
+      }));
+      const out = await runDailyDigest(baseEnv({ RATE_LIMIT: makeKv([]) }));
+      // Email still goes; Discord is silent.
+      expect(out.sent).toBe(true);
+      expect(out.discord).toBeUndefined();
+      expect(sendDiscordMock).not.toHaveBeenCalled();
+    });
+
+    it('fires Discord when at least one P1 surfaces, in parallel with the email', async () => {
+      listMessageIdsMock.mockResolvedValueOnce([{ id: 'm1', threadId: 't1' }]);
+      runAiMock.mockResolvedValueOnce(JSON.stringify({
+        items: [
+          { priority: 1, oneLine: 'customer demands refund today', from: 'cust', subject: 'Refund' },
+          { priority: 4, oneLine: 'noise', from: 'acme' },
+        ],
+      }));
+      const out = await runDailyDigest(baseEnv({ RATE_LIMIT: makeKv([]) }));
+      expect(out.sent).toBe(true);
+      expect(out.discord).toBe('sent');
+      expect(sendDiscordMock).toHaveBeenCalledTimes(1);
+      const call = sendDiscordMock.mock.calls[0] as unknown as [unknown, { urgentItems: Array<{ priority: number }>; inboxItemCount: number }];
+      // Only the P1 item gets forwarded (no P4/P5 noise).
+      expect(call[1].urgentItems.length).toBe(1);
+      expect(call[1].urgentItems[0].priority).toBe(1);
+      // inboxItemCount stays at the full count for context in the embed.
+      expect(call[1].inboxItemCount).toBe(2);
+    });
+
+    it('a Discord send-failure does NOT block the email path', async () => {
+      sendDiscordMock.mockResolvedValueOnce({ sent: false, skipReason: 'send-failed', status: 429 });
+      listMessageIdsMock.mockResolvedValueOnce([{ id: 'm1', threadId: 't1' }]);
+      runAiMock.mockResolvedValueOnce(JSON.stringify({
+        items: [{ priority: 2, oneLine: 'important', from: 'x' }],
+      }));
+      const out = await runDailyDigest(baseEnv({ RATE_LIMIT: makeKv([]) }));
+      // Email still went out…
+      expect(out.sent).toBe(true);
+      // …but Discord is recorded as failed.
+      expect(out.discord).toBe('send-failed');
+    });
   });
 });

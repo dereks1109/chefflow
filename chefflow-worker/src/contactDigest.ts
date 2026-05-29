@@ -94,6 +94,9 @@ export interface ContactDigestParts {
   sectionHtml: string;
   sectionText: string;
   count: number;
+  /** Raw submission rows — exposed so alternate transports (Discord
+   *  embeds, etc.) can render their own format without re-fetching KV. */
+  submissions: ContactSubmission[];
 }
 
 export type ContactDigestPartsResult =
@@ -125,6 +128,7 @@ export async function buildContactDigestParts(
       sectionHtml: formatContactSectionHtml(windowed, dayLabel),
       sectionText: formatContactSectionText(windowed, dayLabel),
       count: windowed.length,
+      submissions: windowed,
     },
   };
 }

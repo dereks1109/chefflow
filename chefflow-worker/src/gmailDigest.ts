@@ -195,10 +195,24 @@ export function formatDigestSectionText(payload: DigestPayload, dayLabel: string
   return lines.join('\n');
 }
 
+/** A single inbox item exposed to alternate transports (e.g. Discord)
+ *  so they can render their own format without re-parsing the HTML.
+ *  Public-shaped subset of the internal DigestItem. */
+export interface GmailDigestItem {
+  priority: 1 | 2 | 3 | 4 | 5;
+  oneLine: string;
+  from?: string;
+  subject?: string;
+}
+
 export interface GmailDigestParts {
   sectionHtml: string;
   sectionText: string;
   itemCount: number;
+  /** P1 + P2 items only — the "act today / important" subset used by
+   *  Discord to decide whether to fire a notification + what to show
+   *  in the embed. Empty when the LLM grouped everything as P3-P5. */
+  urgentItems: GmailDigestItem[];
 }
 
 export type GmailDigestPartsResult =
@@ -259,6 +273,14 @@ export async function buildGmailDigestParts(
       sectionHtml: formatDigestSectionHtml(digest, dayLabel),
       sectionText: formatDigestSectionText(digest, dayLabel),
       itemCount: digest.items.length,
+      urgentItems: digest.items
+        .filter((it) => it.priority === 1 || it.priority === 2)
+        .map((it) => ({
+          priority: it.priority,
+          oneLine: it.oneLine,
+          from: it.from,
+          subject: it.subject,
+        })),
     },
   };
 }
