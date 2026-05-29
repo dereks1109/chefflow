@@ -50,7 +50,7 @@ export default function EventDetailCard({ event, onEdit }: Props) {
       )}
       <h1
         className={onEdit ? 'text-2xl font-bold pr-8' : 'text-2xl font-bold'}
-        data-testid="event-detail-card-title"
+        data-testid="event-view-title"
       >
         {event.title || 'Untitled event'}
       </h1>

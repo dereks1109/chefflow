@@ -12,13 +12,29 @@ const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true'
 const root = createRoot(document.getElementById('root')!);
 
 if (e2eMode) {
-  // In E2E mode the app renders directly — Clerk is bypassed. App.tsx must
-  // also skip <SignedIn>/<SignedOut> gating; see App.tsx e2eMode branch.
+  // E2E mode: bypass Clerk's auth flow BUT still mount the provider so
+  // hooks like useUser() / useClerk() don't throw inside components
+  // such as TopNav and MobileTopBar. With no Clerk session, useUser
+  // returns { isSignedIn: false }, and components that need to act as
+  // "signed in" for the test suite check `import.meta.env.VITE_E2E_MODE`
+  // to override behaviour (see useAuthGate's useIsGuest, TopNav's
+  // `showSignedInChrome = isE2E || isSignedIn`, etc.).
+  //
+  // The publishable key is the same dev key used in normal builds —
+  // Clerk's SDK initialises but does no real auth work because no
+  // sign-in flow is triggered. Fallback to the public dev key from
+  // .env.production (tracked in git, safe to inline) so E2E never
+  // hard-fails when .env.local is missing the key. Clerk's strict
+  // format validation rejects random placeholder strings, so the
+  // fallback has to be a real-shaped pk_test_*.
+  const e2eKey = publishableKey || 'pk_test_ZW5nYWdpbmctYmF0LTUuY2xlcmsuYWNjb3VudHMuZGV2JA';
   root.render(
     <StrictMode>
-      <BrowserRouter>
-        <App e2eMode />
-      </BrowserRouter>
+      <ClerkProvider publishableKey={e2eKey}>
+        <BrowserRouter>
+          <App e2eMode />
+        </BrowserRouter>
+      </ClerkProvider>
     </StrictMode>,
   );
 } else if (!publishableKey) {

@@ -48,10 +48,16 @@ export default defineConfig({
       // Route LLM calls through the proxy path so page.route() can intercept
       // /api/llm/* without needing a live Groq API key.
       VITE_LLM_MODE: 'proxy',
-      // Clerk publishable key is unused in E2E mode but the SDK import
-      // requires some value or it throws at module load time. The dummy key
-      // has the correct pk_test_ prefix format Clerk's SDK validation expects.
-      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_e2e_placeholder_000000000000000000000000000000000000000000',
+      // Clerk publishable key. Since 2026-05-24 the TopNav + MobileTopBar
+      // call useUser()/useClerk() directly, which throws if ClerkProvider
+      // isn't mounted. main.tsx now mounts ClerkProvider in E2E mode too
+      // (no real auth flow runs because tests never trigger sign-in), but
+      // the key must pass Clerk's strict format validation. The dummy
+      // placeholder string we used before fails that check. Reuse the
+      // tracked-in-git dev key from .env.production — it's the same one
+      // used in normal Pages builds and the Clerk dev instance is happy
+      // to initialise without performing real auth requests during E2E.
+      VITE_CLERK_PUBLISHABLE_KEY: 'pk_test_ZW5nYWdpbmctYmF0LTUuY2xlcmsuYWNjb3VudHMuZGV2JA',
     },
     timeout: 30_000,
   },
