@@ -389,7 +389,11 @@ export async function handleRequest(
         // prefix here. (Kept in sync via tests.)
         await env.RATE_LIMIT.delete(`demos:provisioned:v5:${userId}`);
       }
-      const result = await provisionDemosForUser({ DB: env.DB, RATE_LIMIT: env.RATE_LIMIT }, userId);
+      const result = await provisionDemosForUser(
+        { DB: env.DB, RATE_LIMIT: env.RATE_LIMIT },
+        userId,
+        { force },
+      );
       return json(result, 200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Demo provision failed';

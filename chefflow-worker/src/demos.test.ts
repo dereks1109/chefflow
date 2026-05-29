@@ -41,6 +41,18 @@ function makeStubDb() {
             return { success: true, meta: { changes: 1 } };
           }
 
+          // Un-tombstone UPDATE (force-mode only). Only un-tombstones rows
+          // that are currently is_deleted=1 — preserves chef edits on
+          // active rows.
+          if (/^UPDATE recipes\s+SET is_deleted = 0/i.test(sql)) {
+            const [payload, updatedAt, userId, id] = params as [string, number, string, string];
+            const k = key('recipes', userId, id);
+            const existing = rows.get(k);
+            if (!existing || !existing.is_deleted) return { success: true, meta: { changes: 0 } };
+            rows.set(k, { ...existing, is_deleted: 0, payload, updated_at: updatedAt });
+            return { success: true, meta: { changes: 1 } };
+          }
+
           // Allergen-strip UPDATE.
           if (/^UPDATE recipes SET payload = \?/i.test(sql)) {
             const [payload, updatedAt, userId, id] = params as [string, number, string, string];
@@ -117,6 +129,71 @@ describe('provisionDemosForUser', () => {
     expect(second.eventsInserted).toBe(0);
     expect(second.recipesTombstoned).toBe(0);
     expect(second.recipesUpdated).toBe(0);
+  });
+
+  it('force=true revives tombstoned demo recipes (chef deleted, then clicked "Restore demo content")', async () => {
+    const { db, rows } = makeStubDb();
+    const { kv, store } = makeStubKv();
+
+    // First sign-in: full provision happens. All 14 demos present, marker set.
+    await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+    expect(rows.get('recipes::user_alice::r_demo_ribeye')?.is_deleted).toBe(0);
+    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
+
+    // Chef deletes one of the demos (sync writes a tombstone).
+    rows.set('recipes::user_alice::r_demo_ribeye', {
+      id: 'r_demo_ribeye',
+      user_id: 'user_alice',
+      updated_at: 2000,
+      is_deleted: 1,
+      payload: JSON.stringify({ id: 'r_demo_ribeye', title: 'My Ribeye' }),
+    });
+
+    // Default re-call (no force, marker still set) → no-op. Tombstone stays.
+    const second = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+    expect(second.alreadyProvisioned).toBe(true);
+    expect(rows.get('recipes::user_alice::r_demo_ribeye')?.is_deleted).toBe(1);
+
+    // Settings → Restore demo content: route deletes marker, then calls
+    // with force=true. The un-tombstone pass revives the row.
+    store.delete('demos:provisioned:v5:user_alice');
+    const restored = await provisionDemosForUser(
+      { DB: db, RATE_LIMIT: kv },
+      'user_alice',
+      { force: true },
+    );
+    expect(restored.alreadyProvisioned).toBe(false);
+    expect(restored.recipesUntombstoned).toBe(1);
+    // Row is back active + payload reset to canonical (My Ribeye → (Demo) Ribeye).
+    const ribeye = rows.get('recipes::user_alice::r_demo_ribeye');
+    expect(ribeye?.is_deleted).toBe(0);
+    expect(ribeye?.payload).toContain('(Demo) Ribeye');
+  });
+
+  it('force=true does NOT overwrite an ACTIVE chef-edited demo recipe (un-tombstone only targets is_deleted=1)', async () => {
+    const { db, rows } = makeStubDb();
+    const { kv, store } = makeStubKv();
+    await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
+
+    // Chef tunes one active demo recipe (no tombstone — just edit).
+    rows.set('recipes::user_alice::r_demo_ribeye', {
+      id: 'r_demo_ribeye',
+      user_id: 'user_alice',
+      updated_at: 3000,
+      is_deleted: 0,
+      payload: JSON.stringify({ id: 'r_demo_ribeye', title: 'My Custom Ribeye' }),
+    });
+
+    store.delete('demos:provisioned:v5:user_alice');
+    const restored = await provisionDemosForUser(
+      { DB: db, RATE_LIMIT: kv },
+      'user_alice',
+      { force: true },
+    );
+    // No un-tombstone happened — the active row wasn't tombstoned.
+    expect(restored.recipesUntombstoned).toBe(0);
+    // Chef's edited title is preserved.
+    expect(rows.get('recipes::user_alice::r_demo_ribeye')?.payload).toContain('My Custom Ribeye');
   });
 
   it('INSERT OR IGNORE preserves an existing recipe with the same id (chef customisation survives)', async () => {

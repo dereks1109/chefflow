@@ -12,6 +12,11 @@ export interface ProvisionResult {
   alreadyProvisioned: boolean;
   recipesInserted: number;
   eventsInserted: number;
+  /** Count of demo recipes that had been tombstoned (chef-deleted) and
+   *  were un-tombstoned by the force pass. 0 in normal first-sign-in
+   *  flow. Worker-side field added 2026-05-29 along with the Settings
+   *  "Restore demo content" button. */
+  recipesUntombstoned?: number;
 }
 
 export interface ProvisionDemosOpts {

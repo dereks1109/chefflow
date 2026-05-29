@@ -46,6 +46,10 @@ export interface ProvisionResult {
   eventsInserted: number;
   recipesUpdated: number;        // retroactive allergen-strip count
   recipesTombstoned: number;     // retired demo id count
+  /** Tombstoned demo recipes un-deleted by the force pass. 0 in normal
+   *  first-sign-in flow; non-zero only when called via Settings'
+   *  "Restore demo content" button after the chef deleted demos. */
+  recipesUntombstoned: number;
 }
 
 export interface DemosEnv {
@@ -53,18 +57,29 @@ export interface DemosEnv {
   RATE_LIMIT: KVNamespace;
 }
 
+export interface ProvisionOpts {
+  /** When true, also revive tombstoned demo recipes by rewriting their
+   *  payload back to the canonical version + flipping is_deleted to 0.
+   *  Active (non-tombstoned) chef-edited copies are NOT touched —
+   *  edits survive. Used by the /api/demos/provision?force=1 route
+   *  that the Settings button hits. */
+  force?: boolean;
+}
+
 export async function provisionDemosForUser(
   env: DemosEnv,
   userId: string,
+  opts: ProvisionOpts = {},
 ): Promise<ProvisionResult> {
   const marker = await env.RATE_LIMIT.get(markerKey(userId));
-  if (marker === '1') {
+  if (marker === '1' && !opts.force) {
     return {
       alreadyProvisioned: true,
       recipesInserted: 0,
       eventsInserted: 0,
       recipesUpdated: 0,
       recipesTombstoned: 0,
+      recipesUntombstoned: 0,
     };
   }
 
@@ -95,6 +110,26 @@ export async function provisionDemosForUser(
     if (updated) recipesUpdated += 1;
   }
 
+  // 3. Force-mode only: un-tombstone any demo recipes the chef previously
+  //    deleted. Targets is_deleted=1 rows ONLY so chef edits on active
+  //    rows survive. Done BEFORE INSERT OR IGNORE so the next step
+  //    doesn't no-op on a tombstoned row.
+  let recipesUntombstoned = 0;
+  if (opts.force) {
+    for (const r of recipes) {
+      const res = await env.DB
+        .prepare(
+          `UPDATE recipes
+             SET is_deleted = 0, payload = ?, updated_at = ?
+             WHERE user_id = ? AND id = ? AND is_deleted = 1`,
+        )
+        .bind(JSON.stringify(r), now, userId, r.id)
+        .run();
+      const changes = (res.meta?.changes ?? res.meta?.changed_rows ?? 0) as number;
+      recipesUntombstoned += changes;
+    }
+  }
+
   // ---- Standard provisioning (idempotent across users + content versions). ----
   let recipesInserted = 0;
   for (const r of recipes) {
@@ -120,6 +155,7 @@ export async function provisionDemosForUser(
     eventsInserted,
     recipesUpdated,
     recipesTombstoned,
+    recipesUntombstoned,
   };
 }
 

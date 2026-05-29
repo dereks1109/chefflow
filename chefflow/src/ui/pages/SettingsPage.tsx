@@ -647,8 +647,12 @@ function RestoreDemosSection() {
     setStatus(null);
     try {
       const result = await provisionDemos({ getToken, force: true });
+      // Two counters: fresh inserts (newly-seeded rows) + un-tombstoned
+      // (previously chef-deleted rows the force pass revived). Both count
+      // as "restored" from the chef's perspective.
+      const recipesRestored = result.recipesInserted + (result.recipesUntombstoned ?? 0);
       setStatus(
-        `Restored. ${result.eventsInserted} event${result.eventsInserted === 1 ? '' : 's'} + ${result.recipesInserted} recipe${result.recipesInserted === 1 ? '' : 's'} seeded. Refresh /events to see the Demo Event.`,
+        `Restored. ${result.eventsInserted} event${result.eventsInserted === 1 ? '' : 's'} + ${recipesRestored} recipe${recipesRestored === 1 ? '' : 's'}. Refresh /recipes and /events to see them.`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Restore failed.');
