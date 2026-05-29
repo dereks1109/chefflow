@@ -35,6 +35,7 @@ export default function BottomNav() {
             <li key={to} className="flex-1">
               <NavLink
                 to={to}
+                data-testid={`nav-${to.slice(1)}`}
                 aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
                 className={[

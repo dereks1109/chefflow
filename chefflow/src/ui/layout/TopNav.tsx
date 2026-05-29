@@ -53,6 +53,7 @@ export default function TopNav() {
           <NavLink
             key={to}
             to={to}
+            data-testid={`nav-${to.slice(1)}`}
             className={({ isActive }) =>
               [
                 'flex items-center gap-2 px-3 h-9 rounded-md text-sm font-medium',

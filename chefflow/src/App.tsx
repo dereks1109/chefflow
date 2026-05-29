@@ -25,6 +25,7 @@ import SyncRunner from './ui/components/SyncRunner';
 import ReloadOnFirstSignIn from './ui/components/ReloadOnFirstSignIn';
 import OnboardingGate from './ui/components/OnboardingGate';
 import TosReacceptanceGate from './ui/components/TosReacceptanceGate';
+import ProductTour from './ui/components/ProductTour';
 import { SignedIn, SignedOut, SignIn, useUser } from '@clerk/clerk-react';
 import TermsPage from './ui/pages/legal/TermsPage';
 import PrivacyPage from './ui/pages/legal/PrivacyPage';
@@ -60,6 +61,10 @@ function PublicApp() {
       <AuthGateRunner />
       <SyncRunner />
       <ReloadOnFirstSignIn />
+      {/* Mounted at root so the spotlight overlay can land on any
+          page the chef navigates to after first-time OnboardingSheet
+          completion. Self-renders nothing when the tour isn't active. */}
+      <ProductTour />
       <Routes>
         <Route element={<AppLayout />}>
           {/* Always-public routes — guest-browseable.

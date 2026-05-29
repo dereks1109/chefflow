@@ -5,6 +5,7 @@ import Button from './primitives/Button';
 import { useProfileStore } from '../../state/useProfileStore';
 import { downscaleToDataUrl } from '../../core/util/image';
 import { completeOnboarding } from '../../core/onboarding/onboardingClient';
+import { useTourState } from '../../state/useTourState';
 import {
   CURRENT_TOS_VERSION,
   CURRENT_DISCLAIMER_VERSION,
@@ -79,6 +80,14 @@ export default function OnboardingSheet({ onDone }: Props) {
             },
       });
       onDone();
+      // Kick off the 4-step product tour for first-time chefs.
+      // useTourState.start() self-skips if the dismiss flag is already
+      // set in localStorage (e.g. the chef dismissed a prior tour on
+      // this device), so this call is safe to make unconditionally.
+      // Deferred to next tick so OnboardingGate has time to unmount
+      // this sheet + paint the nav before the tour tries to spotlight
+      // its targets.
+      setTimeout(() => useTourState.getState().start(), 50);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Could not save — please retry');
       setSubmitting(false);
