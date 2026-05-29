@@ -35,7 +35,7 @@ describe('runGroq', () => {
       messages: Array<{ role: string; content: string }>;
       response_format?: { type: string };
     };
-    expect(parsed.model).toBe('moonshotai/kimi-k2-instruct');
+    expect(parsed.model).toBe('llama-3.3-70b-versatile');
     expect(parsed.messages[0].role).toBe('system');
     expect(parsed.messages[1].role).toBe('user');
     expect(parsed.messages[1].content).toContain('steak frites');

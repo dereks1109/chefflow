@@ -343,6 +343,31 @@ export default function Workflow() {
     [scheduled],
   );
 
+  // Whether the on-screen workflow differs from what's persisted in Dexie.
+  // True in two cases:
+  //   - dirty: chef drag-reordered steps since the last save / fresh gen.
+  //   - !loadedFromSnapshot: the workflow was just produced by the LLM /
+  //     local scheduler and has never been persisted yet.
+  // Drives the Save button's prominence, the "Unsaved" pill, and the
+  // beforeunload guard. (No in-app navigation blocker: useBlocker needs
+  // a data router and the app mounts a regular BrowserRouter — the loud
+  // orange button + pill is the in-app deterrent.)
+  const needsSave =
+    workflowStatus.kind === 'ready' &&
+    scheduled.length > 0 &&
+    (dirty || !loadedFromSnapshot);
+
+  // Browser-level guard: warn on tab close / refresh while unsaved.
+  useEffect(() => {
+    if (!needsSave) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [needsSave]);
+
   if (eventQuery.status === 'loading' || recipesQuery.status === 'loading') {
     return <div className="p-6 text-slate-500">Loading…</div>;
   }
@@ -476,15 +501,26 @@ export default function Workflow() {
               <RefreshCw className={`h-3.5 w-3.5 ${workflowStatus.kind === 'generating' ? 'animate-spin' : ''}`} aria-hidden="true" />
               Regenerate
             </button>
+            {needsSave && (
+              <span
+                data-testid="workflow-unsaved-pill"
+                className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+              >
+                Unsaved
+              </span>
+            )}
             <button
               type="button"
               onClick={() => void handleSave()}
-              disabled={(!dirty && loadedFromSnapshot) || !showWorkflowBody}
-              className="btn-primary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Persist the current workflow on this event"
+              disabled={!needsSave}
+              data-testid="workflow-save-button"
+              className={`text-sm inline-flex items-center gap-1 disabled:cursor-not-allowed ${
+                needsSave ? 'btn-primary' : 'btn-secondary opacity-70'
+              }`}
+              title={needsSave ? 'Save this workflow to the event' : 'Already saved'}
             >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
-              Save
+              {needsSave ? 'Save changes' : 'Saved'}
             </button>
           </div>
         </div>

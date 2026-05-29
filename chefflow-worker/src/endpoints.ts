@@ -1,5 +1,5 @@
 import { runAi } from './aiCall';
-import { runGroq, GROQ_WORKFLOW_MODEL, GroqError } from './groqClient';
+import { runGroqWithFallback, GroqError } from './groqClient';
 import { TEXT_MODEL, VISION_MODEL, type ProxyRequestBody } from './types';
 
 export type EndpointName = 'generate' | 'analyze' | 'photo' | 'workflow';
@@ -12,15 +12,15 @@ export const ENDPOINTS: ReadonlySet<EndpointName> = new Set([
  * Dispatch a request body to the right model.
  *
  * - generate / analyze / photo → Workers AI (Llama text / vision).
- * - workflow → Groq + Kimi K2 (if GROQ_API_KEY is set), with a
- *   graceful fallback to Workers AI Llama on missing-key OR runtime
- *   failure. Routing chosen for the workflow scheduler specifically
- *   because:
- *     - Kimi K2 reasons better over the prep-dependency / timing
- *       constraints the scheduler has to satisfy than Llama 3.3 70B.
- *     - Groq's LPU inference keeps chef-perceived latency under ~1.5s.
- *   The fallback means a missing secret never breaks the feature —
- *   the chef just gets the lower-quality Llama schedule.
+ * - workflow → tri-tier fallback for resilience + speed:
+ *     1. Groq + Llama 3.3 70B (~500ms, fast primary)
+ *     2. Groq + Kimi K2 (~1-2s, smarter — handles complex multi-dish
+ *        events that confuse Llama). Internal to runGroqWithFallback.
+ *     3. Workers AI Llama 3.3 70B fp8 (~3s, free safety net when both
+ *        Groq tiers are down or GROQ_API_KEY is unset).
+ *   The cascade means a Groq outage / missing key / rate-limit never
+ *   breaks the chef's workflow generation — they just see slightly
+ *   worse latency.
  *
  * The photo endpoint defaults jsonMode=false because the vision model
  * on CF sometimes ignores JSON mode — the SPA validator tolerates
@@ -39,11 +39,10 @@ export async function handleEndpoint(
     case 'workflow':
       if (groqApiKey) {
         try {
-          return await runGroq(groqApiKey, GROQ_WORKFLOW_MODEL, body);
+          return await runGroqWithFallback(groqApiKey, body);
         } catch (err) {
-          // Best-effort upgrade: log + fall through to Workers AI so a
-          // Groq outage / bad key / rate-limit doesn't break the
-          // chef's workflow generation.
+          // Both Groq tiers (Llama 3.3 + Kimi K2) failed — log + fall
+          // through to Workers AI so the chef still gets a workflow.
           if (err instanceof GroqError) {
             console.warn('[handleEndpoint] Groq workflow call failed, falling back to Workers AI:', err.status, err.message);
           } else {

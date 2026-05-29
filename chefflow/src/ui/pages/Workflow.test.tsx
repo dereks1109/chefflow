@@ -311,6 +311,68 @@ describe('Workflow page — persistence', () => {
     });
   });
 
+  it('after a fresh LLM generation, Save button reads "Save changes" + Unsaved pill is visible (chef notices the unsaved snapshot)', async () => {
+    // Event has dishes but NO saved workflow — runSchedule will fire and
+    // produce a fresh, unsaved snapshot. needsSave should flip true.
+    await db.events.put(DEMO_EVENT);
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    // Wait for the schedule to render (proves workflowStatus → 'ready'
+    // and scheduled.length > 0, the preconditions for needsSave).
+    await waitFor(() => {
+      expect(screen.getByText(/Rest steaks 5 minutes/)).toBeInTheDocument();
+    });
+
+    // Loud-state assertions: orange "Save changes" + amber "Unsaved" pill.
+    // If a future change accidentally re-quiets the button (e.g. by removing
+    // !loadedFromSnapshot from needsSave), THIS is the test that fails.
+    const saveBtn = screen.getByTestId('workflow-save-button');
+    expect(saveBtn).toHaveTextContent(/save changes/i);
+    expect(saveBtn).not.toBeDisabled();
+    expect(saveBtn.className).toContain('btn-primary');
+    expect(screen.getByTestId('workflow-unsaved-pill')).toBeInTheDocument();
+  });
+
+  it('when a saved snapshot loads cleanly, Save button reads "Saved" + no pill (no false alarm)', async () => {
+    // Plant a snapshot whose hash matches current dishes — loadedFromSnapshot
+    // becomes true, dirty stays false, so needsSave should be false.
+    const saved: ScheduledStep = {
+      id: 'saved:1',
+      dishId: 'd_ribeye',
+      recipeId: RIBEYE_RECIPE.id,
+      recipeStepId: 'rs1',
+      dishLabel: '(Demo) Ribeye',
+      text: 'Previously saved step',
+      startAt: '2026-05-14T17:55:00.000Z',
+      endAt: '2026-05-14T18:00:00.000Z',
+      durationSec: 300,
+      phase: 'serve',
+      kind: 'active',
+      thermalClass: 'normal',
+      allergenClass: 'allergen-free',
+      dependsOnStepIds: [],
+      warnings: [],
+      rulesApplied: [1],
+    };
+    await db.events.put({
+      ...DEMO_EVENT,
+      workflow: [saved],
+      workflowDishesHash: hashDishes(DEMO_EVENT.dishes),
+    });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Previously saved step/)).toBeInTheDocument();
+    });
+
+    const saveBtn = screen.getByTestId('workflow-save-button');
+    expect(saveBtn).toHaveTextContent(/saved/i);
+    expect(saveBtn).toBeDisabled();
+    expect(screen.queryByTestId('workflow-unsaved-pill')).toBeNull();
+  });
+
   it('Regenerate clears the saved snapshot and re-runs the algorithm', async () => {
     await db.events.put({
       ...DEMO_EVENT,

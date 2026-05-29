@@ -16,10 +16,18 @@
 import type { ProxyRequestBody } from './types';
 
 const GROQ_CHAT_URL = 'https://api.groq.com/openai/v1/chat/completions';
-/** Kimi K2 Instruct — currently the best open-weights reasoner Groq
- *  hosts (1T params, MoE, 128K context, JSON mode). Switch model id
- *  here to upgrade without touching call sites. */
-export const GROQ_WORKFLOW_MODEL = 'moonshotai/kimi-k2-instruct';
+/** Primary workflow model — Llama 3.3 70B on Groq's LPU. ~500ms TTFT
+ *  for our prompt size; smart enough for the 3-8 dish events that
+ *  make up the vast majority of chef usage. The smarter Kimi K2 is
+ *  the fallback for when this errors (rate-limit, transient 5xx,
+ *  malformed JSON, etc.) — see runGroqWithFallback below. */
+export const GROQ_WORKFLOW_MODEL = 'llama-3.3-70b-versatile';
+/** Kimi K2 Instruct — 1T-param MoE, top of Groq's reasoning leaderboard
+ *  but slower (~1-2s TTFT). Used as the second tier when Llama errors
+ *  out, so complex multi-dish events that confuse Llama still resolve
+ *  cleanly. Workers AI Llama remains the third / final fallback at
+ *  the endpoints.ts layer. */
+export const GROQ_WORKFLOW_FALLBACK_MODEL = 'moonshotai/kimi-k2-instruct';
 
 export class GroqError extends Error {
   readonly status?: number;
@@ -87,4 +95,32 @@ export async function runGroq(
     throw new GroqError('Groq response missing choices[0].message.content');
   }
   return content;
+}
+
+/**
+ * Workflow-generation fallback chain across Groq's two best models.
+ *
+ *   1. Try GROQ_WORKFLOW_MODEL (Llama 3.3 70B — fast)
+ *   2. On any error → GROQ_WORKFLOW_FALLBACK_MODEL (Kimi K2 — smarter,
+ *      slower)
+ *
+ * Caller is responsible for the OUTER fallback to Workers AI when
+ * BOTH Groq tiers throw — handleEndpoint wraps this call in its own
+ * try/catch for exactly that reason. Logging the transition makes
+ * `wrangler tail` tell you which tier handled a given request.
+ */
+export async function runGroqWithFallback(
+  apiKey: string,
+  body: ProxyRequestBody,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  try {
+    return await runGroq(apiKey, GROQ_WORKFLOW_MODEL, body, fetchImpl);
+  } catch (err) {
+    console.warn(
+      '[groqClient] Llama 3.3 70B failed, retrying with Kimi K2:',
+      err instanceof Error ? err.message : String(err),
+    );
+    return runGroq(apiKey, GROQ_WORKFLOW_FALLBACK_MODEL, body, fetchImpl);
+  }
 }

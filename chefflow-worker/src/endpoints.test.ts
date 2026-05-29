@@ -1,19 +1,35 @@
 import { describe, it, expect, vi } from 'vitest';
 
-// Mock groqClient before importing endpoints so handleEndpoint sees the
-// mocked runGroq when the workflow path tries to use it.
+// Mock groqClient before importing endpoints. We mock the low-level
+// runGroq so we can assert which model the tri-tier fallback chain
+// chose (Llama primary → Kimi K2 fallback → outer Workers AI). The
+// real runGroqWithFallback delegates to runGroq twice with the two
+// model constants, so we mirror that behaviour here to exercise the
+// fallback chain end-to-end.
 const runGroqMock = vi.hoisted(() => vi.fn(async () => '{"groq":"ok"}'));
-vi.mock('./groqClient', () => ({
-  runGroq: runGroqMock,
-  GROQ_WORKFLOW_MODEL: 'moonshotai/kimi-k2-instruct',
-  GroqError: class extends Error {
-    readonly status?: number;
-    constructor(message: string, status?: number) {
-      super(message);
-      this.status = status;
-    }
-  },
-}));
+vi.mock('./groqClient', () => {
+  const PRIMARY = 'llama-3.3-70b-versatile';
+  const FALLBACK = 'moonshotai/kimi-k2-instruct';
+  return {
+    runGroq: runGroqMock,
+    GROQ_WORKFLOW_MODEL: PRIMARY,
+    GROQ_WORKFLOW_FALLBACK_MODEL: FALLBACK,
+    runGroqWithFallback: async (apiKey: string, body: unknown) => {
+      try {
+        return await runGroqMock(apiKey, PRIMARY, body);
+      } catch {
+        return runGroqMock(apiKey, FALLBACK, body);
+      }
+    },
+    GroqError: class extends Error {
+      readonly status?: number;
+      constructor(message: string, status?: number) {
+        super(message);
+        this.status = status;
+      }
+    },
+  };
+});
 
 import { handleEndpoint } from './endpoints';
 import { TEXT_MODEL, VISION_MODEL } from './types';
@@ -58,7 +74,7 @@ describe('handleEndpoint', () => {
     expect(runGroqMock).not.toHaveBeenCalled();
   });
 
-  it('workflow + GROQ_API_KEY → routes to Groq + Kimi K2 (NOT Workers AI)', async () => {
+  it('workflow + GROQ_API_KEY → routes to Groq + Llama 3.3 70B (fast primary, NOT Workers AI)', async () => {
     runGroqMock.mockClear();
     runGroqMock.mockResolvedValueOnce('{"groq":"ok"}');
     const captured: { model?: string } = {};
@@ -72,14 +88,36 @@ describe('handleEndpoint', () => {
     expect(runGroqMock).toHaveBeenCalledTimes(1);
     const callArgs = runGroqMock.mock.calls[0] as unknown as unknown[];
     expect(callArgs[0]).toBe('gsk_test');
-    expect(callArgs[1]).toBe('moonshotai/kimi-k2-instruct');
+    // Primary tier: Llama 3.3 70B (~500ms TTFT), NOT Kimi K2.
+    expect(callArgs[1]).toBe('llama-3.3-70b-versatile');
     // Workers AI was NOT called.
     expect(captured.model).toBeUndefined();
   });
 
-  it('workflow + Groq throws → falls back to Workers AI Llama (chef still gets a schedule)', async () => {
+  it('workflow + Llama errors → falls back to Kimi K2 (smart tier 2 inside runGroqWithFallback)', async () => {
     runGroqMock.mockClear();
-    runGroqMock.mockRejectedValueOnce(new Error('Groq 503: upstream busy'));
+    runGroqMock.mockRejectedValueOnce(new Error('Groq 503: Llama overloaded'));
+    runGroqMock.mockResolvedValueOnce('{"kimi":"resolved"}');
+    const captured: { model?: string } = {};
+    const out = await handleEndpoint(
+      'workflow',
+      fakeAi(captured),
+      { systemPrompt: 'SYS', userPrompt: 'an event' },
+      'gsk_test',
+    );
+    // Kimi K2 returned the workflow — chef never noticed the Llama dropout.
+    expect(out).toBe('{"kimi":"resolved"}');
+    expect(runGroqMock).toHaveBeenCalledTimes(2);
+    expect(runGroqMock.mock.calls[0][1]).toBe('llama-3.3-70b-versatile');
+    expect(runGroqMock.mock.calls[1][1]).toBe('moonshotai/kimi-k2-instruct');
+    // Outer Workers AI fallback was NOT triggered (Groq tier 2 succeeded).
+    expect(captured.model).toBeUndefined();
+  });
+
+  it('workflow + BOTH Groq tiers throw → outer fallback to Workers AI Llama (chef still gets a schedule)', async () => {
+    runGroqMock.mockClear();
+    runGroqMock.mockRejectedValueOnce(new Error('Groq 503: Llama down'));
+    runGroqMock.mockRejectedValueOnce(new Error('Groq 503: Kimi down too'));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const captured: { model?: string } = {};
@@ -89,9 +127,11 @@ describe('handleEndpoint', () => {
         { systemPrompt: 'SYS', userPrompt: 'an event' },
         'gsk_test',
       );
+      // Final tier: Workers AI Llama returned the schedule.
       expect(out).toBe('{"ok":true}');
       expect(captured.model).toBe(TEXT_MODEL);
-      expect(runGroqMock).toHaveBeenCalledTimes(1);
+      // Both Groq tiers were attempted before the outer fallback fired.
+      expect(runGroqMock).toHaveBeenCalledTimes(2);
     } finally {
       warn.mockRestore();
     }
