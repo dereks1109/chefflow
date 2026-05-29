@@ -1,0 +1,208 @@
+[
+  {
+    "id": "r_starter_roast_beef",
+    "title": "Classic Roast Beef Sirloin",
+    "description": "Sunday-lunch staple. A 1.5kg sirloin joint rested off the bone with a simple herb crust. Serve with the lemon-herb potatoes and a red-wine gravy.",
+    "originalYield": 6,
+    "prepTime": "0:20",
+    "cookTime": "1:30",
+    "allergens": [],
+    "ingredients": [
+      { "id": "i_1", "raw": "{1500|g|sirloin joint}", "amount": 1500, "unit": "g", "name": "Sirloin joint", "isLocked": false },
+      { "id": "i_2", "raw": "{2|tbsp|olive oil}", "amount": 2, "unit": "tbsp", "name": "Olive oil", "isLocked": false },
+      { "id": "i_3", "raw": "{1|tbsp|sea salt flakes}", "amount": 1, "unit": "tbsp", "name": "Sea salt flakes", "isLocked": false },
+      { "id": "i_4", "raw": "{2|tsp|cracked black pepper}", "amount": 2, "unit": "tsp", "name": "Cracked black pepper", "isLocked": false },
+      { "id": "i_5", "raw": "{4|sprig|thyme}", "amount": 4, "unit": "sprig", "name": "Thyme", "isLocked": false },
+      { "id": "i_6", "raw": "{2|clove|garlic}", "amount": 2, "unit": "clove", "name": "Garlic, crushed", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Pre-heat oven to 220°C / fan 200°C / gas 7. Take the joint out of the fridge 30 minutes before cooking to come to room temperature.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Pat the joint dry with kitchen paper. Rub all over with olive oil, then season generously with salt and pepper.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_3", "text": "Sear in a hot, dry pan on every side until deeply browned — about 6 minutes total. This is your crust.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "Transfer to a roasting tin. Scatter thyme and crushed garlic over the top. Roast for 20 minutes per 500g for medium-rare (so ~60 minutes for this joint).", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "Rest covered loosely with foil for at least 20 minutes before carving. The internal temp will climb 3-4°C off the heat.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "serve" },
+      { "id": "s_6", "text": "Carve against the grain into 0.5cm slices. Serve with the rendered pan juices spooned over.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_vegan_mushroom_risotto",
+    "title": "Vegan Mushroom Risotto",
+    "description": "Wild mushroom risotto finished with nutritional yeast for a parmesan-like depth. Vegan, gluten-free if the stock is.",
+    "originalYield": 4,
+    "prepTime": "0:15",
+    "cookTime": "0:30",
+    "allergens": [],
+    "ingredients": [
+      { "id": "i_1", "raw": "{300|g|arborio rice}", "amount": 300, "unit": "g", "name": "Arborio rice", "isLocked": false },
+      { "id": "i_2", "raw": "{400|g|mixed mushrooms}", "amount": 400, "unit": "g", "name": "Mixed mushrooms (chestnut, shiitake, oyster)", "isLocked": false },
+      { "id": "i_3", "raw": "{1|whole|onion}", "amount": 1, "unit": "whole", "name": "Onion, finely diced", "isLocked": false },
+      { "id": "i_4", "raw": "{3|clove|garlic}", "amount": 3, "unit": "clove", "name": "Garlic, minced", "isLocked": false },
+      { "id": "i_5", "raw": "{1.2|L|vegetable stock}", "amount": 1.2, "unit": "L", "name": "Vegetable stock, hot", "isLocked": false },
+      { "id": "i_6", "raw": "{150|ml|dry white wine}", "amount": 150, "unit": "ml", "name": "Dry white wine", "isLocked": false },
+      { "id": "i_7", "raw": "{3|tbsp|nutritional yeast}", "amount": 3, "unit": "tbsp", "name": "Nutritional yeast", "isLocked": false },
+      { "id": "i_8", "raw": "{2|tbsp|olive oil}", "amount": 2, "unit": "tbsp", "name": "Olive oil", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Slice the mushrooms. Heat 1 tbsp olive oil in a pan, fry the mushrooms in batches until golden and any liquid has evaporated. Set aside.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "In a heavy-bottomed pan, soften the onion in the remaining oil for 5 minutes. Add the garlic, cook 1 minute more.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_3", "text": "Add the rice and toast for 2 minutes, stirring. Pour in the wine and let it bubble away.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "Add hot stock a ladleful at a time, stirring often. Wait until each addition is absorbed before adding the next. Takes ~18 minutes total.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "When the rice is just tender with a slight bite, stir in the mushrooms and nutritional yeast. Season generously.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_6", "text": "Rest off the heat for 2 minutes. Serve in warm bowls with a final drizzle of olive oil and cracked pepper.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_pan_seared_salmon",
+    "title": "Pan-Seared Salmon with Lemon Butter",
+    "description": "Crisp-skinned salmon fillet with a quick lemon butter pan sauce. 12 minutes start to plate.",
+    "originalYield": 4,
+    "prepTime": "0:05",
+    "cookTime": "0:12",
+    "allergens": ["fish", "milk"],
+    "ingredients": [
+      { "id": "i_1", "raw": "{4|whole|salmon fillet}", "amount": 4, "unit": "whole", "name": "Salmon fillets, skin on (~150g each)", "isLocked": false, "allergenFlags": ["fish"] },
+      { "id": "i_2", "raw": "{2|tbsp|olive oil}", "amount": 2, "unit": "tbsp", "name": "Olive oil", "isLocked": false },
+      { "id": "i_3", "raw": "{60|g|unsalted butter}", "amount": 60, "unit": "g", "name": "Unsalted butter", "isLocked": false, "allergenFlags": ["milk"] },
+      { "id": "i_4", "raw": "{1|whole|lemon}", "amount": 1, "unit": "whole", "name": "Lemon, juiced + zested", "isLocked": false },
+      { "id": "i_5", "raw": "{2|tbsp|capers}", "amount": 2, "unit": "tbsp", "name": "Capers", "isLocked": false },
+      { "id": "i_6", "raw": "{1|tbsp|parsley}", "amount": 1, "unit": "tbsp", "name": "Parsley, chopped", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Pat the salmon dry. Score the skin if thick. Season both sides with salt.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Heat olive oil in a non-stick pan over medium-high. Place the fillets skin-side down and press gently with a spatula for the first 30 seconds so the skin stays flat.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_3", "text": "Cook skin-side down for 5-6 minutes until the skin is deep gold and crisp. The flesh should look cooked 75% of the way up the fillet.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "Flip, cook for 1-2 minutes more depending on thickness. Transfer to plates skin-up.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "Reduce the heat to medium-low. Add butter, lemon juice, zest, and capers. Swirl until the butter has melted into a glossy sauce.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_6", "text": "Spoon the sauce around (not over) the salmon to keep the skin crisp. Finish with parsley.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_chicken_tikka_masala",
+    "title": "Chicken Tikka Masala",
+    "description": "Yoghurt-marinated chicken, charred under the grill, then folded into a smoky tomato + cream sauce. Serve with basmati and naan.",
+    "originalYield": 4,
+    "prepTime": "0:30",
+    "cookTime": "0:40",
+    "allergens": ["milk"],
+    "ingredients": [
+      { "id": "i_1", "raw": "{600|g|chicken thigh}", "amount": 600, "unit": "g", "name": "Chicken thigh fillets, cubed", "isLocked": false },
+      { "id": "i_2", "raw": "{200|g|natural yoghurt}", "amount": 200, "unit": "g", "name": "Natural yoghurt", "isLocked": false, "allergenFlags": ["milk"] },
+      { "id": "i_3", "raw": "{3|tbsp|garam masala}", "amount": 3, "unit": "tbsp", "name": "Garam masala", "isLocked": false },
+      { "id": "i_4", "raw": "{1|whole|onion}", "amount": 1, "unit": "whole", "name": "Onion, finely diced", "isLocked": false },
+      { "id": "i_5", "raw": "{4|clove|garlic}", "amount": 4, "unit": "clove", "name": "Garlic, minced", "isLocked": false },
+      { "id": "i_6", "raw": "{2|tbsp|ginger}", "amount": 2, "unit": "tbsp", "name": "Ginger, grated", "isLocked": false },
+      { "id": "i_7", "raw": "{400|g|tinned tomatoes}", "amount": 400, "unit": "g", "name": "Tinned chopped tomatoes", "isLocked": false },
+      { "id": "i_8", "raw": "{150|ml|double cream}", "amount": 150, "unit": "ml", "name": "Double cream", "isLocked": false, "allergenFlags": ["milk"] }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Mix the chicken with yoghurt, 2 tbsp garam masala, half the garlic and half the ginger. Marinate at least 30 minutes (overnight is better).", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Thread onto skewers (or spread on a tray). Grill under high heat for 8-10 minutes, turning once, until edges are charred. Set aside.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_3", "text": "In a heavy pan, sweat the onion in oil over medium heat for 8 minutes until soft. Add remaining garlic, ginger, and garam masala. Cook 1 minute.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "Add the tinned tomatoes. Simmer 15 minutes until reduced and glossy. Blend smooth with a stick blender if you prefer a clean sauce.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "Stir in the cream + grilled chicken. Simmer 5 more minutes for the flavours to come together. Season with salt.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_6", "text": "Serve over hot basmati rice with naan and fresh coriander.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_caesar_salad",
+    "title": "Classic Caesar Salad",
+    "description": "Crisp baby gem, anchovy-rich dressing, parmesan shavings, garlic croutons. Real Caesar — the way the original Tijuana Hotel served it.",
+    "originalYield": 4,
+    "prepTime": "0:15",
+    "cookTime": "0:10",
+    "allergens": ["eggs", "fish", "milk", "gluten"],
+    "ingredients": [
+      { "id": "i_1", "raw": "{4|whole|baby gem lettuce}", "amount": 4, "unit": "whole", "name": "Baby gem lettuces, leaves separated", "isLocked": false },
+      { "id": "i_2", "raw": "{2|whole|egg yolk}", "amount": 2, "unit": "whole", "name": "Egg yolks", "isLocked": false, "allergenFlags": ["eggs"] },
+      { "id": "i_3", "raw": "{6|whole|anchovy fillet}", "amount": 6, "unit": "whole", "name": "Anchovy fillets in oil", "isLocked": false, "allergenFlags": ["fish"] },
+      { "id": "i_4", "raw": "{2|clove|garlic}", "amount": 2, "unit": "clove", "name": "Garlic, crushed", "isLocked": false },
+      { "id": "i_5", "raw": "{50|g|parmesan}", "amount": 50, "unit": "g", "name": "Parmesan, finely grated + shaved for garnish", "isLocked": false, "allergenFlags": ["milk"] },
+      { "id": "i_6", "raw": "{120|ml|olive oil}", "amount": 120, "unit": "ml", "name": "Olive oil", "isLocked": false },
+      { "id": "i_7", "raw": "{1|whole|lemon}", "amount": 1, "unit": "whole", "name": "Lemon, juiced", "isLocked": false },
+      { "id": "i_8", "raw": "{2|slice|sourdough bread}", "amount": 2, "unit": "slice", "name": "Sourdough bread, torn into pieces", "isLocked": false, "allergenFlags": ["gluten"] }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Pre-heat oven to 200°C. Toss the torn sourdough with 2 tbsp olive oil + 1 clove crushed garlic. Bake on a tray for 8 minutes until crisp.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "In a bowl, mash 4 anchovies and the remaining garlic to a paste. Whisk in the egg yolks.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_3", "text": "Slowly drizzle in the olive oil while whisking, as for mayonnaise, until thick and emulsified.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_4", "text": "Whisk in the lemon juice + grated parmesan. Season with salt + pepper. Taste — it should be punchy and savoury.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_5", "text": "Toss the lettuce leaves with the dressing in a wide bowl until every leaf is coated.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" },
+      { "id": "s_6", "text": "Plate with croutons scattered through, top with parmesan shavings + remaining anchovy fillets.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_chocolate_lava_cake",
+    "title": "Chocolate Lava Cake",
+    "description": "Individual molten-centre chocolate cakes. 12 minutes in the oven, runny middle guaranteed if you don't overbake.",
+    "originalYield": 4,
+    "prepTime": "0:15",
+    "cookTime": "0:12",
+    "allergens": ["eggs", "milk", "gluten"],
+    "ingredients": [
+      { "id": "i_1", "raw": "{200|g|dark chocolate}", "amount": 200, "unit": "g", "name": "Dark chocolate (70%+), chopped", "isLocked": false, "allergenFlags": ["milk"] },
+      { "id": "i_2", "raw": "{200|g|unsalted butter}", "amount": 200, "unit": "g", "name": "Unsalted butter, cubed", "isLocked": false, "allergenFlags": ["milk"] },
+      { "id": "i_3", "raw": "{4|whole|egg}", "amount": 4, "unit": "whole", "name": "Eggs", "isLocked": false, "allergenFlags": ["eggs"] },
+      { "id": "i_4", "raw": "{4|whole|egg yolk}", "amount": 4, "unit": "whole", "name": "Egg yolks", "isLocked": false, "allergenFlags": ["eggs"] },
+      { "id": "i_5", "raw": "{120|g|caster sugar}", "amount": 120, "unit": "g", "name": "Caster sugar", "isLocked": false },
+      { "id": "i_6", "raw": "{60|g|plain flour}", "amount": 60, "unit": "g", "name": "Plain flour", "isLocked": false, "allergenFlags": ["gluten"] },
+      { "id": "i_7", "raw": "{1|tbsp|cocoa powder}", "amount": 1, "unit": "tbsp", "name": "Cocoa powder (for dusting)", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Pre-heat oven to 200°C / fan 180°C / gas 6. Generously butter 4 × 200ml dariole moulds and dust with cocoa powder.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Melt the chocolate and butter together in a bowl over barely-simmering water. Stir until smooth, then cool slightly.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_3", "text": "In a separate bowl, whisk the eggs, yolks, and sugar until pale and thickened (about 3 minutes with electric beaters).", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_4", "text": "Fold the chocolate mixture into the eggs, then sift in the flour and fold gently. Don't overmix.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_5", "text": "Divide between the moulds. Bake for exactly 12 minutes — the tops should be set but the centre still wobbly.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_6", "text": "Rest for 1 minute, then turn out onto plates. Dust with cocoa and serve immediately with cream or ice cream.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_roast_potatoes",
+    "title": "Lemon Herb Roast Potatoes",
+    "description": "Crispy on the outside, fluffy inside. Maris Piper or King Edward potatoes parboiled then roasted in olive oil with lemon zest and rosemary.",
+    "originalYield": 6,
+    "prepTime": "0:15",
+    "cookTime": "0:50",
+    "allergens": [],
+    "ingredients": [
+      { "id": "i_1", "raw": "{1500|g|potatoes}", "amount": 1500, "unit": "g", "name": "Maris Piper potatoes, peeled and quartered", "isLocked": false },
+      { "id": "i_2", "raw": "{80|ml|olive oil}", "amount": 80, "unit": "ml", "name": "Olive oil", "isLocked": false },
+      { "id": "i_3", "raw": "{1|whole|lemon}", "amount": 1, "unit": "whole", "name": "Lemon, zested", "isLocked": false },
+      { "id": "i_4", "raw": "{4|sprig|rosemary}", "amount": 4, "unit": "sprig", "name": "Rosemary", "isLocked": false },
+      { "id": "i_5", "raw": "{6|clove|garlic}", "amount": 6, "unit": "clove", "name": "Garlic cloves, unpeeled", "isLocked": false },
+      { "id": "i_6", "raw": "{1|tbsp|sea salt}", "amount": 1, "unit": "tbsp", "name": "Sea salt flakes", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Pre-heat oven to 220°C / fan 200°C. Pour the olive oil into a large roasting tray and slide into the oven to heat up.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Boil the potatoes in well-salted water for 8 minutes until just yielding to a knife tip. Drain and shake them in the colander to rough up the edges.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "prep" },
+      { "id": "s_3", "text": "Carefully tip the potatoes into the hot oil — they should sizzle. Turn each one with a spoon to coat. Roast for 30 minutes.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "Turn the potatoes, scatter over the garlic cloves and rosemary. Return to the oven for 15-20 more minutes until deeply golden and crisp.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "Transfer to a serving bowl. Sprinkle with sea salt and the lemon zest while still hot. Serve immediately.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen-free", "dependsOn": [], "phase": "serve" }
+    ]
+  },
+  {
+    "id": "r_starter_quick_tomato_pasta",
+    "title": "Quick Tomato Pasta",
+    "description": "A weeknight pasta in under 20 minutes. Good tinned San Marzano tomatoes, garlic, fresh basil, generous black pepper.",
+    "originalYield": 2,
+    "prepTime": "0:05",
+    "cookTime": "0:15",
+    "allergens": ["gluten"],
+    "ingredients": [
+      { "id": "i_1", "raw": "{200|g|spaghetti}", "amount": 200, "unit": "g", "name": "Spaghetti", "isLocked": false, "allergenFlags": ["gluten"] },
+      { "id": "i_2", "raw": "{400|g|tinned tomatoes}", "amount": 400, "unit": "g", "name": "Tinned San Marzano tomatoes", "isLocked": false },
+      { "id": "i_3", "raw": "{4|clove|garlic}", "amount": 4, "unit": "clove", "name": "Garlic cloves, sliced", "isLocked": false },
+      { "id": "i_4", "raw": "{3|tbsp|olive oil}", "amount": 3, "unit": "tbsp", "name": "Extra virgin olive oil", "isLocked": false },
+      { "id": "i_5", "raw": "{10|leaf|basil}", "amount": 10, "unit": "leaf", "name": "Basil leaves", "isLocked": false },
+      { "id": "i_6", "raw": "{1|pinch|chilli flakes}", "amount": 1, "unit": "pinch", "name": "Chilli flakes (optional)", "isLocked": false }
+    ],
+    "steps": [
+      { "id": "s_1", "text": "Bring a large pan of well-salted water to the boil. Drop in the spaghetti.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "prep" },
+      { "id": "s_2", "text": "Meanwhile, warm the olive oil in a wide pan over medium-low heat. Add the sliced garlic — let it gently turn pale gold (don't burn it).", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_3", "text": "Crush the tinned tomatoes by hand into the pan. Add the chilli flakes. Simmer 8 minutes until thickened.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_4", "text": "When the pasta is 1 minute shy of al dente, lift it directly into the sauce with tongs, bringing a splash of pasta water with it.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_5", "text": "Toss vigorously over the heat for 1 minute. The starchy water emulsifies the sauce around the strands.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "cook" },
+      { "id": "s_6", "text": "Tear the basil leaves over. Plate, finish with a final drizzle of olive oil and cracked pepper.", "kind": "active", "thermalClass": "normal", "allergenClass": "allergen", "dependsOn": [], "phase": "serve" }
+    ]
+  }
+]
