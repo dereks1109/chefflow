@@ -5,7 +5,10 @@ import { getRecipe } from '../../db/recipesRepo';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import { AllergenPill } from '../components/AllergenBadge';
 import AllergenHistorySection from '../components/AllergenHistorySection';
+import GuestBrowseBanner from '../components/GuestBrowseBanner';
 import type { Recipe } from '../../core/types';
+import { useIsGuest } from '../../state/useAuthGate';
+import { fetchPublicDemos } from '../../core/demos/demosClient';
 
 // ---------------------------------------------------------------------------
 // RecipeView — read-only view of a recipe. Mirrors the events pattern
@@ -30,22 +33,47 @@ function ingredientsFlaggedWith(recipe: Recipe, tag: string): string[] {
 export default function RecipeView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const isGuest = useIsGuest();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
+    // Guest branch: look up the recipe in the public demos set rather
+    // than Dexie (the chef's personal library doesn't exist for a
+    // signed-out visitor). Non-demo ids fall through to not-found,
+    // which renders a sign-in CTA below.
+    if (isGuest) {
+      void fetchPublicDemos()
+        .then((d) => {
+          if (cancelled) return;
+          const found = d.recipes.find((r) => r.id === id);
+          setState(found ? { kind: 'ready', recipe: found } : { kind: 'not-found' });
+        })
+        .catch(() => {
+          if (!cancelled) setState({ kind: 'not-found' });
+        });
+      return () => { cancelled = true; };
+    }
     void getRecipe(id).then((recipe) => {
       if (cancelled) return;
       setState(recipe ? { kind: 'ready', recipe } : { kind: 'not-found' });
     });
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, isGuest]);
 
   if (state.kind === 'loading') return <div className="p-6 text-slate-500">Loading…</div>;
   if (state.kind === 'not-found') {
     return (
       <section className="p-6">
-        <h1 className="text-xl font-bold">Recipe not found.</h1>
+        {isGuest && <GuestBrowseBanner scope="recipes" />}
+        <h1 className="text-xl font-bold">
+          {isGuest ? "Recipe isn't public." : 'Recipe not found.'}
+        </h1>
+        {isGuest && (
+          <p className="mt-2 text-sm text-slate-500">
+            Personal recipes live in your library. Sign in to view your own.
+          </p>
+        )}
         <button
           type="button"
           onClick={() => navigate('/recipes')}
@@ -65,6 +93,7 @@ export default function RecipeView() {
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto" data-testid="recipe-view">
+      {isGuest && <GuestBrowseBanner scope="recipes" />}
       <div className="mb-3 flex items-center justify-between gap-2">
         <button
           type="button"

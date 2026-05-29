@@ -11,6 +11,9 @@ import {
 import { randomId } from '../../core/util/id';
 import { ArrowLeft, GripVertical, Layers, Plus, Sparkles, Trash2, Wallet } from 'lucide-react';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
+import { useIsGuest } from '../../state/useAuthGate';
+import { fetchPublicDemos } from '../../core/demos/demosClient';
+import GuestBrowseBanner from '../components/GuestBrowseBanner';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
@@ -37,6 +40,7 @@ type AddDishUi = { open: false } | { open: true; draft: Dish };
 export default function EventView() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const isGuest = useIsGuest();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   // Full recipe library — loaded once per mount. Used three ways:
   //   1) `recipesById` (derived Map) prices dishes for the per-dish line +
@@ -54,13 +58,27 @@ export default function EventView() {
 
   useEffect(() => {
     let cancelled = false;
+    // Guest branch: pull the requested event out of the public demos
+    // set (the chef's personal events don't exist for a signed-out
+    // visitor). Non-demo ids fall through to not-found, which now
+    // shows a sign-in CTA.
+    if (isGuest) {
+      void fetchPublicDemos()
+        .then((d) => {
+          if (cancelled) return;
+          const found = d.events.find((e) => e.id === id);
+          setState(found ? { kind: 'ready', event: found } : { kind: 'not-found' });
+        })
+        .catch(() => { if (!cancelled) setState({ kind: 'not-found' }); });
+      return () => { cancelled = true; };
+    }
     getEvent(id).then((event) => {
       if (cancelled) return;
       if (!event) setState({ kind: 'not-found' });
       else setState({ kind: 'ready', event });
     });
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, isGuest]);
 
   // Load the full recipe library once on mount so the autocomplete dropdown
   // can search across all titles, not just those already linked to a dish.
@@ -80,7 +98,15 @@ export default function EventView() {
   if (state.kind === 'not-found') {
     return (
       <div className="p-6">
-        <h1 className="text-xl font-bold">Event not found.</h1>
+        {isGuest && <GuestBrowseBanner scope="events" />}
+        <h1 className="text-xl font-bold">
+          {isGuest ? "Event isn't public." : 'Event not found.'}
+        </h1>
+        {isGuest && (
+          <p className="mt-2 text-sm text-slate-500">
+            Personal events live in your library. Sign in to view your own.
+          </p>
+        )}
         <Link to="/events" className="btn-secondary mt-4 inline-flex">Back to events</Link>
       </div>
     );
@@ -275,6 +301,7 @@ export default function EventView() {
 
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 print:!p-0 print:!space-y-0 print:!max-w-full">
+      {isGuest && <GuestBrowseBanner scope="events" />}
       <header className="flex items-center justify-between gap-2 print:!hidden">
         <Link to="/events" className="btn-secondary text-sm inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />

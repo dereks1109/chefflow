@@ -8,11 +8,14 @@ import { listRecipes } from '../../db/recipesRepo';
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
-import { useAuthGate } from '../../state/useAuthGate';
+import { useAuthGate, useIsGuest } from '../../state/useAuthGate';
+import { fetchPublicDemos } from '../../core/demos/demosClient';
+import GuestBrowseBanner from '../components/GuestBrowseBanner';
 import type { KitchenEvent } from '../../core/types';
 
 export default function EventsLibrary() {
   const requireAuth = useAuthGate();
+  const isGuest = useIsGuest();
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   // Populated when the chef returns from the recipe editor mid-review.
@@ -23,7 +26,18 @@ export default function EventsLibrary() {
 
   // Live subscription — re-renders the moment the D1 sync engine commits
   // new rows into Dexie post-login (no nav round-trip needed).
-  useEffect(() => subscribeEvents(setEvents), []);
+  //
+  // Guest branch: signed-out visitors fetch demo events from the public
+  // worker endpoint so they get something to browse without writing
+  // anon rows into Dexie.
+  useEffect(() => {
+    if (!isGuest) return subscribeEvents(setEvents);
+    let cancelled = false;
+    void fetchPublicDemos()
+      .then((d) => { if (!cancelled) setEvents(d.events); })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [isGuest]);
 
   // Pick up any pending review draft once on mount.
   useEffect(() => {
@@ -100,6 +114,7 @@ export default function EventsLibrary() {
 
   return (
     <section className="p-4 md:p-6 max-w-5xl mx-auto">
+      {isGuest && <GuestBrowseBanner scope="events" />}
       <header className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Events</h1>
         <button
@@ -114,7 +129,7 @@ export default function EventsLibrary() {
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {events.map((e) => (
           <li key={e.id} className="h-full">
-            <EventCard event={e} onDelete={handleDelete} />
+            <EventCard event={e} onDelete={(t) => requireAuth(() => void handleDelete(t))} />
           </li>
         ))}
       </ul>

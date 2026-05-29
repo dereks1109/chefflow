@@ -9,12 +9,15 @@ import { deleteMenu, listMenus, saveMenu, subscribeMenus } from '../../db/menusR
 import { randomId } from '../../core/util/id';
 import { consumeDailyQuota, QuotaExceededError } from '../../core/tier/quotaClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
-import { useAuthGate } from '../../state/useAuthGate';
+import { useAuthGate, useIsGuest } from '../../state/useAuthGate';
+import { fetchPublicDemos } from '../../core/demos/demosClient';
+import GuestBrowseBanner from '../components/GuestBrowseBanner';
 import { filterRecipes, filterRecipesByMenu } from '../../core/util/recipeSearch';
 import type { Menu, Recipe } from '../../core/types';
 
 export default function RecipesLibrary() {
   const requireAuth = useAuthGate();
+  const isGuest = useIsGuest();
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [menus, setMenus] = useState<Menu[] | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -76,7 +79,20 @@ export default function RecipesLibrary() {
   // (including when the D1 sync engine pulls demos into Dexie post-login).
   // Replaces the old one-shot listRecipes() that snapshotted Dexie before
   // the sync had finished. The unsubscribe runs on unmount.
-  useEffect(() => subscribeRecipes(setRecipes), []);
+  //
+  // Guest branch: signed-out visitors never touch Dexie (avoids writing
+  // demo rows under the anon scope that would get migrated into the
+  // chef's library on first sign-in). Instead we one-shot fetch demos
+  // from the public worker endpoint. The card grid renders the same
+  // way; only write actions short-circuit via requireAuth.
+  useEffect(() => {
+    if (!isGuest) return subscribeRecipes(setRecipes);
+    let cancelled = false;
+    void fetchPublicDemos()
+      .then((d) => { if (!cancelled) setRecipes(d.recipes); })
+      .catch(() => { if (!cancelled) setRecipes([]); });
+    return () => { cancelled = true; };
+  }, [isGuest]);
   useEffect(() => subscribeMenus(setMenus), []);
 
   async function handleDuplicate(source: Recipe) {
@@ -213,6 +229,7 @@ export default function RecipesLibrary() {
 
   return (
     <section className="p-4 md:p-6 max-w-7xl mx-auto">
+      {isGuest && <GuestBrowseBanner scope="recipes" />}
       <header className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <h1 className="text-2xl font-bold">Recipes</h1>
         <div className="flex items-center gap-2 flex-wrap">
@@ -396,10 +413,14 @@ export default function RecipesLibrary() {
                   recipe={r}
                   usedByCount={usedByCount.get(r.id) ?? 0}
                   usedByTitles={usedByTitles.get(r.id)}
-                  onTogglePin={handleTogglePin}
-                  onDuplicate={handleDuplicate}
-                  onDelete={handleDelete}
-                  onCoverPhotoChange={(next) => handleCoverPhotoChange(r, next)}
+                  // Each write action threads through requireAuth so a guest
+                  // clicking pin/duplicate/delete on a demo card opens the
+                  // Clerk sign-in modal instead of silently writing under
+                  // the anon scope. Signed-in chefs fire immediately.
+                  onTogglePin={(t) => requireAuth(() => void handleTogglePin(t))}
+                  onDuplicate={(t) => requireAuth(() => void handleDuplicate(t))}
+                  onDelete={(t) => requireAuth(() => void handleDelete(t))}
+                  onCoverPhotoChange={(next) => requireAuth(() => void handleCoverPhotoChange(r, next))}
                 />
               </li>
             );

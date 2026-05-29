@@ -56,6 +56,7 @@ import { completeOnboarding, OnboardingError, type OnboardingProfile } from './o
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
 import { runContactDigest } from './contactDigest';
 import { runDailyDigest } from './dailyDigest';
+import { buildDemoEvents, buildDemoRecipes } from './demoSeed';
 import { runGmailDigest } from './gmailDigest';
 import { requestPinRecoveryCode, verifyPinRecoveryCode } from './pinRecovery';
 import { estimateCommute, CommuteError } from './commute';
@@ -166,6 +167,28 @@ export async function handleRequest(
   // behind Clerk auth. Handle BEFORE the JWT verify below.
   if (req.method === 'POST' && url.pathname === '/webhook/stripe') {
     return handleStripeWebhook(req, env, fetchImpl);
+  }
+
+  // ---- Public demo content — fuels the signed-out guest browse mode
+  // on /recipes + /events. Same canonical demo set that gets provisioned
+  // to each chef on first sign-in (buildDemoRecipes / buildDemoEvents).
+  // No auth, CDN-cacheable for 5 minutes since the content is static.
+  if (req.method === 'GET' && url.pathname === '/demos/list') {
+    const now = Date.now();
+    return new Response(
+      JSON.stringify({
+        recipes: buildDemoRecipes(now),
+        events: buildDemoEvents(now),
+      }),
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=300',
+          'Access-Control-Allow-Origin': '*',
+        },
+      },
+    );
   }
 
   // ---- Public community reads — anyone with the URL can browse. ----

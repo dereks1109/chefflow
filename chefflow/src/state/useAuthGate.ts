@@ -30,3 +30,18 @@ export function useAuthGate(): (action: () => void) => void {
     clerk.openSignIn?.();
   };
 }
+
+// useIsGuest — true when Clerk has fully loaded and reports no signed-
+// in user. Used by the library/view pages to switch to read-only demo
+// browsing instead of reading the per-user Dexie repo. Returns false
+// during Clerk's initial load so we don't briefly flash the guest UI
+// to chefs who actually have a session.
+//
+// E2E mode short-circuits to "not a guest" so the test suite keeps
+// reading from the local Dexie repo.
+export function useIsGuest(): boolean {
+  const { isLoaded, isSignedIn } = useUser();
+  const e2eMode = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
+  if (e2eMode) return false;
+  return isLoaded && !isSignedIn;
+}

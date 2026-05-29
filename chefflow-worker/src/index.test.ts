@@ -214,6 +214,27 @@ describe('worker router — POST /quota/consume', () => {
   });
 });
 
+describe('worker router — GET /demos/list (public, no auth)', () => {
+  it('returns 200 + canonical demo recipes + events WITHOUT a Clerk JWT', async () => {
+    // Bare request — no Authorization header, no body. Signed-out guests
+    // on the SPA hit this endpoint to populate the read-only demo browse
+    // mode on /recipes + /events.
+    const req = new Request('https://api.test/demos/list', { method: 'GET' });
+    const res = await handleRequest(req, env, verifyRejects, stubFetchClerkTier('free'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { recipes: Array<{ id: string }>; events: Array<{ id: string }> };
+    // Audit confirmed buildDemoRecipes ships 14 entries today. Asserting
+    // >=10 makes the test resilient to small additions without going
+    // stale on every demo tweak.
+    expect(body.recipes.length).toBeGreaterThanOrEqual(10);
+    expect(body.events.length).toBeGreaterThanOrEqual(1);
+    // Demo ids are namespaced (r_demo_*) so the SPA can demoPhotoMap them.
+    expect(body.recipes.every((r) => r.id.startsWith('r_demo_'))).toBe(true);
+    // CDN-friendly cache headers — content is static.
+    expect(res.headers.get('Cache-Control')).toContain('public');
+  });
+});
+
 describe('worker router — community', () => {
   it('GET /community/list is public (no auth required)', async () => {
     const req = new Request('https://api.test/community/list', { method: 'GET' });
