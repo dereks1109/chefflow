@@ -6,7 +6,9 @@ import { describe, it, expect, vi } from 'vitest';
 // real runGroqWithFallback delegates to runGroq twice with the two
 // model constants, so we mirror that behaviour here to exercise the
 // fallback chain end-to-end.
-const runGroqMock = vi.hoisted(() => vi.fn(async () => '{"groq":"ok"}'));
+const runGroqMock = vi.hoisted(() =>
+  vi.fn(async (_apiKey: string, _model: string, _body: unknown): Promise<string> => '{"groq":"ok"}'),
+);
 vi.mock('./groqClient', () => {
   const PRIMARY = 'llama-3.3-70b-versatile';
   const FALLBACK = 'moonshotai/kimi-k2-instruct';
