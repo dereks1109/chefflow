@@ -9,7 +9,9 @@ import {
   type DraggableProvided,
 } from '@hello-pangea/dnd';
 import { randomId } from '../../core/util/id';
-import { ArrowLeft, GripVertical, Layers, Plus, Sparkles, Trash2, Wallet } from 'lucide-react';
+import { ArrowLeft, ChefHat, GripVertical, Layers, Plus, Sparkles, Trash2, Wallet } from 'lucide-react';
+import { useTierStore } from '../../state/useTierStore';
+import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { useIsGuest } from '../../state/useAuthGate';
 import { fetchPublicDemos } from '../../core/demos/demosClient';
@@ -55,6 +57,10 @@ export default function EventView() {
   );
   const [addDishUi, setAddDishUi] = useState<AddDishUi>({ open: false });
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
+  const [menuBuilderOpen, setMenuBuilderOpen] = useState(false);
+  const tier = useTierStore((s) => s.tier);
+  const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
+  const canBuildMenu = tier !== 'free';
 
   useEffect(() => {
     let cancelled = false;
@@ -307,14 +313,35 @@ export default function EventView() {
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
           Events
         </Link>
-        <WorkflowCta event={e} />
+        <div className="flex items-center gap-2">
+          {/* "Build menu" sits next to "Generate Workflow" — both are
+              chef-driven post-planning actions. Pro-gated: free users
+              clicking it open the upgrade sheet (same destination as
+              the old in-section upgrade pitch). */}
+          <button
+            type="button"
+            onClick={() => (canBuildMenu ? setMenuBuilderOpen(true) : openUpgrade('general'))}
+            data-testid="event-build-menu"
+            className="btn-secondary inline-flex items-center gap-2"
+            title={canBuildMenu ? 'Print a customer-facing menu' : 'Upgrade to Pro to build menus'}
+          >
+            <ChefHat className="h-4 w-4" aria-hidden="true" />
+            Build menu
+          </button>
+          <WorkflowCta event={e} />
+        </div>
       </header>
 
       <div className="print:!hidden">
         <EventDetailCard event={e} onEdit={() => setDetailsSheetOpen(true)} />
       </div>
 
-      <MenuBuilder event={e} recipesById={recipesById} />
+      <MenuBuilder
+        event={e}
+        recipesById={recipesById}
+        open={menuBuilderOpen}
+        onClose={() => setMenuBuilderOpen(false)}
+      />
 
       <div className="print:!hidden space-y-6">
       <MenuCheckPanel

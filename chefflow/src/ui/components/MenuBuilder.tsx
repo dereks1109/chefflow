@@ -1,17 +1,17 @@
 import { useMemo, useState } from 'react';
-import { ChefHat, Printer, Sparkles } from 'lucide-react';
-import { useTierStore } from '../../state/useTierStore';
+import { ChefHat, Printer } from 'lucide-react';
 import { useProfileStore } from '../../state/useProfileStore';
-import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
-import { TIER_PRICE_GBP } from '../../core/tier/limits';
 import { formatGBP } from '../../core/util/money';
 import { formatDateTime } from '../../core/util/datetime';
 import type { Dish, EventSection, KitchenEvent, Recipe } from '../../core/types';
 
 // ---------------------------------------------------------------------------
 // MenuBuilder — generate a customer-facing, printable menu from the
-// event's dishes. Tier-gated to non-free accounts (Pro / Business /
-// Enterprise). Free users see a teaser + Upgrade CTA.
+// event's dishes. Now a controlled component — EventView owns the
+// open/closed state via the "Build menu" header button (which sits
+// next to "Generate Workflow"). Tier-gating + the upgrade CTA live
+// in EventView's header so MenuBuilder itself is only ever mounted
+// when the chef has access and has actively opened it.
 //
 // Flow:
 //   - Chef toggles which dishes appear (default: all included).
@@ -24,6 +24,10 @@ import type { Dish, EventSection, KitchenEvent, Recipe } from '../../core/types'
 interface Props {
   event: KitchenEvent;
   recipesById: Map<string, Recipe>;
+  /** Externally-controlled visibility. Header button in EventView flips
+   *  this on; "Close" inside the builder calls onClose to flip it off. */
+  open: boolean;
+  onClose: () => void;
 }
 
 interface DishLine {
@@ -40,14 +44,9 @@ function defaultPriceFor(dish: Dish, recipesById: Map<string, Recipe>): number |
   return r?.pricePerPortion;
 }
 
-export default function MenuBuilder({ event, recipesById }: Props) {
-  const tier = useTierStore((s) => s.tier);
+export default function MenuBuilder({ event, recipesById, open, onClose }: Props) {
   const chefName = useProfileStore((s) => s.displayName);
-  const openUpgrade = useUpgradeSheetStore((s) => s.openWith);
 
-  const proPriceLabel = `Pro — £${TIER_PRICE_GBP.pro.monthly}/mo`;
-
-  const [open, setOpen] = useState(false);
   const [headerOverride, setHeaderOverride] = useState('');
   const [lines, setLines] = useState<DishLine[]>(() =>
     event.dishes.map((d) => ({
@@ -78,59 +77,7 @@ export default function MenuBuilder({ event, recipesById }: Props) {
     return sectionGroups.filter((g) => g.lines.length > 0);
   }, [event.sections, lines]);
 
-  const isFree = tier === 'free';
-
-  if (!open) {
-    return (
-      <section
-        aria-labelledby="menu-builder-heading"
-        className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 print:hidden"
-      >
-        <header className="flex items-start justify-between gap-2">
-          <h2
-            id="menu-builder-heading"
-            className="text-sm font-semibold uppercase tracking-wide text-slate-500 inline-flex items-center gap-2"
-          >
-            <ChefHat className="h-3.5 w-3.5" aria-hidden="true" />
-            Customer menu
-          </h2>
-          {!isFree && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              data-testid="menu-builder-open"
-              className="btn-secondary text-sm"
-            >
-              Build menu
-            </button>
-          )}
-        </header>
-        {isFree ? (
-          <div className="mt-2 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-900/20 p-3">
-            <p className="text-xs text-amber-900 dark:text-amber-200 inline-flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              <strong>Pro feature.</strong> Print a customer-facing menu
-              from this event's dishes — sections, prices, your name as the
-              chef. Free accounts can't build menus today.
-            </p>
-            <button
-              type="button"
-              onClick={() => openUpgrade('general')}
-              data-testid="menu-builder-upgrade"
-              className="btn-primary text-xs mt-2"
-            >
-              Upgrade — {proPriceLabel}
-            </button>
-          </div>
-        ) : (
-          <p className="mt-2 text-xs text-slate-500">
-            Generate a printable menu for your customer from this event's
-            dishes.
-          </p>
-        )}
-      </section>
-    );
-  }
+  if (!open) return null;
 
   function toggleInclude(id: string) {
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, included: !l.included } : l)));
@@ -169,7 +116,8 @@ export default function MenuBuilder({ event, recipesById }: Props) {
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={onClose}
+            data-testid="menu-builder-close"
             className="btn-secondary text-sm"
           >
             Close
