@@ -36,6 +36,13 @@ export interface OrderListLine {
   name: string;
   /** Dishes that contributed to this line. Order: first appearance wins. */
   dishNames: string[];
+  /** Per-dish contributions in the chef-authored unit (NOT normalised),
+   *  scaled by dish.portions / recipe.originalYield. Two entries for the
+   *  same (dish, unit) are summed into one. Lets the workflow page show
+   *  "10g for Salad / 5g for Lamb Rack" under a single ingredient heading
+   *  while the aggregate `amount`+`unit` stays available for callers that
+   *  want the shopping-total view. */
+  breakdown: { amount: number; unit: string; dishName: string }[];
 }
 
 export interface OrderListWarning {
@@ -80,6 +87,29 @@ interface Accumulator {
   name: string;
   /** Insertion-ordered set of dish names. */
   dishNames: Set<string>;
+  /** Per-dish contributions in the chef-authored unit. Same (dish, unit)
+   *  is summed in place — see addContribution(). */
+  contributions: { amount: number; unit: string; dishName: string }[];
+}
+
+/** Merge a per-dish contribution into the accumulator, summing when an
+ *  entry with the same (dishName, unit) already exists. Keeps "100 g
+ *  flour + 50 g flour in one recipe for dish X" as a single
+ *  "150 g for X" breakdown row instead of two duplicate rows. */
+function addContribution(
+  acc: Accumulator,
+  amount: number,
+  unit: string,
+  dishName: string,
+): void {
+  const existing = acc.contributions.find(
+    (c) => c.dishName === dishName && c.unit === unit,
+  );
+  if (existing) {
+    existing.amount += amount;
+    return;
+  }
+  acc.contributions.push({ amount, unit, dishName });
 }
 
 /**
@@ -121,6 +151,7 @@ export function aggregateIngredients(input: AggregateInput): OrderListResult {
       unit: norm.unit,
       name: acc.name,
       dishNames: Array.from(acc.dishNames),
+      breakdown: acc.contributions,
     };
   });
 
@@ -206,6 +237,7 @@ function contributeIngredient(
       existing.baseAmount += scaledAmount;
     }
     existing.dishNames.add(dishLabel);
+    addContribution(existing, scaledAmount, ing.unit, dishLabel);
     return;
   }
 
@@ -227,6 +259,7 @@ function contributeIngredient(
     family,
     name: ing.name.trim() || '(unnamed)',
     dishNames: new Set([dishLabel]),
+    contributions: [{ amount: scaledAmount, unit: ing.unit, dishName: dishLabel }],
   });
 
   if (clash) {

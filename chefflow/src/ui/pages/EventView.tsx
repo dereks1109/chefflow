@@ -23,7 +23,6 @@ import EventDetailCard from '../components/EventDetailCard';
 import EventDetailsSheet from '../components/EventDetailsSheet';
 import MenuCheckPanel from '../components/MenuCheckPanel';
 import MenuBuilder from '../components/MenuBuilder';
-import { formatDateTime } from '../../core/util/datetime';
 import { formatGBP } from '../../core/util/money';
 import { groupDishesBySections, moveDishToSection, removeDishFromAllSections } from '../../core/events/sections';
 import type { ColorTag, Dish, EventSection, KitchenEvent, MenuAnalysis, Recipe } from '../../core/types';
@@ -534,36 +533,15 @@ export default function EventView() {
 // there and can jump straight in without re-running the LLM. Otherwise keep
 // the original "Generate Workflow" affordance.
 function WorkflowCta({ event }: { event: KitchenEvent }) {
-  const steps = event.workflow ?? [];
-  const hasWorkflow = steps.length > 0;
-  if (!hasWorkflow) {
-    return (
-      <Link
-        to={`/workflows/${event.id}`}
-        className="btn-primary inline-flex items-center gap-2"
-      >
-        <Sparkles className="h-4 w-4" aria-hidden="true" />
-        Generate Workflow
-      </Link>
-    );
-  }
-  // Use the first step's startAt as a stable "last generated" anchor; the
-  // schedule itself is the timestamp source we trust most.
-  const firstStart = steps[0]?.startAt;
+  const hasWorkflow = (event.workflow?.length ?? 0) > 0;
   return (
-    <div className="flex flex-col items-end gap-0.5">
-      <Link
-        to={`/workflows/${event.id}`}
-        className="btn-primary inline-flex items-center gap-2"
-      >
-        <Sparkles className="h-4 w-4" aria-hidden="true" />
-        View workflow
-      </Link>
-      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-        {steps.length} step{steps.length === 1 ? '' : 's'}
-        {firstStart && <> · starts {formatDateTime(firstStart).split(',').slice(-1)[0].trim()}</>}
-      </span>
-    </div>
+    <Link
+      to={`/workflows/${event.id}`}
+      className="btn-primary inline-flex items-center gap-2"
+    >
+      <Sparkles className="h-4 w-4" aria-hidden="true" />
+      {hasWorkflow ? 'View workflow' : 'Generate Workflow'}
+    </Link>
   );
 }
 

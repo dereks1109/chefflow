@@ -75,17 +75,19 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Format a numeric amount with its unit, trimming trailing zeros for
- *  display (3.00 → 3, 1.5 → 1.5). Used by the Order list milestone. */
-function formatLineAmount(amount: number, unit: string): string {
-  const trimmed = Number.isInteger(amount) ? String(amount) : String(amount).replace(/\.?0+$/, '');
-  return `${trimmed} ${unit}`.trim();
-}
-
 export function scheduledStepsToMilestones(
   steps: ScheduledStep[],
   dishes: readonly Dish[] = [],
-  orderList?: { lines: { amount: number; unit: string; name: string; dishNames: string[] }[]; warnings: { message: string }[] },
+  orderList?: {
+    lines: {
+      amount: number;
+      unit: string;
+      name: string;
+      dishNames: string[];
+      breakdown: { amount: number; unit: string; dishName: string }[];
+    }[];
+    warnings: { message: string }[];
+  },
 ): DndMilestone[] {
   const dishById = new Map(dishes.map((d) => [d.id, d]));
   const byPhase = new Map<SchedulePhase, ScheduledStep[]>();
@@ -98,15 +100,27 @@ export function scheduledStepsToMilestones(
 
   // Prepend a synthetic "Order list" milestone aggregating ingredients
   // across every dish in the event. Steps inside don't carry timing /
-  // dependencies — they're a read-only shopping list. Each step's
-  // meta.dishTags lists the dishes the ingredient is used in.
+  // dependencies — they're a read-only shopping list.
+  //
+  // Render shape: ONE step per ingredient name (case-insensitive). The
+  // step's content is the canonical name (e.g. "Black pepper"); the
+  // meta.breakdown carries per-dish per-unit rows ("10g for Salad",
+  // "10 tsp for Ribeye") so chefs see each dish's actual share rather
+  // than a single aggregate like "15g black pepper for [Salad, Lamb]"
+  // (which obscured the tsp-based contribution from Ribeye entirely).
   if (orderList && (orderList.lines.length > 0 || orderList.warnings.length > 0)) {
-    const itemCount = orderList.lines.length;
-    const orderSteps = orderList.lines.map((line, idx) => ({
+    const byName = new Map<string, typeof orderList.lines>();
+    for (const line of orderList.lines) {
+      const key = line.name.toLowerCase();
+      const bucket = byName.get(key);
+      if (bucket) bucket.push(line);
+      else byName.set(key, [line]);
+    }
+    const orderSteps = Array.from(byName.values()).map((group, idx) => ({
       id: `order-${idx}`,
-      content: `${formatLineAmount(line.amount, line.unit)} ${line.name}`,
+      content: group[0].name,
       meta: {
-        dishTags: line.dishNames,
+        breakdown: group.flatMap((l) => l.breakdown),
       },
     }));
     // Surface aggregation warnings as muted entries at the end of the list.
@@ -114,9 +128,10 @@ export function scheduledStepsToMilestones(
       orderSteps.push({
         id: `order-warn-${orderSteps.length}`,
         content: `⚠ ${w.message}`,
-        meta: { dishTags: [] },
+        meta: { breakdown: [] },
       });
     }
+    const itemCount = byName.size;
     milestones.push({
       id: 'phase-order-list',
       title: `Order list — ${itemCount} item${itemCount === 1 ? '' : 's'}`,

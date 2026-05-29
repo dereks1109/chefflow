@@ -33,6 +33,12 @@ export interface DndStepMeta {
    *  ingredient row aggregates across several dishes. Each entry renders
    *  as a small slate chip. Mutually exclusive in practice with `dish`. */
   dishTags?: string[];
+  /** Per-dish breakdown rows shown under the step's main row. Used by the
+   *  Order-list milestone where one ingredient heading (e.g. "Black
+   *  pepper") rolls up each dish's per-unit contribution: "10g for Salad
+   *  / 5g for Lamb Rack / 10 tsp for Ribeye". Mutually exclusive in
+   *  practice with `dishTags`. */
+  breakdown?: { amount: number; unit: string; dishName: string }[];
 }
 
 export interface DndStep {
@@ -594,25 +600,48 @@ function MilestoneHeader({
 // ---------------------------------------------------------------------------
 function StepMetaLine({ meta }: { meta: DndStepMeta }) {
   const hasTags = Array.isArray(meta.dishTags) && meta.dishTags.length > 0;
-  if (!meta.time && !meta.dish && !hasTags) return null;
+  const hasBreakdown = Array.isArray(meta.breakdown) && meta.breakdown.length > 0;
+  if (!meta.time && !meta.dish && !hasTags && !hasBreakdown) return null;
   return (
-    <div className="mt-1 pl-9 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-      {meta.time && (
-        <span className="font-mono text-slate-700 dark:text-slate-300">{meta.time}</span>
+    <div className="mt-1 pl-9 text-xs text-slate-500">
+      {(meta.time || meta.dish || hasTags) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {meta.time && (
+            <span className="font-mono text-slate-700 dark:text-slate-300">{meta.time}</span>
+          )}
+          {meta.dish && (
+            <span className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              {meta.dish}
+            </span>
+          )}
+          {hasTags && meta.dishTags!.map((tag, i) => (
+            <span
+              key={`${tag}-${i}`}
+              className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
       )}
-      {meta.dish && (
-        <span className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
-          {meta.dish}
-        </span>
+      {hasBreakdown && (
+        <ul className="mt-0.5 space-y-0.5 text-slate-600 dark:text-slate-400">
+          {meta.breakdown!.map((row, i) => (
+            <li key={`${row.dishName}-${row.unit}-${i}`} data-testid="order-list-breakdown-row">
+              {formatBreakdownAmount(row.amount, row.unit)} for {row.dishName}
+            </li>
+          ))}
+        </ul>
       )}
-      {hasTags && meta.dishTags!.map((tag, i) => (
-        <span
-          key={`${tag}-${i}`}
-          className="rounded px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-        >
-          {tag}
-        </span>
-      ))}
     </div>
   );
+}
+
+/** Trim trailing zeros (3.00 → 3, 1.5 stays 1.5). Mirrors the helper
+ *  used by Workflow.tsx for ordered-list amounts; kept inline here so
+ *  StepMetaLine has no cross-page import. */
+function formatBreakdownAmount(amount: number, unit: string): string {
+  const rounded = Number.isInteger(amount) ? amount : Number(amount.toFixed(2));
+  const trimmed = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.?0+$/, '');
+  return `${trimmed} ${unit}`.trim();
 }

@@ -201,6 +201,53 @@ describe('aggregateIngredients', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('breakdown carries per-dish scaled contributions in the chef-authored unit — same name in two units stays in two lines, each with its own per-dish rows', () => {
+    // Salad authored in g, scaled 4 → 8 (×2). Lamb authored in g, scaled 4
+    // → 8 (×2). Ribeye authored in tsp, scaled 4 → 8 (×2). The mixed-unit
+    // case is what the workflow page's name-grouped render exists for —
+    // we assert each LINE carries the right breakdown rows here; the
+    // grouping happens in scheduledStepsToMilestones.
+    const salad = recipe('r_salad', 'Salad', 4, [ing('Black pepper', 5, 'g')]);
+    const lamb = recipe('r_lamb', 'Lamb', 4, [ing('Black pepper', 2.5, 'g')]);
+    const ribeye = recipe('r_ribeye', 'Ribeye', 4, [ing('Black pepper', 5, 'tsp')]);
+    const event = evt([
+      dish('d1', 'Garden Salad', 'r_salad', 8),
+      dish('d2', 'Lamb Rack', 'r_lamb', 8),
+      dish('d3', 'Ribeye', 'r_ribeye', 8),
+    ]);
+    const recipes = new Map([[salad.id, salad], [lamb.id, lamb], [ribeye.id, ribeye]]);
+
+    const { lines } = aggregateIngredients({ event, recipes });
+
+    // Two lines: gram-family + volume-family. Workflow.tsx will group them
+    // under one "Black pepper" heading.
+    const grams = lines.find((l) => l.unit === 'g')!;
+    expect(grams.breakdown).toEqual([
+      { amount: 10, unit: 'g', dishName: 'Garden Salad' },  // 5 × (8/4)
+      { amount: 5, unit: 'g', dishName: 'Lamb Rack' },      // 2.5 × (8/4)
+    ]);
+    const tsp = lines.find((l) => l.unit === 'tsp')!;
+    expect(tsp.breakdown).toEqual([
+      { amount: 10, unit: 'tsp', dishName: 'Ribeye' },      // 5 × (8/4)
+    ]);
+  });
+
+  it('breakdown sums same (dish, unit) duplicates within one recipe — 100g flour + 50g flour for dish X → one "150g for X" row, not two', () => {
+    // Without dedup, chefs would see "100g flour for Cake / 50g flour for
+    // Cake" — confusing because the workflow page is per-dish, not per-
+    // ingredient-line. addContribution merges (dish, unit) duplicates.
+    const cake = recipe('r_cake', 'Cake', 1, [
+      ing('Flour', 100, 'g'),
+      ing('Flour', 50, 'g'),
+    ]);
+    const event = evt([dish('d1', 'Cake', 'r_cake', 1)]);
+    const { lines } = aggregateIngredients({ event, recipes: new Map([[cake.id, cake]]) });
+    const flour = lines.find((l) => l.name === 'Flour')!;
+    expect(flour.breakdown).toEqual([
+      { amount: 150, unit: 'g', dishName: 'Cake' },
+    ]);
+  });
+
   it('sorts output alphabetically — chefs scan a stable list, not whatever insertion order the schedule produced', () => {
     const r = recipe('r', 'R', 1, [
       ing('Zucchini', 100, 'g'),

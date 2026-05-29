@@ -108,6 +108,33 @@ describe('Workflow page', () => {
   });
 });
 
+describe('Workflow page — order list per-dish breakdown', () => {
+  it('groups same-name ingredients in different units under ONE heading with per-dish rows', async () => {
+    // The whole reason this code path exists: today the Demo event's
+    // black pepper (g) lands on one row and any future tsp pepper would
+    // land on a SEPARATE row, hiding from the chef that they're shopping
+    // for the same ingredient. After the fix: one "Black pepper" heading
+    // with breakdown rows that show each dish's actual contribution
+    // ("10g for Salad", "10 tsp for Ribeye") rather than an aggregate.
+    await db.events.put(DEMO_EVENT);
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    // The Demo event's ribeye uses pepper in grams; the salad uses
+    // pepper too (gram-family). One heading, per-dish breakdown rows.
+    await waitFor(() => {
+      const heading = screen.queryByText(/^Black pepper$/i);
+      expect(heading).not.toBeNull();
+    });
+    const breakdownRows = screen.getAllByTestId('order-list-breakdown-row');
+    // Expect at least one per-dish row for pepper. Each row reads
+    // "<amount> <unit> for <dish>". We don't pin exact amounts — that's
+    // tested upstream in aggregateIngredients.test.ts — just the shape.
+    expect(breakdownRows.length).toBeGreaterThan(0);
+    expect(breakdownRows.some((row) => /for \(Demo\) Ribeye/i.test(row.textContent ?? ''))).toBe(true);
+  });
+});
+
 describe('scheduledStepsToMilestones adapter', () => {
   it('groups Demo Event steps into Prep / Cook / Serve milestones in that order', () => {
     const recipes = new Map([[RIBEYE_RECIPE.id, RIBEYE_RECIPE], [SALAD_RECIPE.id, SALAD_RECIPE]]);
