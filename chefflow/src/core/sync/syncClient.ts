@@ -9,6 +9,13 @@ export interface SyncRow {
   is_deleted: 0 | 1;
   /** JSON-serialised entity row (Recipe / KitchenEvent / Menu / AllergenAuditEntry). */
   payload: string;
+  /** Team-share marker (T3c Phase 3). Set when the row belongs to another
+   *  user the caller is an accepted team viewer of. The sync engine
+   *  stamps this onto the local Dexie row so the UI can render a
+   *  "Shared by" badge and the push collector can skip it. */
+  owner_user_id?: string;
+  /** 1 when read-only (paired with owner_user_id today). */
+  read_only?: 0 | 1;
 }
 
 export interface PullResponse {

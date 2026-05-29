@@ -348,6 +348,23 @@ export async function handleDelete(
   return jsonResponse({ removed: memberEmail }, 200);
 }
 
+/** Internal helper: list owner user IDs the given member has accepted
+ *  into. Shared by handleOwnersOfMe (HTTP) and the sync.pull route
+ *  (Phase 3 — read-only fan-in of owner content for member sync). */
+export async function getAcceptedOwnersForMember(
+  db: D1Database,
+  memberUserId: string,
+): Promise<string[]> {
+  const rows = await db
+    .prepare(
+      `SELECT owner_user_id FROM team_memberships
+       WHERE member_user_id = ? AND accepted_at IS NOT NULL`,
+    )
+    .bind(memberUserId)
+    .all<{ owner_user_id: string }>();
+  return (rows.results ?? []).map((r) => r.owner_user_id);
+}
+
 /**
  * GET /api/teams/owners-of-me — member-only. Returns the list of owner
  * user IDs whose teams the caller has accepted into. Used by Phase 3
@@ -357,13 +374,6 @@ export async function handleOwnersOfMe(
   env: TeamsEnv,
   memberUserId: string,
 ): Promise<Response> {
-  const rows = await env.DB
-    .prepare(
-      `SELECT owner_user_id FROM team_memberships
-       WHERE member_user_id = ? AND accepted_at IS NOT NULL`,
-    )
-    .bind(memberUserId)
-    .all<{ owner_user_id: string }>();
-  const owners = (rows.results ?? []).map((r) => r.owner_user_id);
+  const owners = await getAcceptedOwnersForMember(env.DB, memberUserId);
   return jsonResponse({ owners }, 200);
 }

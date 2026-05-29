@@ -58,6 +58,7 @@ import {
   handleList as teamsHandleList,
   handleDelete as teamsHandleDelete,
   handleOwnersOfMe as teamsHandleOwnersOfMe,
+  getAcceptedOwnersForMember,
 } from './teams';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
@@ -347,7 +348,12 @@ export async function handleRequest(
   if (req.method === 'GET' && url.pathname === '/api/sync/pull') {
     const since = parseSince(url.searchParams.get('since'));
     try {
-      const out = await syncPull(env.DB, userId, since);
+      // Phase 3 (T3c): also fan in owner content the caller has been
+      // accepted into as a team viewer. Empty list for non-members
+      // (most users) so this query is a single fast indexed lookup,
+      // then the regular per-user pull runs as before.
+      const viewerOwnerIds = await getAcceptedOwnersForMember(env.DB, userId);
+      const out = await syncPull(env.DB, userId, since, viewerOwnerIds);
       return json(out, 200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sync pull failed';

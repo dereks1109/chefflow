@@ -137,15 +137,27 @@ async function applyPullToDexie(
       // Stamp the server's authoritative metadata onto the row we persist.
       // userId is enforced server-side, but we re-stamp defensively so a
       // future tab-local hijack of the userId in payload can't sneak past.
+      //
+      // For shared rows (T3c Phase 3 — row.owner_user_id set), we still
+      // stamp userId = currentUserId so the existing per-user Dexie
+      // queries (`where('userId').equals(...)`) automatically include
+      // the borrowed rows. The ownerUserId + readOnly flags below mark
+      // them as borrowed for the UI + push filter.
       parsed.userId = currentUserId;
-      // Keep updatedAt fields in sync with the server's authoritative
-      // timestamp — the field name differs across entity types so write
-      // to whichever exists, plus add a generic synced flag.
       if ('updatedAt' in parsed) {
         (parsed as Recipe | KitchenEvent | Menu).updatedAt = serverRow.updated_at;
       }
       parsed.isDeleted = serverRow.is_deleted === 1;
       parsed.synced = true;
+      if (serverRow.owner_user_id) {
+        parsed.ownerUserId = serverRow.owner_user_id;
+        parsed.readOnly = serverRow.read_only === 1;
+      } else {
+        // Clear stale share metadata in case a row was previously shared
+        // and is now owned by the caller (or simply absent from server).
+        delete parsed.ownerUserId;
+        delete parsed.readOnly;
+      }
       await table.put(parsed);
     }
   }
@@ -154,7 +166,7 @@ async function applyPullToDexie(
 // ---------------------------------------------------------------------------
 // PUSH — collect locally-modified rows, batched per table, capped per call.
 // ---------------------------------------------------------------------------
-async function collectPending(): Promise<PushBody> {
+export async function collectPending(): Promise<PushBody> {
   const userId = getCurrentUserId();
   const body: PushBody = {};
 
@@ -171,6 +183,12 @@ async function collectPending(): Promise<PushBody> {
       // will adopt them; the sync engine ignores them until then).
       if (!r.userId) return false;
       if (r.userId !== userId) return false;
+      // T3c Phase 3 — shared rows from a team owner are READ-ONLY for
+      // the viewer. Never push them: pushing would create a duplicate
+      // row stamped with the viewer's userId on the server (since the
+      // worker stamps user_id from JWT), and any local accidental edit
+      // would silently fork from the owner's copy.
+      if (r.readOnly === true) return false;
       return r.synced !== true;
     });
     if (pending.length === 0) continue;

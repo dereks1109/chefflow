@@ -158,3 +158,88 @@ describe('sync.push — payload size cap', () => {
     expect((db as any).store.recipes).toHaveLength(0); // nothing persisted
   });
 });
+
+describe('sync.pull — Phase 3 team-share fan-in (T3c)', () => {
+  // Why this matters: a member viewing an Enterprise owner's team needs
+  // the owner's recipes + events delivered alongside their own on the
+  // same pull, with provenance flags so the SPA can render "Shared by"
+  // badges and lock editing. Per-user table isolation (the original
+  // pull behaviour) must stay intact when viewerOwnerIds is empty so
+  // 99% of users (non-members) see no behaviour change.
+
+  it('with NO viewerOwnerIds (default), behaves identically to the pre-T3c pull — only the caller\'s own rows, no owner_user_id decoration', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner', { recipes: [{ id: 'r_owner', updated_at: 100, payload: { id: 'r_owner', title: 'owner-only' } }] });
+    await push(db, 'user_viewer', { recipes: [{ id: 'r_viewer', updated_at: 100, payload: { id: 'r_viewer', title: 'viewer-only' } }] });
+
+    const out = await pull(db, 'user_viewer', 0);
+
+    expect(out.recipes).toHaveLength(1);
+    expect(out.recipes[0].id).toBe('r_viewer');
+    expect(out.recipes[0].owner_user_id).toBeUndefined();
+    expect(out.recipes[0].read_only).toBeUndefined();
+  });
+
+  it('with viewerOwnerIds, fan-ins owner\'s recipes + events as decorated read-only rows alongside the caller\'s own', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r_owner', updated_at: 100, payload: { id: 'r_owner', title: 'shared recipe' } }],
+      events:  [{ id: 'e_owner', updated_at: 100, payload: { id: 'e_owner', title: 'shared event'  } }],
+    });
+    await push(db, 'user_viewer', {
+      recipes: [{ id: 'r_viewer', updated_at: 100, payload: { id: 'r_viewer', title: 'my recipe' } }],
+    });
+
+    const out = await pull(db, 'user_viewer', 0, ['user_owner']);
+
+    // Viewer's own recipe + owner's shared recipe, marked correctly.
+    expect(out.recipes).toHaveLength(2);
+    const owned = out.recipes.find((r) => r.id === 'r_viewer')!;
+    const shared = out.recipes.find((r) => r.id === 'r_owner')!;
+    expect(owned.owner_user_id).toBeUndefined();
+    expect(shared.owner_user_id).toBe('user_owner');
+    expect(shared.read_only).toBe(1);
+
+    // Owner's event was fanned in too.
+    expect(out.events).toHaveLength(1);
+    expect(out.events[0].id).toBe('e_owner');
+    expect(out.events[0].owner_user_id).toBe('user_owner');
+    expect(out.events[0].read_only).toBe(1);
+  });
+
+  it('NEVER fan-ins menus or allergen_audits — those tables stay per-user (menus = personal printouts, audits = owner safety records)', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner', {
+      menus:           [{ id: 'm_owner', updated_at: 100, payload: { id: 'm_owner', title: 'owner menu' } }],
+      allergen_audits: [{ id: 'a_owner', updated_at: 100, payload: { id: 'a_owner' } }],
+    });
+
+    const out = await pull(db, 'user_viewer', 0, ['user_owner']);
+
+    expect(out.menus).toHaveLength(0);
+    expect(out.allergen_audits).toHaveLength(0);
+  });
+
+  it('respects `since` cursor for shared rows too — a fast-syncing viewer doesn\'t re-receive every owner row on every pull', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner', { recipes: [{ id: 'r_old', updated_at: 50,  payload: { id: 'r_old' } }] });
+    await push(db, 'user_owner', { recipes: [{ id: 'r_new', updated_at: 150, payload: { id: 'r_new' } }] });
+
+    const out = await pull(db, 'user_viewer', 100, ['user_owner']);
+
+    expect(out.recipes).toHaveLength(1);
+    expect(out.recipes[0].id).toBe('r_new');
+  });
+
+  it('with MULTIPLE viewerOwnerIds (chef on two teams), fan-ins all of them with their respective owner_user_id', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner1', { recipes: [{ id: 'r_o1', updated_at: 100, payload: { id: 'r_o1' } }] });
+    await push(db, 'user_owner2', { recipes: [{ id: 'r_o2', updated_at: 100, payload: { id: 'r_o2' } }] });
+
+    const out = await pull(db, 'user_viewer', 0, ['user_owner1', 'user_owner2']);
+
+    expect(out.recipes).toHaveLength(2);
+    expect(out.recipes.find((r) => r.id === 'r_o1')!.owner_user_id).toBe('user_owner1');
+    expect(out.recipes.find((r) => r.id === 'r_o2')!.owner_user_id).toBe('user_owner2');
+  });
+});

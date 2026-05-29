@@ -29,6 +29,14 @@ export interface SyncRow {
   updated_at: number;
   is_deleted: 0 | 1;
   payload: string; // JSON-serialised
+  /** Phase 3 (T3c) — set on rows that belong to ANOTHER user the caller
+   *  is an accepted team viewer of. Drives the SPA's "Shared by <owner>"
+   *  badge + read-only gate. Absent on the caller's own rows. */
+  owner_user_id?: string;
+  /** Phase 3 — 1 when the row is read-only (currently always paired
+   *  with owner_user_id). Separate field so future "shared with edit"
+   *  roles slot in cleanly. */
+  read_only?: 0 | 1;
 }
 
 export interface PullResponse {
@@ -84,16 +92,23 @@ function isTable(t: string): t is SyncTable {
 }
 
 // ---------------------------------------------------------------------------
-// pull — fetch all rows for the verified user updated after `since`.
+// pull — fetch all rows for the verified user updated after `since`,
+// optionally MERGED with read-only rows from owners the caller is an
+// accepted team viewer of (Phase 3 of T3c). Only recipes + events are
+// shared — menus + allergen_audits stay strictly per-user (menus are
+// printout-personal; audits are safety records the owner owns alone).
+// Shared rows are decorated with owner_user_id + read_only=1 so the
+// SPA can render the "Shared by" badge and lock editing.
 // ---------------------------------------------------------------------------
 export async function pull(
   db: D1Database,
   userId: string,
   since: number,
+  viewerOwnerIds: string[] = [],
 ): Promise<PullResponse> {
   if (!Number.isFinite(since) || since < 0) since = 0;
 
-  const sql = (table: SyncTable) =>
+  const sqlOwn = (table: SyncTable) =>
     db
       .prepare(
         `SELECT id, updated_at, is_deleted, payload
@@ -106,10 +121,10 @@ export async function pull(
 
   // Parallel reads — each table is independent.
   const [recipes, events, menus, audits] = await Promise.all([
-    sql('recipes'),
-    sql('events'),
-    sql('menus'),
-    sql('allergen_audits'),
+    sqlOwn('recipes'),
+    sqlOwn('events'),
+    sqlOwn('menus'),
+    sqlOwn('allergen_audits'),
   ]);
 
   const project = (r: { id: string; updated_at: number; is_deleted: number; payload: string }): SyncRow => ({
@@ -119,9 +134,49 @@ export async function pull(
     payload: r.payload,
   });
 
+  let sharedRecipes: SyncRow[] = [];
+  let sharedEvents: SyncRow[] = [];
+  if (viewerOwnerIds.length > 0) {
+    // Fan-in each owner's recipes + events. Per-owner queries (not a
+    // single IN-clause) keep the SQL placeholders simple AND let us
+    // tag each row with the right owner_user_id at projection time.
+    // Volume is bounded by maxSeats (50 enterprise) × ~1000 rows/owner
+    // worst case = 50k rows, well within D1 limits.
+    const sharedPromises = viewerOwnerIds.flatMap((ownerId) => [
+      db
+        .prepare(
+          `SELECT id, updated_at, is_deleted, payload
+           FROM recipes WHERE user_id = ? AND updated_at > ?
+           ORDER BY updated_at ASC`,
+        )
+        .bind(ownerId, since)
+        .all<{ id: string; updated_at: number; is_deleted: number; payload: string }>()
+        .then((res) => ({ kind: 'recipes' as const, ownerId, rows: res.results ?? [] })),
+      db
+        .prepare(
+          `SELECT id, updated_at, is_deleted, payload
+           FROM events WHERE user_id = ? AND updated_at > ?
+           ORDER BY updated_at ASC`,
+        )
+        .bind(ownerId, since)
+        .all<{ id: string; updated_at: number; is_deleted: number; payload: string }>()
+        .then((res) => ({ kind: 'events' as const, ownerId, rows: res.results ?? [] })),
+    ]);
+    const sharedResults = await Promise.all(sharedPromises);
+    for (const s of sharedResults) {
+      const decorated = s.rows.map((r) => ({
+        ...project(r),
+        owner_user_id: s.ownerId,
+        read_only: 1 as const,
+      }));
+      if (s.kind === 'recipes') sharedRecipes = sharedRecipes.concat(decorated);
+      else sharedEvents = sharedEvents.concat(decorated);
+    }
+  }
+
   return {
-    recipes: (recipes.results ?? []).map(project),
-    events: (events.results ?? []).map(project),
+    recipes: (recipes.results ?? []).map(project).concat(sharedRecipes),
+    events: (events.results ?? []).map(project).concat(sharedEvents),
     menus: (menus.results ?? []).map(project),
     allergen_audits: (audits.results ?? []).map(project),
     serverNow: Date.now(),

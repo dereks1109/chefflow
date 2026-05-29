@@ -99,6 +99,16 @@ export interface SyncMeta {
   userId?: string;
   isDeleted?: boolean;
   synced?: boolean;
+  /** Team-share read-only marker (T3c Phase 3). Set on rows the caller
+   *  pulled from an Enterprise team owner they're an accepted viewer
+   *  of. The SPA renders these with a "Shared by" badge and hides edit
+   *  / share / delete affordances; the sync engine filters them out of
+   *  push so the viewer never writes back over the owner's content. */
+  ownerUserId?: string;
+  /** True when the row is shared FROM another user; pairs with
+   *  ownerUserId. Kept as a separate boolean so future "shared with
+   *  edit" roles can flip it false without losing provenance. */
+  readOnly?: boolean;
 }
 
 export interface Recipe extends SyncMeta {
