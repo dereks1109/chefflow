@@ -38,6 +38,24 @@ export default defineConfig({
       allow: ['..'],
     },
   },
+  build: {
+    // T7 Phase C — split heavy vendor deps into named chunks so they
+    // don't bloat the entry bundle. decimal.js + @hello-pangea/dnd
+    // ride exclusively with the Workflow + nested-DND surfaces;
+    // gray-matter only loads on community recipe view (markdown
+    // front-matter parser). Each is large enough that loading it
+    // separately on demand is a measurable first-paint win.
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/decimal.js')) return 'vendor-decimal';
+          if (id.includes('node_modules/@hello-pangea/dnd')) return 'vendor-dnd';
+          if (id.includes('node_modules/gray-matter')) return 'vendor-matter';
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
