@@ -24,9 +24,11 @@ export default function EventCard({ event, onDelete }: Props) {
       <header className="flex items-center justify-between gap-3">
         <Link
           to={`/events/${event.id}`}
-          className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2"
+          className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2 leading-snug"
         >
-          {event.title || 'Untitled event'}
+          {event.title
+            ? event.title
+            : <span className="italic opacity-60">Untitled event</span>}
         </Link>
         {!isDemo(event) && (
           <button
