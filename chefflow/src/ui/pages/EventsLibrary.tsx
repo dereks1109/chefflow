@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CalendarPlus, Plus, Sparkles } from 'lucide-react';
 import EventCard from '../components/EventCard';
@@ -18,6 +18,10 @@ export default function EventsLibrary() {
   const isGuest = useIsGuest();
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Library scope filter (T3c follow-up) — see RecipesLibrary for the
+  // shared rationale. Default 'all'; chip row hidden when no shared
+  // events exist (zero UI cost for non-team chefs).
+  const [scope, setScope] = useState<'all' | 'mine' | 'shared'>('all');
   // Populated when the chef returns from the recipe editor mid-review.
   // Passed through to GenerateEventSheet so it can rebuild the review screen
   // with the saved event + match map + the freshly-saved stub recipe linked.
@@ -80,6 +84,22 @@ export default function EventsLibrary() {
     setEvents(await listEvents());
   }
 
+  // Scope counts (T3c follow-up) — stable across renders. Falls back
+  // to zeros when `events` is null so the chip-row guard below stays
+  // simple. Computed unconditionally so the hook order is stable
+  // regardless of the early-return branches below.
+  const scopeCounts = useMemo(() => {
+    const source = events ?? [];
+    const shared = source.filter((e) => e.readOnly === true).length;
+    return { all: source.length, mine: source.length - shared, shared };
+  }, [events]);
+  const filteredEvents = useMemo(() => {
+    const source = events ?? [];
+    if (scope === 'mine') return source.filter((e) => e.readOnly !== true);
+    if (scope === 'shared') return source.filter((e) => e.readOnly === true);
+    return source;
+  }, [events, scope]);
+
   if (events === null) {
     return <div className="p-6 text-slate-500">Loading…</div>;
   }
@@ -126,8 +146,39 @@ export default function EventsLibrary() {
           New event
         </button>
       </header>
+      {scopeCounts.shared > 0 && (
+        <div
+          className="flex flex-wrap gap-2 mb-4"
+          role="tablist"
+          aria-label="Library scope filter"
+          data-testid="events-scope-chip-row"
+        >
+          {(['all', 'mine', 'shared'] as const).map((s) => {
+            const isActive = scope === s;
+            const label = s === 'all' ? 'All' : s === 'mine' ? 'Mine' : 'Shared';
+            return (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setScope(s)}
+                data-testid={`events-scope-${s}`}
+                className={[
+                  'inline-flex items-center px-3 h-7 rounded-full text-xs font-medium transition-colors',
+                  isActive
+                    ? 'bg-accent text-white'
+                    : 'bg-slate-100 text-slate-700 dark:bg-surface-2 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-surface-3',
+                ].join(' ')}
+              >
+                {label} ({scopeCounts[s]})
+              </button>
+            );
+          })}
+        </div>
+      )}
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {events.map((e) => (
+        {filteredEvents.map((e) => (
           <li key={e.id} className="h-full relative">
             {/* T3c Phase 4 — "Shared" tag on events fanned in from a team
                 owner. Editor + delete gates live on EventView itself. */}

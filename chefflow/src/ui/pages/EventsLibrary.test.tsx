@@ -64,3 +64,39 @@ describe('EventsLibrary', () => {
     }
   });
 });
+
+describe('EventsLibrary — Mine vs Shared scope filter (T3c follow-up)', () => {
+  // Same rationale as RecipesLibrary: a chef on an Enterprise team needs
+  // a clear way to filter out borrowed events from their own. Tests pin
+  // the chip-row guard (hidden when no shared events), count derivation,
+  // and the two filtering branches.
+
+  it('does NOT render the chip row when the chef has zero shared events', async () => {
+    await db.events.put(dinner);
+    renderPage();
+    await waitFor(() => screen.getByText('Sunday Dinner'));
+    expect(screen.queryByTestId('events-scope-chip-row')).toBeNull();
+  });
+
+  it('renders the chip row + filters correctly when shared events are present', async () => {
+    await db.events.bulkPut([
+      dinner,
+      { ...dinner, id: 'e_shared_1', title: "Owner's Wedding", readOnly: true, ownerUserId: 'user_owner' },
+      { ...dinner, id: 'e_shared_2', title: "Owner's Pop-up", readOnly: true, ownerUserId: 'user_owner' },
+    ]);
+    renderPage();
+    await waitFor(() => screen.getByTestId('events-scope-chip-row'));
+    expect(screen.getByTestId('events-scope-all')).toHaveTextContent('All (3)');
+    expect(screen.getByTestId('events-scope-mine')).toHaveTextContent('Mine (1)');
+    expect(screen.getByTestId('events-scope-shared')).toHaveTextContent('Shared (2)');
+
+    await userEvent.click(screen.getByTestId('events-scope-mine'));
+    expect(screen.getByText('Sunday Dinner')).toBeInTheDocument();
+    expect(screen.queryByText("Owner's Wedding")).toBeNull();
+
+    await userEvent.click(screen.getByTestId('events-scope-shared'));
+    expect(screen.queryByText('Sunday Dinner')).toBeNull();
+    expect(screen.getByText("Owner's Wedding")).toBeInTheDocument();
+    expect(screen.getByText("Owner's Pop-up")).toBeInTheDocument();
+  });
+});

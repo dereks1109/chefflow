@@ -21,6 +21,11 @@ export default function RecipesLibrary() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [menus, setMenus] = useState<Menu[] | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  // Library scope filter (T3c follow-up). Coarse first-pass filter that
+  // separates the chef's own content from rows fanned in by a team owner.
+  // Chip row hides entirely when no shared recipes exist so non-team
+  // chefs see no UI change at all.
+  const [scope, setScope] = useState<'all' | 'mine' | 'shared'>('all');
   const [newRecipeOpen, setNewRecipeOpen] = useState(false);
   // Carried over when the chef clicked "Create new recipe: <name>" in the
   // event timeline's dish-name autocomplete; pre-fills the blank recipe's
@@ -164,8 +169,23 @@ export default function RecipesLibrary() {
     const byMenu = activeMenu
       ? filterRecipesByMenu(recipes, activeMenu.recipeIds)
       : recipes;
-    return filterRecipes(byMenu, debouncedQuery);
-  }, [recipes, activeMenu, debouncedQuery]);
+    const bySearch = filterRecipes(byMenu, debouncedQuery);
+    if (scope === 'mine') return bySearch.filter((r) => r.readOnly !== true);
+    if (scope === 'shared') return bySearch.filter((r) => r.readOnly === true);
+    return bySearch;
+  }, [recipes, activeMenu, debouncedQuery, scope]);
+
+  // Counts for the chip labels — derived from the FULL recipes list (or
+  // the menu-filtered set when a menu chip is active), NOT from
+  // `filtered`. Counts shifting as the chef types in the search box
+  // would be confusing.
+  const scopeCounts = useMemo(() => {
+    const source = activeMenu && recipes
+      ? filterRecipesByMenu(recipes, activeMenu.recipeIds)
+      : recipes ?? [];
+    const shared = source.filter((r) => r.readOnly === true).length;
+    return { all: source.length, mine: source.length - shared, shared };
+  }, [recipes, activeMenu]);
 
   // Maps of recipeId → count and recipeId → parent titles for "used in N"
   // badge + hover tooltip. Lets RecipeCard render which OTHER recipes
@@ -339,6 +359,37 @@ export default function RecipesLibrary() {
                   <X className="h-3 w-3" aria-hidden="true" />
                 </button>
               </span>
+            );
+          })}
+        </div>
+      )}
+      {scopeCounts.shared > 0 && (
+        <div
+          className="flex flex-wrap gap-2 mb-3"
+          role="tablist"
+          aria-label="Library scope filter"
+          data-testid="recipes-scope-chip-row"
+        >
+          {(['all', 'mine', 'shared'] as const).map((s) => {
+            const isActive = scope === s;
+            const label = s === 'all' ? 'All' : s === 'mine' ? 'Mine' : 'Shared';
+            return (
+              <button
+                key={s}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setScope(s)}
+                data-testid={`recipes-scope-${s}`}
+                className={[
+                  'inline-flex items-center px-3 h-7 rounded-full text-xs font-medium transition-colors',
+                  isActive
+                    ? 'bg-accent text-white'
+                    : 'bg-slate-100 text-slate-700 dark:bg-surface-2 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-surface-3',
+                ].join(' ')}
+              >
+                {label} ({scopeCounts[s]})
+              </button>
             );
           })}
         </div>

@@ -350,3 +350,61 @@ describe('RecipesLibrary', () => {
     );
   });
 });
+
+describe('RecipesLibrary — Mine vs Shared scope filter (T3c follow-up)', () => {
+  // Why these matter: when a chef joins an Enterprise team, their library
+  // mixes own recipes with shared (read-only) ones. The scope chips are
+  // the primary UI distinction beyond the small "Shared" tag — getting
+  // them wrong leaks shared rows into "Mine" (chef can't trust the
+  // filter) or hides own rows under "Shared" (chef thinks they were
+  // demoted). Tests pin the count derivation + filtering branches.
+
+  it('does NOT render the chip row when the chef has zero shared recipes (99% case)', async () => {
+    await db.recipes.bulkPut([stew, cake]); // both owned by the chef
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText('Beef Stew')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('recipes-scope-chip-row')).toBeNull();
+  });
+
+  it('renders the chip row with correct counts when at least one shared recipe is present', async () => {
+    await db.recipes.bulkPut([
+      stew,                                              // mine
+      cake,                                              // mine
+      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
+      { ...stew, id: 'r_shared_2', title: 'Owner Sauce', readOnly: true, ownerUserId: 'user_owner' },
+    ]);
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('recipes-scope-chip-row')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('recipes-scope-all')).toHaveTextContent('All (4)');
+    expect(screen.getByTestId('recipes-scope-mine')).toHaveTextContent('Mine (2)');
+    expect(screen.getByTestId('recipes-scope-shared')).toHaveTextContent('Shared (2)');
+  });
+
+  it('clicking "Mine" hides shared cards', async () => {
+    await db.recipes.bulkPut([
+      stew,
+      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
+    ]);
+    renderPage();
+    await waitFor(() => screen.getByTestId('recipes-scope-chip-row'));
+    await userEvent.click(screen.getByTestId('recipes-scope-mine'));
+    expect(screen.getByText('Beef Stew')).toBeInTheDocument();
+    expect(screen.queryByText('Owner Lamb')).toBeNull();
+  });
+
+  it('clicking "Shared" hides own cards (chef sees only borrowed content)', async () => {
+    await db.recipes.bulkPut([
+      stew,
+      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
+    ]);
+    renderPage();
+    await waitFor(() => screen.getByTestId('recipes-scope-chip-row'));
+    await userEvent.click(screen.getByTestId('recipes-scope-shared'));
+    expect(screen.queryByText('Beef Stew')).toBeNull();
+    expect(screen.getByText('Owner Lamb')).toBeInTheDocument();
+  });
+});
