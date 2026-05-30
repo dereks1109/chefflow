@@ -15,7 +15,7 @@ function isDemo(event: KitchenEvent): boolean {
 export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
-    <article className="flex h-full flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
+    <article className="flex flex-1 flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
       {/* T6: items-center keeps the trash icon vertically aligned with
           the title's first line in the common 1-line case. Long titles
           (line-clamp-2) shift the icon to the visual midline of the

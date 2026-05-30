@@ -179,7 +179,7 @@ export default function EventsLibrary() {
       )}
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {filteredEvents.map((e) => (
-          <li key={e.id} className="h-full relative">
+          <li key={e.id} className="flex flex-col relative">
             {/* T3c Phase 4 + T6 — tag on events fanned in from a team
                 owner. T6 swaps the generic "Shared" label for the
                 actual team name when the worker decorated it. */}

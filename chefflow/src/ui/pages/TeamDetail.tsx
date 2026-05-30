@@ -451,7 +451,7 @@ export default function TeamDetail() {
           ) : (
             <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               {sharedEvents.map((e) => (
-                <li key={e.id} className="h-full relative">
+                <li key={e.id} className="flex flex-col relative">
                   <EventCard event={e} onDelete={() => {}} />
                 </li>
               ))}
