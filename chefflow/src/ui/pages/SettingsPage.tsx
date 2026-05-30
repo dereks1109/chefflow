@@ -22,6 +22,13 @@ import {
 import { downscaleToDataUrl } from '../../core/util/image';
 import { useTheme } from '../theme/useTheme';
 import AccountDataPanel from '../components/AccountDataPanel';
+import {
+  inviteMember,
+  listMembers,
+  removeMember,
+  type TeamMember,
+  type InviteResult,
+} from '../../core/teams/teamsClient';
 
 // Settings tab IDs — mirrored to ?tab=… for deep-linking.
 type SettingsTab = 'profile' | 'plan' | 'preferences' | 'data' | 'account';
@@ -563,6 +570,8 @@ export default function SettingsPage() {
         </p>
       </section>
       )}
+
+      {activeTab === 'plan' && <TeamMembersSection />}
 
       {activeTab === 'preferences' && <AllergyKeywordsSection />}
 
@@ -1297,6 +1306,185 @@ function PinSection() {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Team members (T3c Phase 5) — Enterprise-only invite UI.
+// Lives inside the Plan tab. Lists pending + accepted members, invite-by-
+// email form, per-row Remove. The accept side lives at /teams/accept
+// (TeamAccept page). When the owner isn't on Enterprise tier, this whole
+// section renders nothing — keeps the Plan tab clean for the 99% of users.
+// ---------------------------------------------------------------------------
+function TeamMembersSection() {
+  const tier = useTierStore((s) => s.tier);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [email, setEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [lastInvite, setLastInvite] = useState<InviteResult | null>(null);
+
+  const isEnterprise = tier === 'enterprise';
+
+  useEffect(() => {
+    if (!isEnterprise) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const list = await listMembers();
+        if (!cancelled) setMembers(list);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Load failed');
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isEnterprise]);
+
+  if (!isEnterprise) return null;
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setInviting(true);
+    setInviteError(null);
+    setLastInvite(null);
+    try {
+      const out = await inviteMember(email.trim());
+      setLastInvite(out);
+      setEmail('');
+      // Re-pull so the new pending row shows up immediately.
+      try {
+        setMembers(await listMembers());
+      } catch {
+        // Non-fatal — the next page load will reconcile.
+      }
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Invite failed');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRemove(memberEmail: string) {
+    if (!window.confirm(`Remove ${memberEmail} from your team?`)) return;
+    try {
+      await removeMember(memberEmail);
+      setMembers(await listMembers());
+    } catch (err) {
+      setInviteError(err instanceof Error ? err.message : 'Remove failed');
+    }
+  }
+
+  return (
+    <section
+      aria-labelledby="settings-teams-heading"
+      data-testid="settings-team-members-section"
+      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+    >
+      <h2 id="settings-teams-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
+        Team members
+      </h2>
+      <p className="mt-2 text-xs text-slate-500">
+        Invite up to {TIER_LIMITS.enterprise.maxSeats} team members. Members can
+        view your recipes, events, and workflows but cannot edit or share them
+        — only you can. They sign in with their own ChefFlow account and
+        accept the invite via the link in the email.
+      </p>
+
+      <form onSubmit={(e) => void handleInvite(e)} className="mt-3 flex flex-wrap gap-2 items-start">
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(ev) => setEmail(ev.target.value)}
+          placeholder="member@example.com"
+          data-testid="settings-team-invite-email"
+          className="input flex-1 min-w-[14rem]"
+          aria-label="Member email"
+        />
+        <button
+          type="submit"
+          disabled={inviting || !email.trim()}
+          data-testid="settings-team-invite-submit"
+          className="btn-primary disabled:opacity-60"
+        >
+          {inviting ? 'Inviting…' : 'Invite'}
+        </button>
+      </form>
+
+      {inviteError && (
+        <p
+          role="alert"
+          data-testid="settings-team-invite-error"
+          className="mt-2 text-xs text-red-600 dark:text-red-400"
+        >
+          {inviteError}
+        </p>
+      )}
+      {lastInvite && (
+        <p
+          data-testid="settings-team-invite-status"
+          className="mt-2 text-xs text-emerald-700 dark:text-emerald-300"
+        >
+          Invited <strong>{lastInvite.email}</strong> ·{' '}
+          {lastInvite.emailStatus === 'sent' && 'email sent'}
+          {lastInvite.emailStatus === 'skipped-no-key' && 'email send disabled — copy the link below'}
+          {lastInvite.emailStatus === 'failed' && 'email send failed — copy the link below'}
+          {lastInvite.emailStatus !== 'sent' && (
+            <>
+              {': '}
+              <a href={lastInvite.acceptUrl} className="underline break-all">
+                {lastInvite.acceptUrl}
+              </a>
+            </>
+          )}
+        </p>
+      )}
+
+      <div className="mt-4">
+        {!loaded && <p className="text-xs text-slate-500">Loading members…</p>}
+        {loadError && (
+          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+            {loadError}
+          </p>
+        )}
+        {loaded && !loadError && members.length === 0 && (
+          <p className="text-xs text-slate-500" data-testid="settings-team-empty">
+            No team members yet. Invite your first chef above.
+          </p>
+        )}
+        {members.length > 0 && (
+          <ul data-testid="settings-team-list" className="divide-y divide-slate-200 dark:divide-slate-700">
+            {members.map((m) => (
+              <li
+                key={m.member_email}
+                data-testid={`settings-team-row-${m.member_email}`}
+                className="py-2 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{m.member_email}</p>
+                  <p className="text-xs text-slate-500">
+                    {m.accepted_at ? 'Accepted' : 'Pending invite'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleRemove(m.member_email)}
+                  data-testid={`settings-team-remove-${m.member_email}`}
+                  className="btn-secondary text-xs"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

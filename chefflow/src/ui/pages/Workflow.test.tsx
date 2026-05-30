@@ -122,15 +122,22 @@ describe('Workflow page — order list per-dish breakdown', () => {
 
     // The Demo event's ribeye uses pepper in grams; the salad uses
     // pepper too (gram-family). One heading, per-dish breakdown rows.
+    // We waitFor BOTH the heading AND the breakdown rows in one block —
+    // otherwise the heading appears first via the LLM-stub schedule
+    // promise resolving, and the breakdown rows render in a subsequent
+    // tick. Asserting outside the waitFor races that second tick and
+    // flakes in the full suite (passes when this file runs alone).
+    let breakdownRows: HTMLElement[] = [];
     await waitFor(() => {
-      const heading = screen.queryByText(/^Black pepper$/i);
-      expect(heading).not.toBeNull();
+      // Use queryAllByText — interactive list + hidden print-checklist
+      // each render their own copy of the order-list, same as other
+      // tests in this file (`Pat steaks dry`).
+      expect(screen.queryAllByText(/^Black pepper$/i).length).toBeGreaterThan(0);
+      breakdownRows = screen.getAllByTestId('order-list-breakdown-row');
+      expect(breakdownRows.length).toBeGreaterThan(0);
     });
-    const breakdownRows = screen.getAllByTestId('order-list-breakdown-row');
-    // Expect at least one per-dish row for pepper. Each row reads
-    // "<amount> <unit> for <dish>". We don't pin exact amounts — that's
-    // tested upstream in aggregateIngredients.test.ts — just the shape.
-    expect(breakdownRows.length).toBeGreaterThan(0);
+    // Each row reads "<amount> <unit> for <dish>". We don't pin exact
+    // amounts — that's tested upstream in aggregateIngredients.test.ts.
     expect(breakdownRows.some((row) => /for \(Demo\) Ribeye/i.test(row.textContent ?? ''))).toBe(true);
   });
 });

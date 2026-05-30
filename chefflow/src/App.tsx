@@ -12,6 +12,7 @@ import NestedDndDemo from './ui/pages/NestedDndDemo';
 import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SettingsPage from './ui/pages/SettingsPage';
+import TeamAccept from './ui/pages/TeamAccept';
 import AboutPage from './ui/pages/AboutPage';
 import ContactPage from './ui/pages/ContactPage';
 import AdminDashboard from './ui/pages/AdminDashboard';
@@ -83,6 +84,11 @@ function PublicApp() {
           <Route path="/chef/:clerkId" element={<ChefProfile />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/demo/nested-dnd" element={<NestedDndDemo />} />
+          {/* T3c Phase 5 — invite accept landing. Public so the link from
+              the invite email opens without an upstream auth wall; the
+              page renders a "Sign in to accept" prompt if the chef isn't
+              signed in yet, then auto-POSTs the token to the worker. */}
+          <Route path="/teams/accept" element={<TeamAccept />} />
 
           {/* Auth-required routes — guest hits Clerk sign-in.
               OnboardingGate + TosReacceptanceGate run inside the

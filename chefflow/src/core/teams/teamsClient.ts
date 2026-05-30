@@ -1,0 +1,124 @@
+// HTTP wrappers for the worker /api/teams/* routes (T3c Phase 2).
+// Mirrors the auth + base-URL pattern of communityClient.ts so the
+// SettingsPage TeamMembersSection (Phase 5) and the TeamAccept page
+// can stay declarative — fetch + token + error class live here.
+
+import { getWorkerBaseUrl } from '../util/workerBaseUrl';
+
+export interface TeamMember {
+  member_email: string;
+  member_user_id: string | null;
+  role: 'viewer';
+  invited_at: number;
+  accepted_at: number | null;
+}
+
+export interface InviteResult {
+  email: string;
+  token: string;
+  acceptUrl: string;
+  emailStatus: 'sent' | 'skipped-no-key' | 'failed';
+}
+
+export interface AcceptResult {
+  ownerUserId: string;
+  memberEmail: string;
+}
+
+export class TeamsClientError extends Error {
+  readonly status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = 'TeamsClientError';
+    this.status = status;
+  }
+}
+
+interface Options {
+  origin?: string;
+  fetchImpl?: typeof fetch;
+}
+
+function originOf(opts: Options): string {
+  return (opts.origin ?? getWorkerBaseUrl()).replace(/\/+$/, '');
+}
+
+async function getClerkToken(): Promise<string | null> {
+  const clerk = (window as unknown as {
+    Clerk?: { session?: { getToken(): Promise<string | null> } };
+  }).Clerk;
+  return clerk?.session ? await clerk.session.getToken() : null;
+}
+
+async function authedFetch(
+  url: string,
+  init: RequestInit & { fetchImpl?: typeof fetch },
+): Promise<Response> {
+  const token = await getClerkToken();
+  if (!token) throw new TeamsClientError('Not signed in', 401);
+  const fetchImpl = init.fetchImpl ?? globalThis.fetch;
+  const { fetchImpl: _drop, ...rest } = init;
+  return fetchImpl(url, {
+    ...rest,
+    headers: {
+      ...(rest.headers ?? {}),
+      Authorization: `Bearer ${token}`,
+    },
+  });
+}
+
+async function readError(res: Response, fallback: string): Promise<never> {
+  let msg = fallback;
+  try {
+    const body = (await res.json()) as { error?: string };
+    if (body?.error) msg = body.error;
+  } catch {
+    // ignore
+  }
+  throw new TeamsClientError(msg, res.status);
+}
+
+/** Owner invites a member by email. Returns the accept URL the chef can
+ *  copy if Resend isn't configured / the recipient's email is misspelled. */
+export async function inviteMember(email: string, opts: Options = {}): Promise<InviteResult> {
+  const res = await authedFetch(`${originOf(opts)}/api/teams/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+    fetchImpl: opts.fetchImpl,
+  });
+  if (!res.ok) return readError(res, 'Invite failed');
+  return (await res.json()) as InviteResult;
+}
+
+/** Member accepts an invite via the token from the email URL. */
+export async function acceptInvite(token: string, opts: Options = {}): Promise<AcceptResult> {
+  const res = await authedFetch(`${originOf(opts)}/api/teams/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+    fetchImpl: opts.fetchImpl,
+  });
+  if (!res.ok) return readError(res, 'Accept failed');
+  return (await res.json()) as AcceptResult;
+}
+
+/** Owner lists pending + accepted members for their team. */
+export async function listMembers(opts: Options = {}): Promise<TeamMember[]> {
+  const res = await authedFetch(`${originOf(opts)}/api/teams/list`, {
+    method: 'GET',
+    fetchImpl: opts.fetchImpl,
+  });
+  if (!res.ok) return readError(res, 'List failed');
+  const body = (await res.json()) as { members: TeamMember[] };
+  return body.members ?? [];
+}
+
+/** Owner revokes a pending invite or removes an accepted member. */
+export async function removeMember(email: string, opts: Options = {}): Promise<void> {
+  const res = await authedFetch(
+    `${originOf(opts)}/api/teams/${encodeURIComponent(email)}`,
+    { method: 'DELETE', fetchImpl: opts.fetchImpl },
+  );
+  if (!res.ok) return readError(res, 'Remove failed');
+}
