@@ -3,11 +3,16 @@ import { Link } from 'react-router-dom';
 
 export default function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy" lastUpdated="2026-05-29">
+    <LegalLayout title="Privacy Policy" lastUpdated="2026-05-30">
       <p>
         This policy explains what personal data ChefFlow collects, why we collect it, where it goes,
         and what rights you have under UK GDPR. We have written it in plain English because you
         should be able to understand what you agreed to.
+      </p>
+      <p>
+        <strong>Age:</strong> ChefFlow is only intended for users aged 18 or over. We do not knowingly
+        collect personal data from anyone under 18. If you believe a child has created an account,
+        contact <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a> and we will delete it.
       </p>
       <p>
         <strong>We never sell your personal data.</strong> ChefFlow does not sell, rent, or trade
@@ -137,6 +142,59 @@ export default function PrivacyPage() {
         See <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google's Privacy Policy</a>.
       </p>
 
+      <h3 id="tos-acceptance" className="text-lg md:text-xl font-semibold">Terms-of-service acceptance log</h3>
+      <p>
+        When you accept the cooling-off waiver during checkout, we record your Clerk user ID, the
+        version of the Terms accepted, the timestamp, your IP address, and your browser User-Agent
+        string in our Cloudflare D1 database (table <code>tos_acceptances</code>). We need this record
+        to evidence that the waiver was given knowingly, in case of a chargeback or refund dispute.
+      </p>
+      <p>
+        <strong>Lawful basis:</strong> Article 6(1)(c) UK GDPR — legal obligation (Consumer Contracts
+        Regulations 2013 requires us to evidence the express waiver) and Article 6(1)(f) — legitimate
+        interests (defending against fraudulent chargebacks).
+      </p>
+
+      <h3 id="contact-form" className="text-lg md:text-xl font-semibold">Contact-form submissions</h3>
+      <p>
+        If you fill in the public contact form, we store the name, email address, message body, your
+        IP address, and any optional screenshot you attach in Cloudflare KV. These submissions are
+        emailed to <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a> via Resend and surfaced in
+        the daily ops digest. KV entries are retained for 90 days, after which they expire
+        automatically.
+      </p>
+      <p>
+        <strong>Lawful basis:</strong> Article 6(1)(b) UK GDPR — necessary to respond to your
+        enquiry — and Article 6(1)(f) for the IP-address field (security / abuse prevention).
+      </p>
+
+      <h3 id="team-invites" className="text-lg md:text-xl font-semibold">Team invitations (Enterprise)</h3>
+      <p>
+        On the Enterprise plan, an account owner can invite colleagues by email to join a team. The
+        invitee's email address and an opaque invite token are stored in our D1 database (table
+        <code>team_memberships</code>) until they accept (their Clerk user ID then replaces the
+        email-only row) or the team owner removes them. If you receive an invite you do not want,
+        ignore it — the invite expires when the owner removes it.
+      </p>
+      <p>
+        <strong>Lawful basis:</strong> Article 6(1)(f) UK GDPR — legitimate interests of the
+        inviting account owner to grant access to their workspace. ChefFlow processes the invite
+        on the owner's behalf.
+      </p>
+
+      <h3 id="takedown-reports" className="text-lg md:text-xl font-semibold">Community takedown reports</h3>
+      <p>
+        If you report a community-published recipe (copyright, allergen accuracy, content standards),
+        we store the recipe ID, your reason, your Clerk user ID, and the email address you used in
+        our D1 database (table <code>takedown_reports</code>). We retain takedown records to evidence
+        the notice-and-takedown process required under CDPA s.97A and the eCommerce Regulations 2002.
+      </p>
+      <p>
+        <strong>Lawful basis:</strong> Article 6(1)(c) — legal obligation (eCommerce hosting safe
+        harbour) and Article 6(1)(f) — legitimate interests (protecting copyright holders and the
+        integrity of the community library).
+      </p>
+
       <h2 id="sub-processors" className="text-xl md:text-2xl font-semibold">3. Sub-processors</h2>
       <p>The following companies process personal data on our behalf:</p>
       <ul>
@@ -159,8 +217,22 @@ export default function PrivacyPage() {
           UK IDTA, SCCs, or other adequate mechanism before launch.]
         </li>
         <li>
-          <strong>Google LLC</strong> (US) — Maps Places API for location search. Transfer
-          mechanism: SCCs / UK addendum. [REVIEW: confirm current mechanism.]
+          <strong>Google LLC</strong> (US) — Maps Places API for location search, plus Gmail API +
+          OAuth for the admin daily-ops digest (reads admin inbox to summarise overnight
+          correspondence). Transfer mechanism: SCCs / UK addendum. [REVIEW: confirm current
+          mechanism.]
+        </li>
+        <li>
+          <strong>Resend (Resend.com Inc.)</strong> (US) — transactional email delivery for team
+          invites, the daily ops digest, and contact-form forwarding. Transfer mechanism: SCCs /
+          UK addendum. [REVIEW: confirm Resend's current UK transfer documentation.]
+        </li>
+        <li>
+          <strong>Discord Inc.</strong> (US) — webhook destination for internal admin alerts
+          (errors, abuse signals). Only ChefFlow-generated operational messages are sent — never
+          end-user content or personal data beyond an opaque user ID. Transfer mechanism: SCCs.
+          [REVIEW: confirm Discord webhook scope and whether this counts as a sub-processor at all
+          under your interpretation.]
         </li>
       </ul>
 
@@ -196,7 +268,9 @@ export default function PrivacyPage() {
       <p>
         You have the following rights in relation to personal data ChefFlow controls. To exercise
         any right, email <a href="mailto:admin@chefflow.uk">admin@chefflow.uk</a>. We will respond
-        within 30 days as required by UK GDPR.
+        within one month of receiving your request, as required by Article 12(3) UK GDPR. Where
+        the request is particularly complex or numerous, we may extend the response window by up to
+        two further months; we will tell you within the first month if that applies and explain why.
       </p>
       <ul>
         <li>

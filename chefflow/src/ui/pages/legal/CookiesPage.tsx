@@ -2,7 +2,7 @@ import LegalLayout from './LegalLayout';
 
 export default function CookiesPage() {
   return (
-    <LegalLayout title="Cookie Policy" lastUpdated="2026-05-29">
+    <LegalLayout title="Cookie Policy" lastUpdated="2026-05-30">
       <p>
         This policy describes the cookies and browser-storage keys ChefFlow uses, why we use them,
         and how to manage them. Under UK PECR we must obtain your consent before setting any
@@ -25,9 +25,22 @@ export default function CookiesPage() {
         storage.
       </p>
       <ul>
-        <li><strong>Clerk session token / <code>__session</code></strong> — keeps you signed in. Set and managed by Clerk, Inc. (US processor with UK DPA).</li>
-        <li><strong>Clerk device ID</strong> — device fingerprint used by Clerk for suspicious-login detection.</li>
-        <li><strong><code>chefflow:cookie-consent-v1</code></strong> (localStorage) — records your cookie consent choices so we don't show the banner on every visit.</li>
+        <li>
+          <strong>Clerk session token / <code>__session</code></strong> — keeps you signed in. Set
+          and managed by Clerk, Inc. (US processor with UK DPA). <strong>Lifetime:</strong> session
+          (cleared when you sign out); the long-lived refresh handle Clerk uses to renew sessions
+          persists for up to 7 days.
+        </li>
+        <li>
+          <strong>Clerk device ID</strong> — device fingerprint used by Clerk for suspicious-login
+          detection. <strong>Lifetime:</strong> up to 12 months.
+        </li>
+        <li>
+          <strong><code>chefflow:cookie-consent-v1</code></strong> (localStorage) — records your
+          cookie consent choices so we don't show the banner on every visit.{' '}
+          <strong>Lifetime:</strong> persistent (until you clear site data or revisit the
+          banner).
+        </li>
       </ul>
 
       <h3 className="text-lg md:text-xl font-semibold">Preferences</h3>
@@ -36,8 +49,14 @@ export default function CookiesPage() {
         necessary — ChefFlow works without them, it just won't remember your settings.
       </p>
       <ul>
-        <li><strong><code>chefflow:theme</code></strong> (localStorage) — your chosen colour theme (dark / light).</li>
-        <li><strong><code>chefflow:unit-system</code></strong> (localStorage) — your preferred unit system (metric / imperial).</li>
+        <li>
+          <strong><code>chefflow:theme</code></strong> (localStorage) — your chosen colour theme
+          (dark / light). <strong>Lifetime:</strong> persistent (until you clear site data).
+        </li>
+        <li>
+          <strong><code>chefflow:unit-system</code></strong> (localStorage) — your preferred unit
+          system (metric / imperial). <strong>Lifetime:</strong> persistent.
+        </li>
       </ul>
 
       <h3 className="text-lg md:text-xl font-semibold">Analytics</h3>

@@ -2,9 +2,9 @@ import LegalLayout from './LegalLayout';
 
 export default function TermsPage() {
   return (
-    <LegalLayout title="Terms &amp; Conditions" lastUpdated="2026-05-29">
+    <LegalLayout title="Terms &amp; Conditions" lastUpdated="2026-05-30">
       <p>
-        Effective date: 2026-05-29. Last updated: 2026-05-29.
+        Effective date: 2026-05-29. Last updated: 2026-05-30.
       </p>
       <p>
         These Terms and Conditions ("Terms") govern your access to and use of ChefFlow. Please read
@@ -145,6 +145,20 @@ export default function TermsPage() {
           all reports within 7 days. Rights-holders may include any evidence they consider relevant
           (e.g. a link to the original source). We may unpublish content while a report is under
           review.
+        </li>
+        <li>
+          <strong>Counter-notice:</strong> if your recipe is unpublished following a notice and you
+          believe the takedown was mistaken, you can submit a counter-notice by emailing{' '}
+          <a href="mailto:legal@chefflow.uk">legal@chefflow.uk</a> with: (a) the community recipe
+          ID, (b) a statement of why you believe the content does not infringe (including any
+          evidence that the recipe is your own work or properly licensed), and (c) your name, email
+          address, and a statement that you consent to the jurisdiction of the courts of England
+          and Wales for any related dispute. We will forward the counter-notice to the original
+          complainant. If the complainant does not pursue legal proceedings within 14 days, we will
+          generally restore the content. We act in good faith as a neutral hosting intermediary
+          under section 97A of the Copyright, Designs and Patents Act 1988 and Regulation 19 of
+          the Electronic Commerce (EC Directive) Regulations 2002; we are not the arbiter of
+          underlying disputes between rights-holders and chefs.
         </li>
         <li>
           <strong>Allergen attestation:</strong> when you publish a recipe to the community, ChefFlow
