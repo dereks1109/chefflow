@@ -192,6 +192,14 @@ function makeMembershipDb(
           return null as T;
         },
         async all<T = unknown>() {
+          // T5 — cleanupT5DefaultGroup: SELECT id FROM groups WHERE owner_user_id=? AND is_default=1 (.all)
+          if (sql.includes('SELECT id FROM groups') && sql.includes('is_default = 1')) {
+            const [ownerUserId] = bindings as [string];
+            const mine = groups
+              .filter((g) => g.owner_user_id === ownerUserId && g.is_default === 1)
+              .map((g) => ({ id: g.id }));
+            return { success: true, results: mine as T[], meta: {} } as unknown as D1Result<T>;
+          }
           // T4 Phase 2 — handleListGroups: SELECT id, name, is_default, created_at FROM groups
           if (sql.includes('SELECT id, name, is_default, created_at')) {
             const [ownerUserId] = bindings as [string];
@@ -282,6 +290,17 @@ function makeMembershipDb(
               }
             }
             return { success: true, meta: { changes }, results: [] } as unknown as D1Result;
+          }
+          // T5 — DELETE FROM team_memberships WHERE owner_user_id=? AND group_id=? (cleanup + delete-team cascade)
+          if (sql.startsWith('DELETE FROM team_memberships') && sql.includes('AND group_id = ?')) {
+            const [ownerUserId, groupId] = bindings as [string, string];
+            const before = rows.length;
+            for (let i = rows.length - 1; i >= 0; i--) {
+              if (rows[i].owner_user_id === ownerUserId && rows[i].group_id === groupId) {
+                rows.splice(i, 1);
+              }
+            }
+            return { success: true, meta: { changes: before - rows.length }, results: [] } as unknown as D1Result;
           }
           if (sql.startsWith('INSERT INTO team_memberships')) {
             // T4 invite signature: (owner, email, token, invitedAt, groupId).
@@ -434,7 +453,7 @@ describe('handleInvite', () => {
     const env = makeEnv(db, impl, 're_test_long_enough');
     const req = new Request('https://x/api/teams/invite', {
       method: 'POST',
-      body: JSON.stringify({ email: 'sous@kitchen.uk' }),
+      body: JSON.stringify({ email: 'sous@kitchen.uk', groupId: 'grp_morning' }),
     });
     const res = await handleInvite(req, env, 'u_owner');
     expect(res.status).toBe(200);
@@ -465,7 +484,7 @@ describe('handleInvite', () => {
     const { impl } = makeClerkAndResendFetch({ users: { u_free: { tier: 'free' } } });
     const env = makeEnv(db, impl, 're_test_long_enough');
     const req = new Request('https://x/api/teams/invite', {
-      method: 'POST', body: JSON.stringify({ email: 'second@x.com' }),
+      method: 'POST', body: JSON.stringify({ email: 'second@x.com', groupId: 'grp_x' }),
     });
     const res = await handleInvite(req, env, 'u_free');
     expect(res.status).toBe(409);
@@ -478,7 +497,7 @@ describe('handleInvite', () => {
     const { impl } = makeClerkAndResendFetch({ users: { u_owner: { tier: 'enterprise', email: 'owner@k.uk' } } });
     const env = makeEnv(db, impl, 're_test_long_enough');
     const req = new Request('https://x/api/teams/invite', {
-      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk' }),
+      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk', groupId: 'grp_x' }),
     });
     const res = await handleInvite(req, env, 'u_owner');
     expect(res.status).toBe(200);
@@ -494,7 +513,7 @@ describe('handleInvite', () => {
     const { impl } = makeClerkAndResendFetch({ users: { u_owner: { tier: 'enterprise' } } });
     const env = makeEnv(db, impl, 're_test_long_enough');
     const req = new Request('https://x/api/teams/invite', {
-      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk' }),
+      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk', groupId: 'grp_x' }),
     });
     expect((await handleInvite(req, env, 'u_owner')).status).toBe(409);
   });
@@ -504,7 +523,7 @@ describe('handleInvite', () => {
     const { impl, resendCalls } = makeClerkAndResendFetch({ users: { u_owner: { tier: 'enterprise' } } });
     const env = makeEnv(db, impl, undefined);
     const req = new Request('https://x/api/teams/invite', {
-      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk' }),
+      method: 'POST', body: JSON.stringify({ email: 'sous@k.uk', groupId: 'grp_x' }),
     });
     const res = await handleInvite(req, env, 'u_owner');
     expect(res.status).toBe(200);
@@ -626,39 +645,46 @@ describe('handleOwnersOfMe', () => {
   });
 });
 
-describe('ensureDefaultGroup (T4 Phase 1)', () => {
-  // Why this matters: the Default group is the migration anchor. If
-  // it doesn't get created lazily, the SettingsPage UI has no group
-  // to render and new invites fall through with group_id = NULL,
-  // which breaks the sync filter (members never see anything).
+describe('cleanupT5DefaultGroup (T5 migration)', () => {
+  // Why this matters: T4 auto-created a Default group + stamped every
+  // recipe/event/menu with sharedWithGroupIds: [defaultId]. T5 swings
+  // to explicit-team-creation, so we need a one-shot lazy sweep that
+  // undoes that state on every owner's first pull post-deploy.
+  // Idempotent via KV marker. Tests stub the rows+groups+KV layers.
 
-  it('creates a Default group on first call + returns its id', async () => {
-    const { db, groups } = makeMembershipDb();
-    const { ensureDefaultGroup } = await import('./teams');
-    const id = await ensureDefaultGroup(db, 'u_owner');
-    expect(id).toMatch(/^grp_/);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].owner_user_id).toBe('u_owner');
-    expect(groups[0].is_default).toBe(1);
-    expect(groups[0].name).toBe('Default');
-  });
-
-  it('is idempotent — returns the SAME id on subsequent calls (no duplicate Default groups)', async () => {
-    const { db, groups } = makeMembershipDb();
-    const { ensureDefaultGroup } = await import('./teams');
-    const first = await ensureDefaultGroup(db, 'u_owner');
-    const second = await ensureDefaultGroup(db, 'u_owner');
-    expect(second).toBe(first);
-    expect(groups).toHaveLength(1);
-  });
-
-  it('backfills group_id on pre-T4 memberships rows (rows that pre-date the migration get stamped with the Default group id)', async () => {
-    const { db, rows } = makeMembershipDb([
-      { owner_user_id: 'u_owner', member_email: 'a@x', member_user_id: 'u_a', role: 'viewer', invite_token: 't1', invited_at: 1, accepted_at: 2, group_id: null },
+  it('returns early when the KV marker is already set (post-cleanup pulls are cheap)', async () => {
+    const { db, groups } = makeMembershipDb([], [
+      { id: 'grp_def', owner_user_id: 'u_o', name: 'Default', is_default: 1, created_at: 1 },
     ]);
-    const { ensureDefaultGroup } = await import('./teams');
-    const id = await ensureDefaultGroup(db, 'u_owner');
-    expect(rows[0].group_id).toBe(id);
+    const kv = makeKv();
+    await kv.put('groups:t5-cleanup:v1:u_o', '1');
+    const { cleanupT5DefaultGroup } = await import('./teams');
+    await cleanupT5DefaultGroup({ DB: db, RATE_LIMIT: kv }, 'u_o');
+    // Default group still present — cleanup short-circuited.
+    expect(groups).toHaveLength(1);
+  });
+
+  it('deletes the owner\'s default groups + the memberships pointing at them, then sets the marker', async () => {
+    const { db, rows, groups } = makeMembershipDb(
+      [
+        { owner_user_id: 'u_o', member_email: 'a@x', member_user_id: 'u_a', role: 'viewer', invite_token: 't1', invited_at: 1, accepted_at: 2, group_id: 'grp_def' },
+        { owner_user_id: 'u_o', member_email: 'b@x', member_user_id: 'u_b', role: 'viewer', invite_token: 't2', invited_at: 1, accepted_at: null, group_id: 'grp_other' }, // not in a default group → kept
+      ],
+      [
+        { id: 'grp_def', owner_user_id: 'u_o', name: 'Default', is_default: 1, created_at: 1 },
+        { id: 'grp_other', owner_user_id: 'u_o', name: 'Morning', is_default: 0, created_at: 2 },
+      ],
+    );
+    const kv = makeKv();
+    const { cleanupT5DefaultGroup } = await import('./teams');
+    await cleanupT5DefaultGroup({ DB: db, RATE_LIMIT: kv }, 'u_o');
+
+    // Default group gone; non-default Morning group untouched.
+    expect(groups.map((g) => g.id).sort()).toEqual(['grp_other']);
+    // Membership pointing at default deleted; the one in Morning kept.
+    expect(rows.map((r) => r.member_email)).toEqual(['b@x']);
+    // Marker set so subsequent calls are no-ops.
+    expect(await kv.get('groups:t5-cleanup:v1:u_o')).toBe('1');
   });
 });
 
@@ -675,13 +701,12 @@ describe('getAcceptedGroupPairsForMember (T4 Phase 1)', () => {
   });
 });
 
-describe('handleInvite (T4 — groupId stamping)', () => {
-  // T4 invariant: every NEW invite row must carry a group_id, either
-  // the requested one (body.groupId) or the owner's Default. The sync
-  // pull's filter relies on group_id being set; a NULL group_id means
-  // the member sees nothing from that owner.
+describe('handleInvite (T5 — groupId required)', () => {
+  // T5 invariant: every invite MUST specify a groupId. No more auto-
+  // Default fallback (T4 behaviour). The /teams/:id page always sends
+  // one; a missing groupId is a programmer error worth a 400.
 
-  it('stamps the new membership with the owner\'s Default group when no groupId is provided', async () => {
+  it('REJECTS with 400 when groupId is missing (T5: no Default fallback)', async () => {
     const { db, rows } = makeMembershipDb();
     const { impl } = makeClerkAndResendFetch({
       users: { u_owner: { tier: 'enterprise', email: 'owner@k.uk' } },
@@ -692,8 +717,8 @@ describe('handleInvite (T4 — groupId stamping)', () => {
       body: JSON.stringify({ email: 'sous@k.uk' }),
     });
     const res = await handleInvite(req, env, 'u_owner');
-    expect(res.status).toBe(200);
-    expect(rows[0].group_id).toMatch(/^grp_/);
+    expect(res.status).toBe(400);
+    expect(rows).toHaveLength(0);
   });
 
   it('stamps the new membership with the body.groupId when provided (chef inviting into a specific named group)', async () => {
@@ -712,25 +737,23 @@ describe('handleInvite (T4 — groupId stamping)', () => {
   });
 });
 
-describe('Groups CRUD handlers (T4 Phase 2)', () => {
-  // Why these matter: this is the only API surface through which an
-  // Enterprise owner manages their named groups. A regression here
-  // strands the per-item sharing feature entirely. Tests pin the
-  // happy paths + the protections around the Default group (cannot
-  // be renamed, cannot be deleted) + cascade-to-default on delete.
+describe('Groups CRUD handlers (T5: no auto-Default)', () => {
+  // Why these matter: T5 removes the lazy Default group. handleList
+  // Groups returns whatever the chef has created (empty until they
+  // create one); name-duplicate guard still applies; the rename +
+  // delete handlers preserve their is_default defenses for legacy
+  // rows that may still exist mid-cleanup.
 
-  it('handleListGroups returns the owner\'s groups with Default first (lazy provisions Default on first call)', async () => {
+  it('handleListGroups returns an empty list when the chef has no teams yet (no lazy Default)', async () => {
     const { db, groups } = makeMembershipDb();
     const { impl } = makeClerkAndResendFetch({});
     const env = makeEnv(db, impl, 're_test_long_enough');
     const { handleListGroups } = await import('./teams');
     const res = await handleListGroups(env, 'u_owner');
     expect(res.status).toBe(200);
-    const out = (await res.json()) as { groups: { id: string; name: string; isDefault: boolean }[] };
-    expect(out.groups).toHaveLength(1);
-    expect(out.groups[0].name).toBe('Default');
-    expect(out.groups[0].isDefault).toBe(true);
-    expect(groups).toHaveLength(1);
+    const out = (await res.json()) as { groups: unknown[] };
+    expect(out.groups).toEqual([]);
+    expect(groups).toHaveLength(0);
   });
 
   it('handleCreateGroup adds a non-default group and rejects duplicate names (case-insensitive)', async () => {
@@ -744,8 +767,7 @@ describe('Groups CRUD handlers (T4 Phase 2)', () => {
       env, 'u_owner',
     );
     expect(first.status).toBe(200);
-    // Both Default (auto) + Morning shift now exist.
-    expect(groups.filter((g) => g.owner_user_id === 'u_owner')).toHaveLength(2);
+    expect(groups.filter((g) => g.owner_user_id === 'u_owner')).toHaveLength(1);
 
     // Duplicate — case-insensitive collision with the existing name.
     const dup = await handleCreateGroup(
@@ -753,13 +775,6 @@ describe('Groups CRUD handlers (T4 Phase 2)', () => {
       env, 'u_owner',
     );
     expect(dup.status).toBe(409);
-    // Also collides with the auto-created Default — chef can't name
-    // a group "Default" themselves.
-    const defaultClash = await handleCreateGroup(
-      new Request('https://x', { method: 'POST', body: JSON.stringify({ name: 'default' }) }),
-      env, 'u_owner',
-    );
-    expect(defaultClash.status).toBe(409);
   });
 
   it('handleCreateGroup rejects empty / too-long names (defensive — never insert garbage)', async () => {
@@ -780,7 +795,7 @@ describe('Groups CRUD handlers (T4 Phase 2)', () => {
     expect(tooLong.status).toBe(400);
   });
 
-  it('handleRenameGroup updates the name on a non-default group, and refuses on Default', async () => {
+  it('handleRenameGroup updates the name on a non-default group, and refuses on any leftover legacy Default', async () => {
     const { db, groups } = makeMembershipDb();
     const { impl } = makeClerkAndResendFetch({});
     const env = makeEnv(db, impl, 're_test_long_enough');
@@ -801,18 +816,17 @@ describe('Groups CRUD handlers (T4 Phase 2)', () => {
     expect(ok.status).toBe(200);
     expect(groups.find((g) => g.id === created.id)!.name).toBe('Morning shift');
 
-    // Refuse to rename the Default group (the chef-visible name is
-    // load-bearing for the "everything I own goes here by default"
-    // mental model).
-    const defaultGroup = groups.find((g) => g.is_default === 1 && g.owner_user_id === 'u_owner')!;
+    // Defensive: a legacy Default left over from T4 (created out of band)
+    // should still be unrenameable. Inject one and verify.
+    groups.push({ id: 'grp_legacy_def', owner_user_id: 'u_owner', name: 'Default', is_default: 1, created_at: 0 });
     const defaultRename = await handleRenameGroup(
       new Request('https://x', { method: 'PATCH', body: JSON.stringify({ name: 'Boss group' }) }),
-      defaultGroup.id, env, 'u_owner',
+      'grp_legacy_def', env, 'u_owner',
     );
     expect(defaultRename.status).toBe(409);
   });
 
-  it('handleDeleteGroup cascades memberships to the Default group + refuses to delete the Default itself', async () => {
+  it('handleDeleteGroup deletes the team AND its memberships outright (T5: no Default to fall back to)', async () => {
     const { db, rows, groups } = makeMembershipDb();
     const { impl } = makeClerkAndResendFetch({});
     const env = makeEnv(db, impl, 're_test_long_enough');
@@ -829,25 +843,25 @@ describe('Groups CRUD handlers (T4 Phase 2)', () => {
       { owner_user_id: 'u_owner', member_email: 'b@x', member_user_id: 'u_b', role: 'viewer', invite_token: 't2', invited_at: 1, accepted_at: 2, group_id: morning.id },
     );
 
-    // Delete the Morning group.
+    // Delete the Morning team.
     const res = await handleDeleteGroup(morning.id, env, 'u_owner');
     expect(res.status).toBe(200);
-    // Group gone, memberships moved to Default.
+    // Group gone, memberships deleted (not orphaned).
     expect(groups.find((g) => g.id === morning.id)).toBeUndefined();
-    const defaultGroupId = groups.find((g) => g.is_default === 1)!.id;
-    expect(rows.every((r) => r.group_id === defaultGroupId)).toBe(true);
+    expect(rows.filter((r) => r.group_id === morning.id)).toHaveLength(0);
+    expect(rows).toHaveLength(0);
   });
 
-  it('handleDeleteGroup refuses to delete the Default group (would orphan every membership)', async () => {
-    const { db, groups } = makeMembershipDb();
+  it('handleDeleteGroup refuses to delete a legacy Default group (would orphan every membership)', async () => {
+    const { db, groups } = makeMembershipDb([], [
+      { id: 'grp_legacy_def', owner_user_id: 'u_owner', name: 'Default', is_default: 1, created_at: 0 },
+    ]);
     const { impl } = makeClerkAndResendFetch({});
     const env = makeEnv(db, impl, 're_test_long_enough');
-    const { handleListGroups, handleDeleteGroup } = await import('./teams');
-    // List once to lazy-create the Default.
-    await handleListGroups(env, 'u_owner');
-    const defaultId = groups.find((g) => g.is_default === 1)!.id;
-    const res = await handleDeleteGroup(defaultId, env, 'u_owner');
+    const { handleDeleteGroup } = await import('./teams');
+    const res = await handleDeleteGroup('grp_legacy_def', env, 'u_owner');
     expect(res.status).toBe(409);
+    expect(groups).toHaveLength(1); // not deleted
   });
 
   it('handleDeleteGroup 404s on a group id that doesn\'t belong to this owner (no cross-owner deletes)', async () => {

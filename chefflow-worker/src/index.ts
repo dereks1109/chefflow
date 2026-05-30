@@ -63,7 +63,7 @@ import {
   handleRenameGroup as teamsHandleRenameGroup,
   handleDeleteGroup as teamsHandleDeleteGroup,
   getAcceptedGroupPairsForMember,
-  migrateOwnerToDefaultGroup,
+  cleanupT5DefaultGroup,
 } from './teams';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
@@ -358,9 +358,10 @@ export async function handleRequest(
       // Ids. Empty pair list for non-members (most users) so the
       // upstream query is a single fast indexed lookup and the regular
       // per-user pull runs as before. We also opportunistically run
-      // the T4 lazy migration here — see migrateOwnerToDefaultGroup.
+      // the T5 cleanup — undoes T4's auto-Default-group migration on
+      // each owner's first pull post-deploy. Idempotent, KV-gated.
       const viewerGroupPairs = await getAcceptedGroupPairsForMember(env.DB, userId);
-      await migrateOwnerToDefaultGroup(env, userId);
+      await cleanupT5DefaultGroup(env, userId);
       const out = await syncPull(env.DB, userId, since, viewerGroupPairs);
       return json(out, 200);
     } catch (err) {

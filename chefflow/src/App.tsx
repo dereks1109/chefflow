@@ -13,6 +13,8 @@ import WorkflowsLibrary from './ui/pages/WorkflowsLibrary';
 import Workflow from './ui/pages/Workflow';
 import SettingsPage from './ui/pages/SettingsPage';
 import TeamAccept from './ui/pages/TeamAccept';
+import TeamsList from './ui/pages/TeamsList';
+import TeamDetail from './ui/pages/TeamDetail';
 import AboutPage from './ui/pages/AboutPage';
 import ContactPage from './ui/pages/ContactPage';
 import AdminDashboard from './ui/pages/AdminDashboard';
@@ -100,6 +102,9 @@ function PublicApp() {
           <Route path="/workflows" element={<RequireAuth><WorkflowsLibrary /></RequireAuth>} />
           <Route path="/workflows/:eventId" element={<RequireAuth><Workflow /></RequireAuth>} />
           <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+          {/* T5: Teams as a top-nav surface for Enterprise owners. */}
+          <Route path="/teams" element={<RequireAuth><TeamsList /></RequireAuth>} />
+          <Route path="/teams/:id" element={<RequireAuth><TeamDetail /></RequireAuth>} />
           <Route path="/admin" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
 
           <Route path="*" element={<div className="p-6">Not found.</div>} />

@@ -148,33 +148,48 @@ export async function ensureDefaultGroup(
 }
 
 /**
- * One-shot lazy backfill: when an Enterprise owner first pulls after
- * the T4 deploy, stamp every recipe / event / menu row they own with
- * `sharedWithGroupIds: [defaultGroupId]` so the existing members keep
- * seeing what they see today (preserve-visibility migration).
+ * T5 one-shot cleanup: undoes T4's "auto-created Default group +
+ * everything-auto-ticked" model. Runs lazily on the owner's first
+ * sync.pull after the T5 deploy. Steps:
+ *   1. Find every default group this owner has.
+ *   2. Strip `sharedWithGroupIds` from every recipe/event/menu row
+ *      they own (bumping updated_at so members see the change on
+ *      their next pull — those items become invisible again until the
+ *      chef explicitly re-ticks).
+ *   3. Delete memberships that pointed at the soon-to-be-deleted
+ *      default groups (members lose the team context; chef re-invites
+ *      under the new explicit-team flow).
+ *   4. Delete the default groups themselves.
+ *   5. Set a new KV marker `groups:t5-cleanup:v1:<ownerUserId>`.
  *
- * Gated by a KV marker `groups:migrated:v1:<ownerUserId>`. Idempotent:
- * the marker prevents the row scan on subsequent pulls. The cost on
- * the cold path is one KV read; on the migration path it's
- * `O(owner_rows)` JSON parse + write per table.
- *
- * If KV is unset (rare misconfig), the marker check fails open and
- * the migration runs every pull until KV recovers. Safer than
- * crashing the pull.
+ * Idempotent. If KV is unset the cleanup repeats on every pull, which
+ * is still correct (each step short-circuits if there's nothing to do).
  */
-export async function migrateOwnerToDefaultGroup(
+export async function cleanupT5DefaultGroup(
   env: { DB: D1Database; RATE_LIMIT: KVNamespace },
   ownerUserId: string,
 ): Promise<void> {
-  const markerKey = `groups:migrated:v1:${ownerUserId}`;
+  const markerKey = `groups:t5-cleanup:v1:${ownerUserId}`;
   try {
     const already = await env.RATE_LIMIT.get(markerKey);
     if (already) return;
   } catch {
     // fall through — re-run is harmless
   }
-  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
 
+  // (1) Find this owner's default group ids.
+  const defaultGroups = await env.DB
+    .prepare(`SELECT id FROM groups WHERE owner_user_id = ? AND is_default = 1`)
+    .bind(ownerUserId)
+    .all<{ id: string }>();
+  const defaultIds = (defaultGroups.results ?? []).map((g) => g.id);
+
+  // (2) Strip sharedWithGroupIds from the owner's recipes/events/menus
+  // unconditionally — even if the owner had no default group (because
+  // a non-default group may have been removed later), the user-chosen
+  // T5 design is "clean slate, chef re-ticks". Safe: any present
+  // sharedWithGroupIds at the moment of T5 deploy is, by definition,
+  // pre-T5 state we're discarding.
   const tables = ['recipes', 'events', 'menus'] as const;
   for (const table of tables) {
     const rows = await env.DB
@@ -191,8 +206,8 @@ export async function migrateOwnerToDefaultGroup(
       } catch {
         continue;
       }
-      if (Array.isArray(parsed.sharedWithGroupIds)) continue; // already migrated
-      parsed.sharedWithGroupIds = [defaultGroupId];
+      if (!('sharedWithGroupIds' in parsed)) continue; // nothing to clean
+      delete parsed.sharedWithGroupIds;
       const nextPayload = JSON.stringify(parsed);
       const nextUpdatedAt = Math.max(r.updated_at + 1, Date.now());
       await env.DB
@@ -205,10 +220,22 @@ export async function migrateOwnerToDefaultGroup(
     }
   }
 
+  // (3) + (4) — drop memberships + groups for every default group.
+  for (const defaultId of defaultIds) {
+    await env.DB
+      .prepare(`DELETE FROM team_memberships WHERE owner_user_id = ? AND group_id = ?`)
+      .bind(ownerUserId, defaultId)
+      .run();
+    await env.DB
+      .prepare(`DELETE FROM groups WHERE owner_user_id = ? AND id = ?`)
+      .bind(ownerUserId, defaultId)
+      .run();
+  }
+
   try {
     await env.RATE_LIMIT.put(markerKey, '1');
   } catch {
-    // Best-effort; next pull will re-run, which is idempotent.
+    // Best-effort; next pull re-runs, idempotent.
   }
 }
 
@@ -336,15 +363,15 @@ export async function handleInvite(
     throw err;
   }
 
-  // T4: invite into a specific group. Body may include `groupId`; when
-  // omitted, default to the owner's auto-created Default group so
-  // pre-T4 callers (and the SettingsPage MVP) keep working.
+  // T5: groupId is REQUIRED. Pre-T5 we lazy-created a Default group
+  // and used it as a fallback; T5 makes team creation explicit (chef
+  // creates a team from /teams, then invites into it), so a missing
+  // groupId is a 400. The /teams/:id page always sends one.
   const requestedGroupId = (body as { groupId?: unknown })?.groupId;
-  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
-  const groupId =
-    typeof requestedGroupId === 'string' && requestedGroupId.length > 0
-      ? requestedGroupId
-      : defaultGroupId;
+  if (typeof requestedGroupId !== 'string' || requestedGroupId.length === 0) {
+    return jsonResponse({ error: 'Body must include a groupId (invite into a specific team)' }, 400);
+  }
+  const groupId = requestedGroupId;
 
   // Idempotency: if the same (owner, email) already exists pending,
   // re-send the email with the SAME token rather than insert a duplicate
@@ -486,14 +513,13 @@ export async function handleAccept(
   return jsonResponse({ ownerUserId: invite.owner_user_id, memberEmail: invite.member_email }, 200);
 }
 
-/** GET /api/teams/list — owner-only. Returns pending + accepted members
- *  with their group_id (T4). Provisions the owner's Default group on
- *  first call so the SettingsPage UI always has a group to render. */
+/** GET /api/teams/list — owner-only. Returns pending + accepted
+ *  members with their group_id. T5: no auto-default; an empty list
+ *  is fine and means the chef hasn't created any teams yet. */
 export async function handleList(
   env: TeamsEnv,
   ownerUserId: string,
 ): Promise<Response> {
-  await ensureDefaultGroup(env.DB, ownerUserId);
   const rows = await env.DB
     .prepare(
       `SELECT member_email, member_user_id, role, invited_at, accepted_at, group_id
@@ -575,14 +601,12 @@ function isValidGroupName(s: unknown): s is string {
 }
 
 /** GET /api/teams/groups — owner-only. Returns the owner's groups
- *  (default first, then by createdAt asc). Lazily provisions the
- *  Default group so the chef ALWAYS sees at least one group on
- *  first call — no empty-state spinner. */
+ *  in createdAt asc. T5: no lazy default; an empty list is the
+ *  expected state until the chef creates their first team from /teams. */
 export async function handleListGroups(
   env: TeamsEnv,
   ownerUserId: string,
 ): Promise<Response> {
-  await ensureDefaultGroup(env.DB, ownerUserId);
   const rows = await env.DB
     .prepare(
       `SELECT id, name, is_default, created_at
@@ -614,10 +638,8 @@ export async function handleCreateGroup(
   }
   const name = rawName.trim();
 
-  // Make sure the Default exists first so the owner always has it,
-  // and so the case-insensitive duplicate check below catches a
-  // "Default" name collision.
-  await ensureDefaultGroup(env.DB, ownerUserId);
+  // T5: no auto-default group, so no "Default" name collision to guard
+  // against here — chef can name their first team "Default" if they want.
   const existing = await env.DB
     .prepare(
       `SELECT id FROM groups
@@ -686,13 +708,14 @@ export async function handleRenameGroup(
   return jsonResponse({ id: groupId, name }, 200);
 }
 
-/** DELETE /api/teams/groups/:id — owner-only. Deletes a non-default
- *  group. Cascades: every membership currently in this group is moved
- *  to the owner's Default. Stale group_ids inside recipe/event/menu
- *  payload.sharedWithGroupIds are NOT scrubbed eagerly — they're
- *  harmless (no member can match them), and the next time the chef
- *  edits the item the chip row simply won't show the deleted group
- *  so they'll save without it. */
+/** DELETE /api/teams/groups/:id — owner-only. Deletes a team and its
+ *  memberships outright (T5: no Default group exists to fall back to,
+ *  so deletion is final — members lose access; chef can re-invite
+ *  under a different team they create). Stale group_ids inside
+ *  recipe/event/menu payload.sharedWithGroupIds are NOT scrubbed
+ *  eagerly — they're harmless (no member can match a deleted group),
+ *  and the next time the chef edits the item the chip row won't show
+ *  the deleted group so they'll save without it. */
 export async function handleDeleteGroup(
   groupId: string,
   env: TeamsEnv,
@@ -710,18 +733,18 @@ export async function handleDeleteGroup(
   if (target.is_default === 1) {
     return jsonResponse({ error: 'The Default group cannot be deleted' }, 409);
   }
-  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
-  // Move memberships first so they're never orphaned mid-delete.
+  // Drop memberships first so we don't leave orphans pointing at a
+  // group_id that no longer exists.
   await env.DB
     .prepare(
-      `UPDATE team_memberships SET group_id = ?
+      `DELETE FROM team_memberships
        WHERE owner_user_id = ? AND group_id = ?`,
     )
-    .bind(defaultGroupId, ownerUserId, groupId)
+    .bind(ownerUserId, groupId)
     .run();
   await env.DB
     .prepare(`DELETE FROM groups WHERE owner_user_id = ? AND id = ?`)
     .bind(ownerUserId, groupId)
     .run();
-  return jsonResponse({ removed: groupId, movedToDefault: true }, 200);
+  return jsonResponse({ removed: groupId }, 200);
 }

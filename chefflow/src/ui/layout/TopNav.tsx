@@ -1,16 +1,21 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk, useUser } from '@clerk/clerk-react';
-import { BookOpen, CalendarDays, Globe2, ListChecks, Mail, Settings, Shield } from 'lucide-react';
+import { BookOpen, CalendarDays, Globe2, ListChecks, Mail, Settings, Shield, Users } from 'lucide-react';
 import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
 import { useAdminStore } from '../../state/useAdminStore';
+import { useTierStore } from '../../state/useTierStore';
 
 // About link removed 2026-05-29: `/about` content is now the
 // marketing landing at `/` (LandingOrRedirect in App.tsx). Logo
 // click takes signed-in chefs to /recipes and guests to the
 // landing — same destinations the About link used to reach.
-const navItems = [
+//
+// Teams link (T5) sits between Workflows and Community, gated to
+// Enterprise tier — non-Enterprise chefs don't see a dead-end nav
+// entry.
+const BASE_NAV_ITEMS = [
   { to: '/recipes', label: 'Recipes', icon: BookOpen },
   { to: '/events', label: 'Events', icon: CalendarDays },
   { to: '/workflows', label: 'Workflows', icon: ListChecks },
@@ -20,9 +25,17 @@ const navItems = [
 
 export default function TopNav() {
   const isAdmin = useAdminStore((s) => s.isAdmin);
+  const tier = useTierStore((s) => s.tier);
   const { isSignedIn } = useUser();
   const clerk = useClerk();
   const isE2E = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
+  const navItems = tier === 'enterprise'
+    ? [
+        ...BASE_NAV_ITEMS.slice(0, 3),
+        { to: '/teams', label: 'Teams', icon: Users },
+        ...BASE_NAV_ITEMS.slice(3),
+      ]
+    : BASE_NAV_ITEMS;
   // In E2E mode we treat the app as always-signed-in so the existing
   // Playwright suite (which doesn't run Clerk) still sees the avatar slot.
   const showSignedInChrome = isE2E || isSignedIn;
