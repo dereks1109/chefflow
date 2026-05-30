@@ -15,7 +15,7 @@ function isDemo(event: KitchenEvent): boolean {
 export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
-    <article className="flex flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
+    <article className="flex h-full flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
       {/* T6: items-center keeps the trash icon vertically aligned with
           the title's first line in the common 1-line case. Long titles
           (line-clamp-2) shift the icon to the visual midline of the
@@ -62,7 +62,13 @@ export default function EventCard({ event, onDelete }: Props) {
           )}
         </div>
       </dl>
-      <p className="mt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
+      {/* mt-auto pins the description to the bottom of the card so it
+          lines up across the row even when titles wrap to two lines.
+          Combined with `h-full` on the article and CSS Grid's default
+          align-items: stretch on the parent <ul>, every card in the
+          grid shares the row's height + bottom padding (p-4 on
+          article = uniform inset on every side). */}
+      <p className="mt-auto pt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
         {event.notes ? event.notes : <span className="italic opacity-60">No description</span>}
       </p>
     </article>
