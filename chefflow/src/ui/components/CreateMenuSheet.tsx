@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layers, X, AlertTriangle } from 'lucide-react';
 import { randomId } from '../../core/util/id';
-import GroupShareChipRow from './GroupShareChipRow';
+import VisibilityControl from './VisibilityControl';
 import type { Menu, Recipe } from '../../core/types';
 
 interface Props {
@@ -117,11 +117,12 @@ export default function CreateMenuSheet({
         </header>
 
         <div className="px-5 py-4 space-y-4 text-sm">
-          {/* T4 Phase 3 — per-item team-share chips. Self-hides for
-              non-Enterprise tiers so non-team chefs see no UI change. */}
-          <GroupShareChipRow
+          {/* T5 Phase B — per-team "Visible to" chips. No Community
+              pill (menus aren't publishable today). Self-hides for
+              non-Enterprise tiers. */}
+          <VisibilityControl
             selectedGroupIds={sharedWithGroupIds}
-            onChange={setSharedWithGroupIds}
+            onGroupsChange={setSharedWithGroupIds}
           />
           <label className="block">
             <span className="text-xs font-medium text-slate-500">Title</span>

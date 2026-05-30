@@ -14,7 +14,7 @@ import { Plus, Calendar, StickyNote, MapPin, Wallet, GripVertical, Trash2, User,
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
 import PinGate from '../components/PinGate';
-import GroupShareChipRow from '../components/GroupShareChipRow';
+import VisibilityControl from '../components/VisibilityControl';
 import LocationAutocomplete from '../components/LocationAutocomplete';
 import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
@@ -195,11 +195,12 @@ export default function EventEditor() {
       </header>
 
       <form className="space-y-6" onSubmit={(ev) => ev.preventDefault()}>
-        {/* T4 Phase 3 — per-item team-share chips for this event. Self-
-            hides for non-Enterprise tiers (no team to share with). */}
-        <GroupShareChipRow
+        {/* T5 Phase B — per-team "Visible to" chips for this event.
+            No Community pill (events aren't publishable today).
+            Self-hides for non-Enterprise tiers. */}
+        <VisibilityControl
           selectedGroupIds={e.sharedWithGroupIds}
-          onChange={(next) => update('sharedWithGroupIds', next)}
+          onGroupsChange={(next) => update('sharedWithGroupIds', next)}
         />
         <label className="block">
           <span className="text-sm font-medium">Event title</span>

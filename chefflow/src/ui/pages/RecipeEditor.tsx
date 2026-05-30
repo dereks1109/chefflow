@@ -26,7 +26,7 @@ import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
 import PinGate from '../components/PinGate';
 import SharedReadOnlyBanner from '../components/SharedReadOnlyBanner';
-import GroupShareChipRow from '../components/GroupShareChipRow';
+import VisibilityControl from '../components/VisibilityControl';
 import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
@@ -67,6 +67,29 @@ export default function RecipeEditor() {
   const communityId = usePublishedSet((s) => s.map[id]);
   const linkPublished = usePublishedSet((s) => s.link);
   const unlinkPublished = usePublishedSet((s) => s.unlink);
+
+  // T5 Phase B — the chef's chosen community-publish state, decoupled
+  // from the server-side communityId. The Community pill writes to this
+  // local; handleSave/actualSave diff against the snapshot at load
+  // time to decide whether to fire publishRecipe or unpublishRecipe.
+  const [communityChecked, setCommunityChecked] = useState(false);
+  const [originalCommunityId, setOriginalCommunityId] = useState<string | undefined>(undefined);
+  // Carries the "save fired, modal needs to navigate after publish"
+  // signal so the AllergenAttestationModal's onConfirm can complete
+  // the save flow.
+  const [pendingPublishNavigate, setPendingPublishNavigate] = useState(false);
+
+  useEffect(() => {
+    // Re-snapshot when the published state hydrates (the publishedSet
+    // populates after the first sync). Only refreshes the snapshot
+    // BEFORE the chef has dirtied anything — once they've started
+    // editing, the original state is locked in.
+    if (!dirty) {
+      setOriginalCommunityId(communityId);
+      setCommunityChecked(!!communityId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [communityId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,11 +234,34 @@ export default function RecipeEditor() {
     const nextRecipe: Recipe = { ...r, updatedAt: Date.now() };
     await saveRecipe(nextRecipe);
     setDirty(false);
-    // Auto-republish to community if this recipe is currently in the
-    // publishedSet. Worker treats author+sourceLocalId as the update key,
-    // so likes + copies counters survive. Fire-and-forget — silent log on
-    // failure; the local save still succeeds even if the worker is down.
-    if (communityId) {
+
+    // T5 — diff the Community pill state against the snapshot taken
+    // at recipe load. Four cases:
+    //   was unpublished, now ticked   → first-time publish (allergen
+    //                                   attestation modal, then navigate)
+    //   was published, now unticked   → unpublish, then navigate
+    //   was published, still ticked   → auto-republish (worker uses
+    //                                   author+sourceLocalId as update
+    //                                   key — likes/copies survive)
+    //   was unpublished, still unticked → no-op
+    const wasPublished = !!originalCommunityId;
+    if (communityChecked && !wasPublished) {
+      // Open the allergen attestation modal; doPublish navigates
+      // after the publish completes.
+      setShareError(null);
+      setPendingPublishNavigate(true);
+      setAttestOpen(true);
+      return; // navigate deferred to doPublish onConfirm
+    }
+    if (!communityChecked && wasPublished && originalCommunityId) {
+      try {
+        await unpublishRecipe(originalCommunityId);
+        unlinkPublished(r.id);
+      } catch (err: unknown) {
+        // eslint-disable-next-line no-console
+        console.warn('[RecipeEditor] unpublish failed', err);
+      }
+    } else if (communityChecked && wasPublished) {
       const nameToSend = showNameOnCommunity ? displayName : '';
       void publishRecipe(nextRecipe, nameToSend).catch((err: unknown) => {
         // eslint-disable-next-line no-console
@@ -230,15 +276,9 @@ export default function RecipeEditor() {
     navigate(returnRoute());
   }
 
-  // First-publish allergen attestation: open the modal, real publish runs
-  // on the modal's onConfirm. Re-publishes (the auto-republish in
-  // handleSave) skip the modal because the user already attested once
-  // when they first published — the recipe is in usePublishedSet.
-  function handlePublish() {
-    setShareError(null);
-    setAttestOpen(true);
-  }
-
+  // T5 — runs when the chef confirms the allergen attestation modal
+  // after a first-time community publish was queued by actualSave.
+  // Performs the publish and then completes the deferred navigate.
   async function doPublish() {
     setShareBusy(true);
     try {
@@ -246,6 +286,10 @@ export default function RecipeEditor() {
       const { id: newCommunityId } = await publishRecipe(r, nameToSend);
       linkPublished(r.id, newCommunityId);
       setAttestOpen(false);
+      if (pendingPublishNavigate) {
+        setPendingPublishNavigate(false);
+        navigate(returnRoute());
+      }
     } catch (err) {
       setShareError(err instanceof Error ? err.message : 'Failed to publish');
     } finally {
@@ -273,21 +317,6 @@ export default function RecipeEditor() {
     }
   }
 
-  async function handleUnpublish() {
-    if (!communityId) return;
-    if (!window.confirm('Unpublish this recipe from the community?')) return;
-    setShareError(null);
-    setShareBusy(true);
-    try {
-      await unpublishRecipe(communityId);
-      unlinkPublished(r.id);
-    } catch (err) {
-      setShareError(err instanceof Error ? err.message : 'Failed to unpublish');
-    } finally {
-      setShareBusy(false);
-    }
-  }
-
   return (
     <PinGate>
     <section className="p-4 md:p-6">
@@ -311,35 +340,17 @@ export default function RecipeEditor() {
       <header className="flex items-center justify-between mb-4 gap-2">
         <h1 className="text-2xl font-bold">{readOnly ? 'Recipe' : 'Edit recipe'}</h1>
         <div className="flex flex-wrap gap-2 items-center">
+          {/* T5: Published badge stays in the header but is now driven
+              by the server-side communityId (set by the publish flow
+              inside actualSave). The Community pill in the editor
+              (VisibilityControl below) carries the user's intent. */}
           {!readOnly && communityId && (
-            <>
-              <span
-                className="text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                data-testid="recipe-editor-published-badge"
-              >
-                Published
-              </span>
-              <button
-                type="button"
-                onClick={() => requireAuth(() => void handleUnpublish())}
-                disabled={shareBusy}
-                className="btn-secondary disabled:opacity-60"
-                data-testid="recipe-editor-unpublish-btn"
-              >
-                Unpublish
-              </button>
-            </>
-          )}
-          {!readOnly && !communityId && (
-            <button
-              type="button"
-              onClick={() => requireAuth(() => void handlePublish())}
-              disabled={shareBusy}
-              className="btn-secondary disabled:opacity-60"
-              data-testid="recipe-editor-publish-btn"
+            <span
+              className="text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+              data-testid="recipe-editor-published-badge"
             >
-              {shareBusy ? 'Publishing…' : 'Share publicly'}
-            </button>
+              Published
+            </span>
           )}
           {!readOnly && (
             <button type="button" onClick={handleCancel} className="btn-secondary">
@@ -369,14 +380,16 @@ export default function RecipeEditor() {
             parent form's space-y-4 between siblings stays intact while
             still cascading `disabled` to every child input/button. */}
         <fieldset disabled={readOnly} className="contents">
-        {/* T4 Phase 3 — per-item team-share chips. Renders ABOVE the
-            field cluster so the chef sees the share state before they
-            start editing. Self-hides for non-Enterprise tiers and for
-            read-only views, so this is a no-op for the 99% of users
-            who aren't on a team. */}
-        <GroupShareChipRow
+        {/* T5 Phase B — unified "Visible to" multi-check. Replaces the
+            old Share-publicly / Unpublish header buttons + the per-team
+            chip row. Community pill triggers publish/unpublish inside
+            actualSave (only on Save click, not on every tick). Team
+            pills update sharedWithGroupIds inline. Self-hides for
+            non-Enterprise + non-recipe callers, and for read-only views. */}
+        <VisibilityControl
           selectedGroupIds={r.sharedWithGroupIds}
-          onChange={(next) => update('sharedWithGroupIds', next)}
+          community={{ checked: communityChecked, onChange: (next) => { setCommunityChecked(next); setDirty(true); } }}
+          onGroupsChange={(next) => update('sharedWithGroupIds', next)}
           readOnly={readOnly}
         />
         {/* Field order (2026-05-28): name first, then chef-declared
