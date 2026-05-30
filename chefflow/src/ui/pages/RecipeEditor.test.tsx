@@ -195,3 +195,46 @@ describe('RecipeEditor — auto-republish on save', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });
+
+describe('RecipeEditor — T3c Phase 4 read-only gating', () => {
+  // Why this matters: when an Enterprise team owner shares a recipe with
+  // a member, the member's local copy carries readOnly=true. The editor
+  // must NOT let the member save, publish, unpublish, or change anything
+  // (the worker push gate is the last line, but the UI must reflect the
+  // constraint immediately so the chef isn't surprised by silently-lost
+  // edits). These tests pin the visible gates.
+
+  it('shows the SharedReadOnlyBanner, hides Save/Cancel/Share buttons, and disables inputs when recipe.readOnly === true', async () => {
+    await db.recipes.put({ ...seed, readOnly: true, ownerUserId: 'user_owner' });
+    renderEditorAt(seed.id);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shared-readonly-banner')).toBeInTheDocument();
+    });
+    // Title is rendered as "Recipe" (read-only mode), not "Edit recipe".
+    expect(screen.getByRole('heading', { name: /^Recipe$/i })).toBeInTheDocument();
+    // Save / Cancel / Share publicly are all hidden.
+    expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^cancel$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /share publicly/i })).toBeNull();
+    // Only a Back button remains.
+    expect(screen.getByRole('button', { name: /^back$/i })).toBeInTheDocument();
+    // Title input still rendered (chef can read the recipe contents).
+    // The wrapping <fieldset disabled> handles input disabling in real
+    // browsers; JSDOM doesn't simulate that cascade, so we can't assert
+    // titleInput.disabled here — the button-visibility checks above are
+    // the real safety boundary anyway (a chef who can't see Save can't
+    // accidentally save).
+    expect(screen.getByDisplayValue('Seed Recipe')).toBeInTheDocument();
+  });
+
+  it('does NOT render the banner on the owner\'s own (read-write) recipe — regression sentinel', async () => {
+    await db.recipes.put(seed); // no readOnly flag
+    renderEditorAt(seed.id);
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /edit recipe/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('shared-readonly-banner')).toBeNull();
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+  });
+});

@@ -19,6 +19,7 @@ import EventDetailCard from '../components/EventDetailCard';
 import CommuteBanner from '../components/CommuteBanner';
 import { swatchClassFor } from '../components/ColorPicker';
 import LlmSettingsSheet from '../components/LlmSettingsSheet';
+import SharedReadOnlyBanner from '../components/SharedReadOnlyBanner';
 import { saveEvent } from '../../db/eventsRepo';
 import { useEvent, useRecipes } from '../../db/hooks/useEvent';
 import {
@@ -495,6 +496,8 @@ export default function Workflow() {
         </div>
       </div>
 
+      {event.readOnly && <SharedReadOnlyBanner scope="workflow" />}
+
       <EventDetailCard event={event} />
 
       <CommuteBanner eventLocation={event.location} serveAt={event.serveAt} />
@@ -506,17 +509,22 @@ export default function Workflow() {
             Workflow
           </h2>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => requireAuth(() => void handleRegenerate())}
-              disabled={workflowStatus.kind === 'generating'}
-              className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Discard saved snapshot and re-run the LLM"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${workflowStatus.kind === 'generating' ? 'animate-spin' : ''}`} aria-hidden="true" />
-              Regenerate
-            </button>
-            {needsSave && (
+            {/* T3c Phase 4 — Regenerate + Save are owner-only. A member
+                viewing a shared event's saved workflow can still browse
+                + print it; mutations stay with the owner. */}
+            {!event.readOnly && (
+              <button
+                type="button"
+                onClick={() => requireAuth(() => void handleRegenerate())}
+                disabled={workflowStatus.kind === 'generating'}
+                className="btn-secondary text-sm inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Discard saved snapshot and re-run the LLM"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${workflowStatus.kind === 'generating' ? 'animate-spin' : ''}`} aria-hidden="true" />
+                Regenerate
+              </button>
+            )}
+            {!event.readOnly && needsSave && (
               <span
                 data-testid="workflow-unsaved-pill"
                 className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
@@ -524,7 +532,7 @@ export default function Workflow() {
                 Unsaved
               </span>
             )}
-            <button
+            {!event.readOnly && <button
               type="button"
               onClick={() => void handleSave()}
               disabled={!needsSave}
@@ -536,7 +544,7 @@ export default function Workflow() {
             >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
               {needsSave ? 'Save changes' : 'Saved'}
-            </button>
+            </button>}
           </div>
         </div>
 

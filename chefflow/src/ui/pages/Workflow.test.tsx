@@ -451,3 +451,39 @@ describe('Workflow page — persistence', () => {
     );
   });
 });
+
+describe('Workflow page — T3c Phase 4 read-only gating', () => {
+  // Why: members viewing an Enterprise owner's shared event still want
+  // the workflow page (timeline + print checklist) but cannot regenerate
+  // or save changes — those mutations belong to the owner. The banner
+  // makes the constraint explicit; the button gates prevent accidental
+  // mutations on the viewer's local copy.
+
+  it('shows the SharedReadOnlyBanner + HIDES Regenerate and Save buttons when event.readOnly === true', async () => {
+    await db.events.put({ ...DEMO_EVENT, readOnly: true, ownerUserId: 'user_owner' });
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('shared-readonly-banner')).toBeInTheDocument();
+    });
+    // Regenerate + Save changes / Saved buttons are gone.
+    expect(screen.queryByRole('button', { name: /regenerate/i })).toBeNull();
+    expect(screen.queryByTestId('workflow-save-button')).toBeNull();
+    // Print checklist still available — viewing-only doesn't preclude printing.
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-print-button')).toBeInTheDocument();
+    });
+  });
+
+  it('does NOT show the banner on the owner\'s own (read-write) event — regression sentinel', async () => {
+    await db.events.put(DEMO_EVENT); // no readOnly flag
+    await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
+    renderWorkflowAt(DEMO_EVENT.id);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /regenerate/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('shared-readonly-banner')).toBeNull();
+  });
+});

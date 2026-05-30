@@ -380,6 +380,18 @@ export default function RecipesLibrary() {
             const checked = selectedIds.has(r.id);
             return (
               <li key={r.id} className="h-full relative">
+                {/* T3c Phase 4 — small "Shared" tag on rows that came
+                    from an Enterprise team owner the caller is a viewer
+                    of. Visual-only here; the editor + workflow gates
+                    are the real "no edits" enforcement. */}
+                {r.readOnly && (
+                  <span
+                    data-testid="recipe-card-shared-tag"
+                    className="absolute top-2 right-2 z-10 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                  >
+                    Shared
+                  </span>
+                )}
                 {selectMode && (
                   <button
                     type="button"

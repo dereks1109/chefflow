@@ -16,6 +16,7 @@ import { getEvent, saveEvent } from '../../db/eventsRepo';
 import { useIsGuest } from '../../state/useAuthGate';
 import { fetchPublicDemos } from '../../core/demos/demosClient';
 import GuestBrowseBanner from '../components/GuestBrowseBanner';
+import SharedReadOnlyBanner from '../components/SharedReadOnlyBanner';
 import { listRecipes, saveRecipe } from '../../db/recipesRepo';
 import DishForm, { blankDish } from '../components/DishForm';
 import DishRow from '../components/DishRow';
@@ -118,6 +119,12 @@ export default function EventView() {
   }
 
   const e = state.event;
+  // T3c Phase 4 — view-only when this event was shared from an
+  // Enterprise team owner. Hide Build menu, Add dish, dish-row delete
+  // buttons, and the event-detail Edit pencil. The "View workflow"
+  // link stays accessible (Workflow page renders its own read-only
+  // gate). Banner makes the constraint explicit at the top of the page.
+  const readOnly = e.readOnly === true;
   const dishGroups = groupDishesBySections(e.dishes, e.sections);
 
   function dishPrice(dish: Dish): number | undefined {
@@ -307,6 +314,7 @@ export default function EventView() {
   return (
     <section className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 print:!p-0 print:!space-y-0 print:!max-w-full">
       {isGuest && <GuestBrowseBanner scope="events" />}
+      {readOnly && <SharedReadOnlyBanner scope="event" />}
       <header className="flex items-center justify-between gap-2 print:!hidden">
         <Link to="/events" className="btn-secondary text-sm inline-flex items-center gap-1">
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -316,23 +324,29 @@ export default function EventView() {
           {/* "Build menu" sits next to "Generate Workflow" — both are
               chef-driven post-planning actions. Pro-gated: free users
               clicking it open the upgrade sheet (same destination as
-              the old in-section upgrade pitch). */}
-          <button
-            type="button"
-            onClick={() => (canBuildMenu ? setMenuBuilderOpen(true) : openUpgrade('general'))}
-            data-testid="event-build-menu"
-            className="btn-secondary inline-flex items-center gap-2"
-            title={canBuildMenu ? 'Print a customer-facing menu' : 'Upgrade to Pro to build menus'}
-          >
-            <ChefHat className="h-4 w-4" aria-hidden="true" />
-            Build menu
-          </button>
+              the old in-section upgrade pitch). Hidden in read-only mode
+              (members can't generate menu PDFs on the owner's behalf). */}
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => (canBuildMenu ? setMenuBuilderOpen(true) : openUpgrade('general'))}
+              data-testid="event-build-menu"
+              className="btn-secondary inline-flex items-center gap-2"
+              title={canBuildMenu ? 'Print a customer-facing menu' : 'Upgrade to Pro to build menus'}
+            >
+              <ChefHat className="h-4 w-4" aria-hidden="true" />
+              Build menu
+            </button>
+          )}
           <WorkflowCta event={e} />
         </div>
       </header>
 
       <div className="print:!hidden">
-        <EventDetailCard event={e} onEdit={() => setDetailsSheetOpen(true)} />
+        <EventDetailCard
+          event={e}
+          onEdit={readOnly ? undefined : () => setDetailsSheetOpen(true)}
+        />
       </div>
 
       <MenuBuilder
@@ -343,6 +357,12 @@ export default function EventView() {
       />
 
       <div className="print:!hidden space-y-6">
+      {/* T3c Phase 4 — when this event is shared from an Enterprise
+          owner, wrap everything below (MenuCheck Analyse-with-AI, dish
+          drag-drop, Add dish, dish row delete/edit) in a disabled
+          fieldset. HTML-native cascade neutralizes every child input
+          and button without touching the individual rendering sites. */}
+      <fieldset disabled={readOnly} className="contents">
       <MenuCheckPanel
         event={e}
         onAnalysisChange={(menuAnalysis: MenuAnalysis) =>
@@ -511,6 +531,7 @@ export default function EventView() {
           )}
         </div>
       </div>
+      </fieldset>
       </div>{/* /print:!hidden wrap around MenuCheckPanel + timeline */}
 
       <EventDetailsSheet

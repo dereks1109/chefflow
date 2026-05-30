@@ -128,7 +128,17 @@ export default function EventsLibrary() {
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         {events.map((e) => (
-          <li key={e.id} className="h-full">
+          <li key={e.id} className="h-full relative">
+            {/* T3c Phase 4 — "Shared" tag on events fanned in from a team
+                owner. Editor + delete gates live on EventView itself. */}
+            {e.readOnly && (
+              <span
+                data-testid="event-card-shared-tag"
+                className="absolute top-2 right-2 z-10 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+              >
+                Shared
+              </span>
+            )}
             <EventCard event={e} onDelete={(t) => requireAuth(() => void handleDelete(t))} />
           </li>
         ))}

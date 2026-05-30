@@ -25,6 +25,7 @@ import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
 import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
 import PinGate from '../components/PinGate';
+import SharedReadOnlyBanner from '../components/SharedReadOnlyBanner';
 import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
@@ -94,6 +95,14 @@ export default function RecipeEditor() {
   }
 
   const r = state.recipe;
+  // T3c Phase 4 — when this recipe was shared from an Enterprise owner
+  // to the caller (sync engine stamped readOnly=true on apply), render
+  // the editor in view-only mode: hide all mutating affordances, wrap
+  // the form in a disabled fieldset (HTML-native cascade disables every
+  // child input/button) and show the explanatory banner. The owner's
+  // own editor session is unaffected — readOnly is only true on rows
+  // that arrived via team_memberships fan-in.
+  const readOnly = r.readOnly === true;
 
   function update<K extends keyof Recipe>(key: K, value: Recipe[K]) {
     setState({ kind: 'ready', recipe: { ...r, [key]: value } });
@@ -299,9 +308,9 @@ export default function RecipeEditor() {
         }}
       />
       <header className="flex items-center justify-between mb-4 gap-2">
-        <h1 className="text-2xl font-bold">Edit recipe</h1>
+        <h1 className="text-2xl font-bold">{readOnly ? 'Recipe' : 'Edit recipe'}</h1>
         <div className="flex flex-wrap gap-2 items-center">
-          {communityId ? (
+          {!readOnly && communityId && (
             <>
               <span
                 className="text-xs px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
@@ -319,7 +328,8 @@ export default function RecipeEditor() {
                 Unpublish
               </button>
             </>
-          ) : (
+          )}
+          {!readOnly && !communityId && (
             <button
               type="button"
               onClick={() => requireAuth(() => void handlePublish())}
@@ -330,14 +340,23 @@ export default function RecipeEditor() {
               {shareBusy ? 'Publishing…' : 'Share publicly'}
             </button>
           )}
-          <button type="button" onClick={handleCancel} className="btn-secondary">
-            Cancel
-          </button>
-          <button type="button" onClick={() => void handleSave()} className="btn-primary">
-            Save
-          </button>
+          {!readOnly && (
+            <button type="button" onClick={handleCancel} className="btn-secondary">
+              Cancel
+            </button>
+          )}
+          {!readOnly ? (
+            <button type="button" onClick={() => void handleSave()} className="btn-primary">
+              Save
+            </button>
+          ) : (
+            <button type="button" onClick={handleCancel} className="btn-secondary">
+              Back
+            </button>
+          )}
         </div>
       </header>
+      {readOnly && <SharedReadOnlyBanner scope="recipe" />}
       {shareError && (
         <p className="mb-3 text-sm text-rose-600 dark:text-rose-400" role="alert">
           {shareError}
@@ -345,6 +364,10 @@ export default function RecipeEditor() {
       )}
 
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+        {/* `contents` keeps the fieldset out of the box model so the
+            parent form's space-y-4 between siblings stays intact while
+            still cascading `disabled` to every child input/button. */}
+        <fieldset disabled={readOnly} className="contents">
         {/* Field order (2026-05-28): name first, then chef-declared
             allergens (so the safety-critical metadata is captured before
             the chef gets into the ingredient/step weeds), then the AI
@@ -502,6 +525,7 @@ export default function RecipeEditor() {
             </button>
           </fieldset>
         </div>
+        </fieldset>
       </form>
     </section>
     </PinGate>
