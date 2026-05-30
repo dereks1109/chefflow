@@ -159,7 +159,7 @@ export default function CommunityRecipeView() {
       )}
 
       <header className="mb-4">
-        <h1 className="text-2xl md:text-3xl font-bold">{r.title || 'Untitled recipe'}</h1>
+        <h1 className="text-2xl font-bold">{r.title || 'Untitled recipe'}</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           by{' '}
           {r.authorClerkId ? (

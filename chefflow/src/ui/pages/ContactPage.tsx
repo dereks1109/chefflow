@@ -83,7 +83,7 @@ export default function ContactPage() {
   return (
     <section className="p-4 md:p-6 max-w-2xl mx-auto space-y-4">
       <header>
-        <h1 className="text-2xl md:text-3xl font-bold">Get in touch</h1>
+        <h1 className="text-2xl font-bold">Get in touch</h1>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
           Found a bug, want a feature, or have feedback on ChefFlow? Drop a line — every
           message goes straight to the person building this.
