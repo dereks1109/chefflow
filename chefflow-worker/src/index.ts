@@ -58,7 +58,8 @@ import {
   handleList as teamsHandleList,
   handleDelete as teamsHandleDelete,
   handleOwnersOfMe as teamsHandleOwnersOfMe,
-  getAcceptedOwnersForMember,
+  getAcceptedGroupPairsForMember,
+  migrateOwnerToDefaultGroup,
 } from './teams';
 import { completeOnboarding, OnboardingError, type OnboardingProfile } from './onboarding';
 import { setAdminByEmail, AdminBootstrapError } from './setAdminByEmail';
@@ -348,12 +349,15 @@ export async function handleRequest(
   if (req.method === 'GET' && url.pathname === '/api/sync/pull') {
     const since = parseSince(url.searchParams.get('since'));
     try {
-      // Phase 3 (T3c): also fan in owner content the caller has been
-      // accepted into as a team viewer. Empty list for non-members
-      // (most users) so this query is a single fast indexed lookup,
-      // then the regular per-user pull runs as before.
-      const viewerOwnerIds = await getAcceptedOwnersForMember(env.DB, userId);
-      const out = await syncPull(env.DB, userId, since, viewerOwnerIds);
+      // T3c Phase 3 + T4 Phase 1: also fan in owner content the caller
+      // is an accepted viewer of, filtered per-row by sharedWithGroup
+      // Ids. Empty pair list for non-members (most users) so the
+      // upstream query is a single fast indexed lookup and the regular
+      // per-user pull runs as before. We also opportunistically run
+      // the T4 lazy migration here — see migrateOwnerToDefaultGroup.
+      const viewerGroupPairs = await getAcceptedGroupPairsForMember(env.DB, userId);
+      await migrateOwnerToDefaultGroup(env, userId);
+      const out = await syncPull(env.DB, userId, since, viewerGroupPairs);
       return json(out, 200);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sync pull failed';

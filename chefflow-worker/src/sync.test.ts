@@ -180,17 +180,20 @@ describe('sync.pull — Phase 3 team-share fan-in (T3c)', () => {
     expect(out.recipes[0].read_only).toBeUndefined();
   });
 
-  it('with viewerOwnerIds, fan-ins owner\'s recipes + events as decorated read-only rows alongside the caller\'s own', async () => {
+  it('with viewerGroupPairs, fan-ins owner\'s recipes + events + menus where the row\'s sharedWithGroupIds intersects the viewer\'s entitled groups', async () => {
     const db = makeDb();
     await push(db, 'user_owner', {
-      recipes: [{ id: 'r_owner', updated_at: 100, payload: { id: 'r_owner', title: 'shared recipe' } }],
-      events:  [{ id: 'e_owner', updated_at: 100, payload: { id: 'e_owner', title: 'shared event'  } }],
+      recipes: [{ id: 'r_owner', updated_at: 100, payload: { id: 'r_owner', title: 'shared recipe', sharedWithGroupIds: ['grp_default'] } }],
+      events:  [{ id: 'e_owner', updated_at: 100, payload: { id: 'e_owner', title: 'shared event', sharedWithGroupIds: ['grp_default'] } }],
+      menus:   [{ id: 'm_owner', updated_at: 100, payload: { id: 'm_owner', title: 'shared menu', sharedWithGroupIds: ['grp_default'] } }],
     });
     await push(db, 'user_viewer', {
       recipes: [{ id: 'r_viewer', updated_at: 100, payload: { id: 'r_viewer', title: 'my recipe' } }],
     });
 
-    const out = await pull(db, 'user_viewer', 0, ['user_owner']);
+    const out = await pull(db, 'user_viewer', 0, [
+      { ownerUserId: 'user_owner', groupId: 'grp_default' },
+    ]);
 
     // Viewer's own recipe + owner's shared recipe, marked correctly.
     expect(out.recipes).toHaveLength(2);
@@ -200,43 +203,67 @@ describe('sync.pull — Phase 3 team-share fan-in (T3c)', () => {
     expect(shared.owner_user_id).toBe('user_owner');
     expect(shared.read_only).toBe(1);
 
-    // Owner's event was fanned in too.
+    // Owner's event + menu were fanned in too (T4 includes menus when
+    // explicitly shared; T3c excluded them entirely).
     expect(out.events).toHaveLength(1);
-    expect(out.events[0].id).toBe('e_owner');
     expect(out.events[0].owner_user_id).toBe('user_owner');
-    expect(out.events[0].read_only).toBe(1);
+    expect(out.menus).toHaveLength(1);
+    expect(out.menus[0].owner_user_id).toBe('user_owner');
   });
 
-  it('NEVER fan-ins menus or allergen_audits — those tables stay per-user (menus = personal printouts, audits = owner safety records)', async () => {
+  it('FILTERS OUT owner rows whose sharedWithGroupIds does NOT include the viewer\'s entitled group (private items stay private)', async () => {
     const db = makeDb();
     await push(db, 'user_owner', {
-      menus:           [{ id: 'm_owner', updated_at: 100, payload: { id: 'm_owner', title: 'owner menu' } }],
-      allergen_audits: [{ id: 'a_owner', updated_at: 100, payload: { id: 'a_owner' } }],
+      recipes: [
+        { id: 'r_default',  updated_at: 100, payload: { id: 'r_default',  sharedWithGroupIds: ['grp_default'] } },
+        { id: 'r_morning',  updated_at: 100, payload: { id: 'r_morning',  sharedWithGroupIds: ['grp_morning'] } },
+        { id: 'r_private',  updated_at: 100, payload: { id: 'r_private' /* no sharedWithGroupIds = private */ } },
+      ],
     });
 
-    const out = await pull(db, 'user_viewer', 0, ['user_owner']);
+    const out = await pull(db, 'user_viewer', 0, [
+      { ownerUserId: 'user_owner', groupId: 'grp_default' },
+    ]);
 
-    expect(out.menus).toHaveLength(0);
+    // Only the default-shared recipe is visible; morning + private are filtered out.
+    expect(out.recipes.map((r) => r.id)).toEqual(['r_default']);
+  });
+
+  it('NEVER fan-ins allergen_audits — owner safety records stay strictly per-user even with explicit group sharing', async () => {
+    const db = makeDb();
+    await push(db, 'user_owner', {
+      allergen_audits: [{ id: 'a_owner', updated_at: 100, payload: { id: 'a_owner', sharedWithGroupIds: ['grp_default'] } }],
+    });
+
+    const out = await pull(db, 'user_viewer', 0, [
+      { ownerUserId: 'user_owner', groupId: 'grp_default' },
+    ]);
+
     expect(out.allergen_audits).toHaveLength(0);
   });
 
   it('respects `since` cursor for shared rows too — a fast-syncing viewer doesn\'t re-receive every owner row on every pull', async () => {
     const db = makeDb();
-    await push(db, 'user_owner', { recipes: [{ id: 'r_old', updated_at: 50,  payload: { id: 'r_old' } }] });
-    await push(db, 'user_owner', { recipes: [{ id: 'r_new', updated_at: 150, payload: { id: 'r_new' } }] });
+    await push(db, 'user_owner', { recipes: [{ id: 'r_old', updated_at: 50,  payload: { id: 'r_old', sharedWithGroupIds: ['grp_default'] } }] });
+    await push(db, 'user_owner', { recipes: [{ id: 'r_new', updated_at: 150, payload: { id: 'r_new', sharedWithGroupIds: ['grp_default'] } }] });
 
-    const out = await pull(db, 'user_viewer', 100, ['user_owner']);
+    const out = await pull(db, 'user_viewer', 100, [
+      { ownerUserId: 'user_owner', groupId: 'grp_default' },
+    ]);
 
     expect(out.recipes).toHaveLength(1);
     expect(out.recipes[0].id).toBe('r_new');
   });
 
-  it('with MULTIPLE viewerOwnerIds (chef on two teams), fan-ins all of them with their respective owner_user_id', async () => {
+  it('with MULTIPLE viewerGroupPairs (chef on two teams), fan-ins all of them with their respective owner_user_id', async () => {
     const db = makeDb();
-    await push(db, 'user_owner1', { recipes: [{ id: 'r_o1', updated_at: 100, payload: { id: 'r_o1' } }] });
-    await push(db, 'user_owner2', { recipes: [{ id: 'r_o2', updated_at: 100, payload: { id: 'r_o2' } }] });
+    await push(db, 'user_owner1', { recipes: [{ id: 'r_o1', updated_at: 100, payload: { id: 'r_o1', sharedWithGroupIds: ['grp_a'] } }] });
+    await push(db, 'user_owner2', { recipes: [{ id: 'r_o2', updated_at: 100, payload: { id: 'r_o2', sharedWithGroupIds: ['grp_b'] } }] });
 
-    const out = await pull(db, 'user_viewer', 0, ['user_owner1', 'user_owner2']);
+    const out = await pull(db, 'user_viewer', 0, [
+      { ownerUserId: 'user_owner1', groupId: 'grp_a' },
+      { ownerUserId: 'user_owner2', groupId: 'grp_b' },
+    ]);
 
     expect(out.recipes).toHaveLength(2);
     expect(out.recipes.find((r) => r.id === 'r_o1')!.owner_user_id).toBe('user_owner1');

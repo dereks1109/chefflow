@@ -115,10 +115,24 @@ interface MembershipRow {
   invite_token: string;
   invited_at: number;
   accepted_at: number | null;
+  /** T4 — nullable until ensureDefaultGroup backfills. */
+  group_id?: string | null;
 }
 
-function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows: MembershipRow[] } {
-  const rows: MembershipRow[] = [...initial];
+interface GroupRow {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  is_default: 0 | 1;
+  created_at: number;
+}
+
+function makeMembershipDb(
+  initial: MembershipRow[] = [],
+  initialGroups: GroupRow[] = [],
+): { db: D1Database; rows: MembershipRow[]; groups: GroupRow[] } {
+  const rows: MembershipRow[] = initial.map((r) => ({ group_id: null, ...r }));
+  const groups: GroupRow[] = [...initialGroups];
   const db = {
     prepare(sql: string) {
       let bindings: unknown[] = [];
@@ -145,6 +159,12 @@ function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows
               accepted_at: found.accepted_at,
             } : null) as T;
           }
+          // T4 — ensureDefaultGroup: SELECT id FROM groups WHERE owner_user_id=? AND is_default=1
+          if (sql.includes('SELECT id FROM groups')) {
+            const [ownerUserId] = bindings as [string];
+            const found = groups.find((g) => g.owner_user_id === ownerUserId && g.is_default === 1);
+            return (found ? { id: found.id } : null) as T;
+          }
           return null as T;
         },
         async all<T = unknown>() {
@@ -158,8 +178,17 @@ function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows
                 role: r.role,
                 invited_at: r.invited_at,
                 accepted_at: r.accepted_at,
+                group_id: r.group_id ?? null,
               }))
               .sort((a, b) => b.invited_at - a.invited_at);
+            return { success: true, results: mine as T[], meta: {} } as unknown as D1Result<T>;
+          }
+          // T4 — getAcceptedGroupPairsForMember: SELECT owner_user_id, group_id ...
+          if (sql.includes('SELECT owner_user_id, group_id FROM team_memberships')) {
+            const [memberUserId] = bindings as [string];
+            const mine = rows
+              .filter((r) => r.member_user_id === memberUserId && r.accepted_at !== null && r.group_id)
+              .map((r) => ({ owner_user_id: r.owner_user_id, group_id: r.group_id! }));
             return { success: true, results: mine as T[], meta: {} } as unknown as D1Result<T>;
           }
           if (sql.includes('SELECT owner_user_id FROM team_memberships')) {
@@ -172,8 +201,18 @@ function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows
           return { success: true, results: [] as T[], meta: {} } as unknown as D1Result<T>;
         },
         async run() {
+          // T4 — INSERT INTO groups
+          if (sql.startsWith('INSERT INTO groups')) {
+            const [id, ownerUserId, name, createdAt] = bindings as [string, string, string, number];
+            groups.push({ id, owner_user_id: ownerUserId, name, is_default: 1, created_at: createdAt });
+            return { success: true, meta: { changes: 1 }, results: [] } as unknown as D1Result;
+          }
           if (sql.startsWith('INSERT INTO team_memberships')) {
-            const [owner, email, token, invitedAt] = bindings as [string, string, string, number];
+            // T4 invite signature: (owner, email, token, invitedAt, groupId).
+            const args = bindings as (string | number | null)[];
+            const [owner, email, token, invitedAt, groupId] = args as [
+              string, string, string, number, string | null,
+            ];
             rows.push({
               owner_user_id: owner,
               member_email: email,
@@ -182,8 +221,22 @@ function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows
               invite_token: token,
               invited_at: invitedAt,
               accepted_at: null,
+              group_id: groupId ?? null,
             });
             return { success: true, meta: { changes: 1 }, results: [] } as unknown as D1Result;
+          }
+          // T4 — UPDATE team_memberships SET group_id = ? WHERE owner = ? AND group_id IS NULL
+          if (sql.startsWith('UPDATE team_memberships')
+              && sql.includes('SET group_id')) {
+            const [newGroupId, ownerUserId] = bindings as [string, string];
+            let changes = 0;
+            for (const r of rows) {
+              if (r.owner_user_id === ownerUserId && !r.group_id) {
+                r.group_id = newGroupId;
+                changes++;
+              }
+            }
+            return { success: true, meta: { changes }, results: [] } as unknown as D1Result;
           }
           if (sql.startsWith('UPDATE team_memberships')) {
             const [memberUserId, acceptedAt, token] = bindings as [string, number, string];
@@ -215,7 +268,7 @@ function makeMembershipDb(initial: MembershipRow[] = []): { db: D1Database; rows
     dump: async () => new ArrayBuffer(0),
     exec: async () => ({ count: 0, duration: 0 }),
   } as unknown as D1Database;
-  return { db, rows };
+  return { db, rows, groups };
 }
 
 function makeKv(): KVNamespace {
@@ -494,5 +547,91 @@ describe('handleOwnersOfMe', () => {
     expect(res.status).toBe(200);
     const out = (await res.json()) as { owners: string[] };
     expect(out.owners).toEqual(['u_owner1']);
+  });
+});
+
+describe('ensureDefaultGroup (T4 Phase 1)', () => {
+  // Why this matters: the Default group is the migration anchor. If
+  // it doesn't get created lazily, the SettingsPage UI has no group
+  // to render and new invites fall through with group_id = NULL,
+  // which breaks the sync filter (members never see anything).
+
+  it('creates a Default group on first call + returns its id', async () => {
+    const { db, groups } = makeMembershipDb();
+    const { ensureDefaultGroup } = await import('./teams');
+    const id = await ensureDefaultGroup(db, 'u_owner');
+    expect(id).toMatch(/^grp_/);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].owner_user_id).toBe('u_owner');
+    expect(groups[0].is_default).toBe(1);
+    expect(groups[0].name).toBe('Default');
+  });
+
+  it('is idempotent — returns the SAME id on subsequent calls (no duplicate Default groups)', async () => {
+    const { db, groups } = makeMembershipDb();
+    const { ensureDefaultGroup } = await import('./teams');
+    const first = await ensureDefaultGroup(db, 'u_owner');
+    const second = await ensureDefaultGroup(db, 'u_owner');
+    expect(second).toBe(first);
+    expect(groups).toHaveLength(1);
+  });
+
+  it('backfills group_id on pre-T4 memberships rows (rows that pre-date the migration get stamped with the Default group id)', async () => {
+    const { db, rows } = makeMembershipDb([
+      { owner_user_id: 'u_owner', member_email: 'a@x', member_user_id: 'u_a', role: 'viewer', invite_token: 't1', invited_at: 1, accepted_at: 2, group_id: null },
+    ]);
+    const { ensureDefaultGroup } = await import('./teams');
+    const id = await ensureDefaultGroup(db, 'u_owner');
+    expect(rows[0].group_id).toBe(id);
+  });
+});
+
+describe('getAcceptedGroupPairsForMember (T4 Phase 1)', () => {
+  it('returns (ownerUserId, groupId) pairs for ACCEPTED memberships only — pending invites and unbackfilled rows excluded', async () => {
+    const { db } = makeMembershipDb([
+      { owner_user_id: 'u_o1', member_email: 'me@x', member_user_id: 'u_me', role: 'viewer', invite_token: 't1', invited_at: 1, accepted_at: 5, group_id: 'grp_default' },
+      { owner_user_id: 'u_o2', member_email: 'me@x', member_user_id: 'u_me', role: 'viewer', invite_token: 't2', invited_at: 1, accepted_at: null, group_id: 'grp_default' }, // pending
+      { owner_user_id: 'u_o3', member_email: 'me@x', member_user_id: 'u_me', role: 'viewer', invite_token: 't3', invited_at: 1, accepted_at: 5, group_id: null }, // unbackfilled
+    ]);
+    const { getAcceptedGroupPairsForMember } = await import('./teams');
+    const pairs = await getAcceptedGroupPairsForMember(db, 'u_me');
+    expect(pairs).toEqual([{ ownerUserId: 'u_o1', groupId: 'grp_default' }]);
+  });
+});
+
+describe('handleInvite (T4 — groupId stamping)', () => {
+  // T4 invariant: every NEW invite row must carry a group_id, either
+  // the requested one (body.groupId) or the owner's Default. The sync
+  // pull's filter relies on group_id being set; a NULL group_id means
+  // the member sees nothing from that owner.
+
+  it('stamps the new membership with the owner\'s Default group when no groupId is provided', async () => {
+    const { db, rows } = makeMembershipDb();
+    const { impl } = makeClerkAndResendFetch({
+      users: { u_owner: { tier: 'enterprise', email: 'owner@k.uk' } },
+    });
+    const env = makeEnv(db, impl, 're_test_long_enough');
+    const req = new Request('https://x/api/teams/invite', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'sous@k.uk' }),
+    });
+    const res = await handleInvite(req, env, 'u_owner');
+    expect(res.status).toBe(200);
+    expect(rows[0].group_id).toMatch(/^grp_/);
+  });
+
+  it('stamps the new membership with the body.groupId when provided (chef inviting into a specific named group)', async () => {
+    const { db, rows } = makeMembershipDb();
+    const { impl } = makeClerkAndResendFetch({
+      users: { u_owner: { tier: 'enterprise', email: 'owner@k.uk' } },
+    });
+    const env = makeEnv(db, impl, 're_test_long_enough');
+    const req = new Request('https://x/api/teams/invite', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'sous@k.uk', groupId: 'grp_morning' }),
+    });
+    const res = await handleInvite(req, env, 'u_owner');
+    expect(res.status).toBe(200);
+    expect(rows[0].group_id).toBe('grp_morning');
   });
 });

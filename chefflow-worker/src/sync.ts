@@ -91,12 +91,24 @@ function isTable(t: string): t is SyncTable {
   return (SYNC_TABLES as readonly string[]).includes(t);
 }
 
+/** Per-(member, group) entitlement used by pull(). Each pair says: for
+ *  this owner, the caller is in this group, so they're entitled to see
+ *  rows where group_id ∈ payload.sharedWithGroupIds. T4 replaces T3c's
+ *  flat owner-id list. */
+export interface ViewerGroupPair {
+  ownerUserId: string;
+  groupId: string;
+}
+
 // ---------------------------------------------------------------------------
 // pull — fetch all rows for the verified user updated after `since`,
 // optionally MERGED with read-only rows from owners the caller is an
-// accepted team viewer of (Phase 3 of T3c). Only recipes + events are
-// shared — menus + allergen_audits stay strictly per-user (menus are
-// printout-personal; audits are safety records the owner owns alone).
+// accepted team viewer of (T3c Phase 3 + T4 per-group filter). T4
+// changes the previous "all of an owner's recipes/events" fan-in to
+// per-item: each shared row's payload.sharedWithGroupIds must include
+// at least one of the caller's groups under that owner. Menus are now
+// shareable too (T3c excluded them; per-item opt-in makes it safe).
+// allergen_audits stay strictly per-user (chef safety records).
 // Shared rows are decorated with owner_user_id + read_only=1 so the
 // SPA can render the "Shared by" badge and lock editing.
 // ---------------------------------------------------------------------------
@@ -104,7 +116,7 @@ export async function pull(
   db: D1Database,
   userId: string,
   since: number,
-  viewerOwnerIds: string[] = [],
+  viewerGroupPairs: ViewerGroupPair[] = [],
 ): Promise<PullResponse> {
   if (!Number.isFinite(since) || since < 0) since = 0;
 
@@ -136,32 +148,57 @@ export async function pull(
 
   let sharedRecipes: SyncRow[] = [];
   let sharedEvents: SyncRow[] = [];
-  if (viewerOwnerIds.length > 0) {
-    // Fan-in each owner's recipes + events. Per-owner queries (not a
-    // single IN-clause) keep the SQL placeholders simple AND let us
-    // tag each row with the right owner_user_id at projection time.
-    // Volume is bounded by maxSeats (50 enterprise) × ~1000 rows/owner
-    // worst case = 50k rows, well within D1 limits.
-    const sharedPromises = viewerOwnerIds.flatMap((ownerId) => [
-      db
-        .prepare(
-          `SELECT id, updated_at, is_deleted, payload
-           FROM recipes WHERE user_id = ? AND updated_at > ?
-           ORDER BY updated_at ASC`,
-        )
-        .bind(ownerId, since)
-        .all<{ id: string; updated_at: number; is_deleted: number; payload: string }>()
-        .then((res) => ({ kind: 'recipes' as const, ownerId, rows: res.results ?? [] })),
-      db
-        .prepare(
-          `SELECT id, updated_at, is_deleted, payload
-           FROM events WHERE user_id = ? AND updated_at > ?
-           ORDER BY updated_at ASC`,
-        )
-        .bind(ownerId, since)
-        .all<{ id: string; updated_at: number; is_deleted: number; payload: string }>()
-        .then((res) => ({ kind: 'events' as const, ownerId, rows: res.results ?? [] })),
-    ]);
+  let sharedMenus: SyncRow[] = [];
+  if (viewerGroupPairs.length > 0) {
+    // Group the caller's entitled groupIds per owner so we run ONE
+    // SELECT per owner per table, then filter rows in JS by the
+    // intersection of payload.sharedWithGroupIds and the caller's
+    // groups under that owner. JS filter is O(rows × groups), which
+    // at MVP scale (~1k rows × ~5 groups) is microseconds.
+    const groupsByOwner = new Map<string, Set<string>>();
+    for (const p of viewerGroupPairs) {
+      const set = groupsByOwner.get(p.ownerUserId) ?? new Set<string>();
+      set.add(p.groupId);
+      groupsByOwner.set(p.ownerUserId, set);
+    }
+
+    const filterByGroup = (
+      rows: { id: string; updated_at: number; is_deleted: number; payload: string }[],
+      allowedGroupIds: Set<string>,
+    ) =>
+      rows.filter((r) => {
+        let parsed: { sharedWithGroupIds?: unknown };
+        try {
+          parsed = JSON.parse(r.payload) as { sharedWithGroupIds?: unknown };
+        } catch {
+          return false;
+        }
+        const list = parsed.sharedWithGroupIds;
+        if (!Array.isArray(list)) return false;
+        for (const g of list) {
+          if (typeof g === 'string' && allowedGroupIds.has(g)) return true;
+        }
+        return false;
+      });
+
+    const sharedPromises = Array.from(groupsByOwner.entries()).flatMap(
+      ([ownerId, allowedGroupIds]) =>
+        (['recipes', 'events', 'menus'] as const).map((table) =>
+          db
+            .prepare(
+              `SELECT id, updated_at, is_deleted, payload
+               FROM ${table} WHERE user_id = ? AND updated_at > ?
+               ORDER BY updated_at ASC`,
+            )
+            .bind(ownerId, since)
+            .all<{ id: string; updated_at: number; is_deleted: number; payload: string }>()
+            .then((res) => ({
+              kind: table,
+              ownerId,
+              rows: filterByGroup(res.results ?? [], allowedGroupIds),
+            })),
+        ),
+    );
     const sharedResults = await Promise.all(sharedPromises);
     for (const s of sharedResults) {
       const decorated = s.rows.map((r) => ({
@@ -170,14 +207,15 @@ export async function pull(
         read_only: 1 as const,
       }));
       if (s.kind === 'recipes') sharedRecipes = sharedRecipes.concat(decorated);
-      else sharedEvents = sharedEvents.concat(decorated);
+      else if (s.kind === 'events') sharedEvents = sharedEvents.concat(decorated);
+      else sharedMenus = sharedMenus.concat(decorated);
     }
   }
 
   return {
     recipes: (recipes.results ?? []).map(project).concat(sharedRecipes),
     events: (events.results ?? []).map(project).concat(sharedEvents),
-    menus: (menus.results ?? []).map(project),
+    menus: (menus.results ?? []).map(project).concat(sharedMenus),
     allergen_audits: (audits.results ?? []).map(project),
     serverNow: Date.now(),
   };

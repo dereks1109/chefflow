@@ -1,14 +1,15 @@
-// Enterprise team-membership module — Phases 1 + 2 of T3c.
+// Enterprise team-membership module — T3c Phases 1+2 + T4 Phase 1.
 //
-// Phase 1: data shape + seat-cap helper (assertCanInvite).
-// Phase 2: HTTP handlers for invite / accept / list / delete /
-// owners-of-me. Phase 3 (next) will plug owners-of-me into the
-// sync-layer pull so members see the owner's recipes/events/workflows
-// as read-only rows.
+// T3c Phase 1: data shape + seat-cap helper (assertCanInvite).
+// T3c Phase 2: HTTP handlers for invite / accept / list / delete /
+// owners-of-me. Phase 3 plugged owners-of-me into the sync pull so
+// members see the owner's recipes/events as read-only rows.
 //
-// One row per (owner_user_id, member_email). While pending,
-// member_user_id + accepted_at are NULL. The invite_token is what the
-// accept-link in the email carries.
+// T4 Phase 1 (this commit): groups data model. Every Enterprise owner
+// has a lazy-created "Default" group; members belong to a specific
+// group; recipes/events/menus opt-in to specific groups via the new
+// payload.sharedWithGroupIds field. The sync pull below now filters
+// per-(member, group) instead of per-member.
 
 import { TIER_LIMITS, type Tier } from '../../chefflow/src/core/tier/limits';
 import { fetchUserTier, type FetchLike } from './tier';
@@ -24,6 +25,17 @@ export interface TeamMembership {
   inviteToken: string;
   invitedAt: number;
   acceptedAt: number | null;
+  /** T4 — id of the group this member belongs to. Backfilled lazily
+   *  to the owner's Default group when ensureDefaultGroup runs. */
+  groupId: string | null;
+}
+
+export interface TeamGroup {
+  id: string;
+  ownerUserId: string;
+  name: string;
+  isDefault: boolean;
+  createdAt: number;
 }
 
 export class TeamSeatCapReached extends Error {
@@ -63,6 +75,166 @@ export async function assertCanInvite(
   if (current >= limit) {
     throw new TeamSeatCapReached(tier, current, limit);
   }
+}
+
+// ---------------------------------------------------------------------------
+// T4 Phase 1 — groups data model + lazy default-group migration
+// ---------------------------------------------------------------------------
+
+const DEFAULT_GROUP_NAME = 'Default';
+
+/** Generate an opaque group id. crypto.randomUUID exists in Workers. */
+function newGroupId(): string {
+  return `grp_${crypto.randomUUID()}`;
+}
+
+/**
+ * Ensure an Enterprise owner has a Default group. Idempotent: returns
+ * the existing default's id on subsequent calls. Also backfills any
+ * team_memberships rows that pre-date the T4 migration (group_id NULL)
+ * to point at the Default.
+ *
+ * Called from /api/teams/list, /api/teams/invite, and /api/sync/pull
+ * (owner-side) so the migration is invisible — the first owner-side
+ * request after deploy provisions everything they need.
+ */
+export async function ensureDefaultGroup(
+  db: D1Database,
+  ownerUserId: string,
+): Promise<string> {
+  const existing = await db
+    .prepare(
+      `SELECT id FROM groups
+       WHERE owner_user_id = ? AND is_default = 1
+       LIMIT 1`,
+    )
+    .bind(ownerUserId)
+    .first<{ id: string }>();
+  if (existing) {
+    // Belt-and-braces backfill: any membership row still pointing at
+    // NULL gets stamped with the default group id. Cheap UPDATE that
+    // no-ops once the rows are migrated.
+    await db
+      .prepare(
+        `UPDATE team_memberships
+         SET group_id = ?
+         WHERE owner_user_id = ? AND group_id IS NULL`,
+      )
+      .bind(existing.id, ownerUserId)
+      .run();
+    return existing.id;
+  }
+
+  const groupId = newGroupId();
+  await db
+    .prepare(
+      `INSERT INTO groups (id, owner_user_id, name, is_default, created_at)
+       VALUES (?, ?, ?, 1, ?)`,
+    )
+    .bind(groupId, ownerUserId, DEFAULT_GROUP_NAME, Date.now())
+    .run();
+  // Backfill memberships in the same transaction (D1 lacks
+  // multi-statement transactions on a single .prepare; two .run calls
+  // are fine since the second is idempotent).
+  await db
+    .prepare(
+      `UPDATE team_memberships
+       SET group_id = ?
+       WHERE owner_user_id = ? AND group_id IS NULL`,
+    )
+    .bind(groupId, ownerUserId)
+    .run();
+  return groupId;
+}
+
+/**
+ * One-shot lazy backfill: when an Enterprise owner first pulls after
+ * the T4 deploy, stamp every recipe / event / menu row they own with
+ * `sharedWithGroupIds: [defaultGroupId]` so the existing members keep
+ * seeing what they see today (preserve-visibility migration).
+ *
+ * Gated by a KV marker `groups:migrated:v1:<ownerUserId>`. Idempotent:
+ * the marker prevents the row scan on subsequent pulls. The cost on
+ * the cold path is one KV read; on the migration path it's
+ * `O(owner_rows)` JSON parse + write per table.
+ *
+ * If KV is unset (rare misconfig), the marker check fails open and
+ * the migration runs every pull until KV recovers. Safer than
+ * crashing the pull.
+ */
+export async function migrateOwnerToDefaultGroup(
+  env: { DB: D1Database; RATE_LIMIT: KVNamespace },
+  ownerUserId: string,
+): Promise<void> {
+  const markerKey = `groups:migrated:v1:${ownerUserId}`;
+  try {
+    const already = await env.RATE_LIMIT.get(markerKey);
+    if (already) return;
+  } catch {
+    // fall through — re-run is harmless
+  }
+  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
+
+  const tables = ['recipes', 'events', 'menus'] as const;
+  for (const table of tables) {
+    const rows = await env.DB
+      .prepare(
+        `SELECT id, payload, updated_at FROM ${table}
+         WHERE user_id = ? AND is_deleted = 0`,
+      )
+      .bind(ownerUserId)
+      .all<{ id: string; payload: string; updated_at: number }>();
+    for (const r of rows.results ?? []) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(r.payload) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (Array.isArray(parsed.sharedWithGroupIds)) continue; // already migrated
+      parsed.sharedWithGroupIds = [defaultGroupId];
+      const nextPayload = JSON.stringify(parsed);
+      const nextUpdatedAt = Math.max(r.updated_at + 1, Date.now());
+      await env.DB
+        .prepare(
+          `UPDATE ${table} SET payload = ?, updated_at = ?
+           WHERE user_id = ? AND id = ?`,
+        )
+        .bind(nextPayload, nextUpdatedAt, ownerUserId, r.id)
+        .run();
+    }
+  }
+
+  try {
+    await env.RATE_LIMIT.put(markerKey, '1');
+  } catch {
+    // Best-effort; next pull will re-run, which is idempotent.
+  }
+}
+
+/**
+ * Return the (ownerUserId, groupId) pairs the given member has accepted
+ * into. Used by the sync pull to determine which owner content rows
+ * the member is entitled to see, filtered down by each row's
+ * sharedWithGroupIds. Replaces T3c's getAcceptedOwnersForMember.
+ */
+export async function getAcceptedGroupPairsForMember(
+  db: D1Database,
+  memberUserId: string,
+): Promise<{ ownerUserId: string; groupId: string }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT owner_user_id, group_id FROM team_memberships
+       WHERE member_user_id = ?
+         AND accepted_at IS NOT NULL
+         AND group_id IS NOT NULL`,
+    )
+    .bind(memberUserId)
+    .all<{ owner_user_id: string; group_id: string }>();
+  return (rows.results ?? []).map((r) => ({
+    ownerUserId: r.owner_user_id,
+    groupId: r.group_id,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +336,16 @@ export async function handleInvite(
     throw err;
   }
 
+  // T4: invite into a specific group. Body may include `groupId`; when
+  // omitted, default to the owner's auto-created Default group so
+  // pre-T4 callers (and the SettingsPage MVP) keep working.
+  const requestedGroupId = (body as { groupId?: unknown })?.groupId;
+  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
+  const groupId =
+    typeof requestedGroupId === 'string' && requestedGroupId.length > 0
+      ? requestedGroupId
+      : defaultGroupId;
+
   // Idempotency: if the same (owner, email) already exists pending,
   // re-send the email with the SAME token rather than insert a duplicate
   // (which would fail the PK constraint anyway). Accepted rows are
@@ -184,10 +366,10 @@ export async function handleInvite(
     await env.DB
       .prepare(
         `INSERT INTO team_memberships
-         (owner_user_id, member_email, role, invite_token, invited_at)
-         VALUES (?, ?, 'viewer', ?, ?)`,
+         (owner_user_id, member_email, role, invite_token, invited_at, group_id)
+         VALUES (?, ?, 'viewer', ?, ?, ?)`,
       )
-      .bind(ownerUserId, memberEmail, inviteToken, Date.now())
+      .bind(ownerUserId, memberEmail, inviteToken, Date.now(), groupId)
       .run();
   }
 
@@ -304,14 +486,17 @@ export async function handleAccept(
   return jsonResponse({ ownerUserId: invite.owner_user_id, memberEmail: invite.member_email }, 200);
 }
 
-/** GET /api/teams/list — owner-only. Returns pending + accepted members. */
+/** GET /api/teams/list — owner-only. Returns pending + accepted members
+ *  with their group_id (T4). Provisions the owner's Default group on
+ *  first call so the SettingsPage UI always has a group to render. */
 export async function handleList(
   env: TeamsEnv,
   ownerUserId: string,
 ): Promise<Response> {
+  await ensureDefaultGroup(env.DB, ownerUserId);
   const rows = await env.DB
     .prepare(
-      `SELECT member_email, member_user_id, role, invited_at, accepted_at
+      `SELECT member_email, member_user_id, role, invited_at, accepted_at, group_id
        FROM team_memberships WHERE owner_user_id = ?
        ORDER BY invited_at DESC`,
     )
@@ -322,6 +507,7 @@ export async function handleList(
       role: TeamRole;
       invited_at: number;
       accepted_at: number | null;
+      group_id: string | null;
     }>();
   return jsonResponse({ members: rows.results ?? [] }, 200);
 }

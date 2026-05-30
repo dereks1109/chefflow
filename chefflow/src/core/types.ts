@@ -109,6 +109,13 @@ export interface SyncMeta {
    *  ownerUserId. Kept as a separate boolean so future "shared with
    *  edit" roles can flip it false without losing provenance. */
   readOnly?: boolean;
+  /** T4 — owner-side list of group_ids this row is shared with. Empty
+   *  array (or undefined) = private to the owner; the sync layer will
+   *  not fan it out to any member. Owner toggles ticks per group in
+   *  the editor. Foreign to members' world: they only ever see rows
+   *  that satisfy the filter, so members' local copies don't need
+   *  this field (worker projects them with readOnly + ownerUserId). */
+  sharedWithGroupIds?: string[];
 }
 
 export interface Recipe extends SyncMeta {
