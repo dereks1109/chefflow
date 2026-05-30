@@ -1,0 +1,72 @@
+name: CI
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+jobs:
+  # T7: vitest + typecheck for the SPA. Catches logic + type regressions
+  # before they reach Playwright (which only exercises UI flows). Pre-T7
+  # CI was Playwright-only, so 90 vitest specs + tsc went unenforced.
+  spa-unit:
+    name: SPA — vitest + typecheck
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chefflow
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: npm
+        cache-dependency-path: chefflow/package-lock.json
+    - run: npm ci
+    - name: TypeScript typecheck
+      run: npx tsc --noEmit
+    - name: Vitest unit tests
+      run: npm run test:run
+
+  # T7: same for the worker — 25 worker test files were unenforced too.
+  worker-unit:
+    name: Worker — vitest + typecheck
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: chefflow-worker
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: npm
+        cache-dependency-path: chefflow-worker/package-lock.json
+    - run: npm ci
+    - name: TypeScript typecheck
+      run: npm run typecheck
+    - name: Vitest unit tests
+      run: npm test
+
+  test:
+    name: SPA — Playwright E2E
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - name: Install dependencies
+      run: npm ci
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+    - name: Run Playwright tests
+      run: npx playwright test
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30

@@ -133,15 +133,67 @@ export interface Env {
   // behaviour). Setup: console.groq.com → API Keys → set via
   // `wrangler secret put GROQ_API_KEY`.
   GROQ_API_KEY?: string;
+  /** T7 — comma-separated allow-list for the CORS Origin header.
+   *  Production set in wrangler.toml [vars]. Localhost is always
+   *  permitted regardless of this list (dev convenience). When unset
+   *  the default is the chefflow.uk production origin only. */
+  ALLOWED_ORIGINS?: string;
 }
 
 type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => Promise<{ sub: string } | undefined>;
 
 const CORS_HEADERS = {
+  // T7: '*' is the safe default INSIDE the worker. The fetch() entry
+  // point post-processes every response via applyCorsOrigin() to swap
+  // this for the request's Origin if (and only if) it's in the
+  // allow-list. Centralising the swap in one chokepoint keeps the 30+
+  // existing json() / withCors() call sites unchanged.
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Stripe-Signature',
 } as const;
+
+/** Default allow-list when env.ALLOWED_ORIGINS is unset — covers the
+ *  two production hosts we ship to today. Localhost is added at
+ *  match time (see isOriginAllowed). */
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://chefflow.uk',
+  'https://main.chefflow.pages.dev',
+];
+
+function parseAllowedOrigins(env: Env): string[] {
+  const raw = env.ALLOWED_ORIGINS;
+  if (!raw || raw.trim().length === 0) return DEFAULT_ALLOWED_ORIGINS;
+  return raw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+function isOriginAllowed(origin: string, env: Env): boolean {
+  // Always permit localhost dev (any port).
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return true;
+  // Allow any *.chefflow.pages.dev preview deployment.
+  if (/^https:\/\/[a-z0-9-]+\.chefflow\.pages\.dev$/.test(origin)) return true;
+  return parseAllowedOrigins(env).includes(origin);
+}
+
+/** T7 — rewrites Access-Control-Allow-Origin on a response so it
+ *  matches the request's Origin (when in the allow-list) or the
+ *  first allowed origin (so non-browser callers still get a usable
+ *  value). Applied once per response in the fetch entry point, so
+ *  every existing call site keeps emitting `*` internally and the
+ *  swap happens at the boundary. */
+function applyCorsOrigin(req: Request, env: Env, res: Response): Response {
+  const origin = req.headers.get('Origin') ?? '';
+  const allowed = isOriginAllowed(origin, env);
+  const echo = allowed && origin.length > 0
+    ? origin
+    : parseAllowedOrigins(env)[0] ?? 'https://chefflow.uk';
+  const headers = new Headers(res.headers);
+  headers.set('Access-Control-Allow-Origin', echo);
+  // Vary lets caches keep separate copies per origin.
+  const prevVary = headers.get('Vary');
+  headers.set('Vary', prevVary && !/Origin/i.test(prevVary) ? `${prevVary}, Origin` : 'Origin');
+  return new Response(res.body, { status: res.status, headers });
+}
 
 function json(body: unknown, status: number, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -1075,7 +1127,12 @@ function finiteOrNull(n: number): number | null {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    return handleRequest(req, env);
+    // T7: post-process every response so its Access-Control-Allow-Origin
+    // reflects the request's Origin (when in the allow-list) instead of
+    // the bare `*` the handlers emit internally. Single chokepoint —
+    // see applyCorsOrigin + isOriginAllowed for the policy.
+    const res = await handleRequest(req, env);
+    return applyCorsOrigin(req, env, res);
   },
   /**
    * Cloudflare cron trigger. Schedules live in `wrangler.toml [triggers]`.

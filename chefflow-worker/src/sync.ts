@@ -100,6 +100,16 @@ function isTable(t: string): t is SyncTable {
   return (SYNC_TABLES as readonly string[]).includes(t);
 }
 
+/** T7 — throwing variant used as a defensive guard wherever `${table}`
+ *  is interpolated into SQL. Today every caller already passes a
+ *  SyncTable from the const tuple, so this is belt-and-braces against
+ *  future call sites that take user input. */
+export function assertSyncTable(t: string): asserts t is SyncTable {
+  if (!isTable(t)) {
+    throw new SyncValidationError(`Invalid sync table: ${t}`);
+  }
+}
+
 /** Per-(member, group) entitlement used by pull(). Each pair says: for
  *  this owner, the caller is in this group, so they're entitled to see
  *  rows where group_id ∈ payload.sharedWithGroupIds. T4 replaces T3c's
@@ -318,6 +328,9 @@ async function upsertRow(
   table: SyncTable,
   row: PushRowInput,
 ): Promise<PushResult> {
+  // T7 — runtime guard even though `table: SyncTable` is type-safe.
+  // Belt-and-braces in case a future caller bypasses the type system.
+  assertSyncTable(table);
   const payloadStr = JSON.stringify(row.payload);
   if (payloadStr.length > MAX_PAYLOAD_BYTES) {
     return {

@@ -3,10 +3,12 @@
 // Cascade in this order so we don't leave dangling state if a later step
 // fails:
 //   1. D1: delete recipes / events / menus / allergen_audits where user_id = ?
-//   2. KV: unpublish every community recipe authored by this user
-//   3. KV: remove the demos:provisioned:* marker so a re-signup gets a
-//      fresh seed
-//   4. Clerk: DELETE /v1/users/<id> — this also revokes all sessions
+//   2. D1: delete team_memberships rows where user is the owner OR member,
+//      and delete groups rows where user is owner (T7).
+//   3. KV: unpublish every community recipe authored by this user
+//   4. KV: remove the demos:provisioned:* marker AND the T5 group
+//      cleanup marker so a re-signup gets a fresh seed
+//   5. Clerk: DELETE /v1/users/<id> — this also revokes all sessions
 //      server-side, so the SPA's next request returns 401 and the user
 //      is bounced to sign-in.
 //
@@ -17,8 +19,9 @@
 
 import type { FetchLike } from './tier';
 import { get as communityGet, unpublish as communityUnpublish } from './community';
+import { assertSyncTable, type SyncTable } from './sync';
 
-export type SyncTable = 'recipes' | 'events' | 'menus' | 'allergen_audits';
+export type { SyncTable };
 
 export interface DeleteAccountResult {
   deleted: Record<SyncTable, number>;
@@ -34,11 +37,16 @@ export class AccountDeleteError extends Error {
 }
 
 const TABLES: SyncTable[] = ['recipes', 'events', 'menus', 'allergen_audits'];
-const DEMOS_MARKER_PREFIX = 'demos:provisioned:v2:';
+// T7 — kept in sync with `MARKER_KEY_PREFIX` in src/demos.ts. Earlier
+// this was 'v2:' (a stale leftover), so a deleted-then-resigned-up
+// user wouldn't get fresh demos because the v5 marker still pointed
+// at "already provisioned". Bumped to match.
+const DEMOS_MARKER_PREFIX = 'demos:provisioned:v5:';
 
 async function deleteTable(db: D1Database, userId: string, table: SyncTable): Promise<number> {
-  // We use the rows-changed count for the response. SQLite reports it via
-  // meta.changes; some D1 versions also expose meta.changed_rows.
+  // T7 — runtime guard even though `table: SyncTable` is type-safe.
+  // Belt-and-braces against a future caller bypassing the type system.
+  assertSyncTable(table);
   const res = await db
     .prepare(`DELETE FROM ${table} WHERE user_id = ?`)
     .bind(userId)
@@ -90,20 +98,34 @@ export async function deleteAccount(
   clerkSecret: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<DeleteAccountResult> {
-  // 1. D1 cascade
+  // 1. D1 cascade — recipes / events / menus / allergen_audits.
   const deleted = {} as Record<SyncTable, number>;
   for (const table of TABLES) {
     deleted[table] = await deleteTable(db, userId, table);
   }
 
-  // 2. Community recipes
+  // 2. Teams cascade (T7) — remove every membership where the user
+  //    is the owner OR a member, plus any groups they own. Don't
+  //    leave invitee email addresses or team metadata behind.
+  await db
+    .prepare(`DELETE FROM team_memberships WHERE owner_user_id = ? OR member_user_id = ?`)
+    .bind(userId, userId)
+    .run();
+  await db
+    .prepare(`DELETE FROM groups WHERE owner_user_id = ?`)
+    .bind(userId)
+    .run();
+
+  // 3. Community recipes
   const communityRecipesUnpublished = await unpublishUserCommunityRecipes(kv, userId);
 
-  // 3. Demos marker — so a future fresh sign-in with the same userId
-  //    (Clerk reuses ids? It doesn't, but defensive) re-seeds demos.
+  // 4. KV markers — demos provisioning + the T5 group-cleanup marker
+  //    so a future fresh sign-in with the same userId re-seeds + re-
+  //    runs cleanup correctly.
   await kv.delete(`${DEMOS_MARKER_PREFIX}${userId}`);
+  await kv.delete(`groups:t5-cleanup:v1:${userId}`);
 
-  // 4. Clerk
+  // 5. Clerk
   const clerkDeleted = await deleteClerkUser(userId, clerkSecret, fetchImpl);
 
   return { deleted, communityRecipesUnpublished, clerkDeleted };
