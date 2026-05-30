@@ -34,7 +34,13 @@ export default function WorkflowsLibrary() {
 
   return (
     <section className="p-4 md:p-6 max-w-5xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
+      {/* min-h-touch keeps the header at the same 48px floor as every
+          other library's <header> (which inherits that floor implicitly
+          from btn-primary's .touch-target on its action button). Without
+          it the WorkflowsLibrary h1 sits ~6px higher than the matching
+          h1 on /events / /recipes / /teams because the header collapses
+          to the h1's natural line-height with no button to set the floor. */}
+      <header className="flex items-center justify-between mb-6 min-h-touch">
         <h1 className="text-2xl font-bold">Workflows</h1>
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
