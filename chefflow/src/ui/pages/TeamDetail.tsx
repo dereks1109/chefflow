@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Users, Trash2, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, Users, Trash2, AlertTriangle, BookOpen, CalendarDays } from 'lucide-react';
 import {
   listGroups,
   listMembers,
@@ -14,6 +14,17 @@ import {
   type InviteResult,
 } from '../../core/teams/teamsClient';
 import { useTierStore } from '../../state/useTierStore';
+import RecipeCard from '../components/RecipeCard';
+import EventCard from '../components/EventCard';
+import { subscribeRecipes } from '../../db/recipesRepo';
+import { subscribeEvents } from '../../db/eventsRepo';
+import type { Recipe, KitchenEvent } from '../../core/types';
+
+type TeamTab = 'details' | 'recipes' | 'events';
+
+function isTeamTab(v: string | null): v is TeamTab {
+  return v === 'details' || v === 'recipes' || v === 'events';
+}
 
 // /teams/:id (T5): manage a single team — rename, invite + remove
 // members, delete the team. Tier-gated like /teams.
@@ -23,9 +34,49 @@ export default function TeamDetail() {
   const navigate = useNavigate();
   const tier = useTierStore((s) => s.tier);
 
+  // T6 — tab state mirrored to ?tab=… for deep-linkability.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const activeTab: TeamTab = isTeamTab(rawTab) ? rawTab : 'details';
+  function setActiveTab(next: TeamTab) {
+    setSearchParams((params) => {
+      const p = new URLSearchParams(params);
+      if (next === 'details') p.delete('tab');
+      else p.set('tab', next);
+      return p;
+    }, { replace: true });
+  }
+
   const [group, setGroup] = useState<TeamGroup | null | undefined>(undefined);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // T6 — shared recipes + events for the Recipes / Events tabs. Live-
+  // queried via the existing Dexie subscribe helpers so the lists
+  // update if the chef edits sharing in another tab.
+  const [allRecipes, setAllRecipes] = useState<Recipe[]>([]);
+  const [allEvents, setAllEvents] = useState<KitchenEvent[]>([]);
+  useEffect(() => {
+    const unsubR = subscribeRecipes(setAllRecipes);
+    const unsubE = subscribeEvents(setAllEvents);
+    return () => { unsubR(); unsubE(); };
+  }, []);
+  const sharedRecipes = useMemo(
+    () => allRecipes.filter((r) => {
+      if (r.teamId === id) return true;
+      if (Array.isArray(r.sharedWithGroupIds) && r.sharedWithGroupIds.includes(id)) return true;
+      return false;
+    }),
+    [allRecipes, id],
+  );
+  const sharedEvents = useMemo(
+    () => allEvents.filter((e) => {
+      if (e.teamId === id) return true;
+      if (Array.isArray(e.sharedWithGroupIds) && e.sharedWithGroupIds.includes(id)) return true;
+      return false;
+    }),
+    [allEvents, id],
+  );
 
   const [renameMode, setRenameMode] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -163,6 +214,9 @@ export default function TeamDetail() {
         </Link>
       </header>
 
+      {/* T6 — always show the team name + Rename above the tab row,
+          so the chef knows which team they're managing regardless of
+          which tab they're on. */}
       <div>
         {renameMode && !safeGroup.isDefault ? (
           <form onSubmit={(e) => void handleRename(e)} className="flex items-center gap-2">
@@ -186,7 +240,7 @@ export default function TeamDetail() {
             </button>
           </form>
         ) : (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Users className="h-6 w-6 text-accent" aria-hidden="true" />
             <h1 className="text-2xl font-bold" data-testid="team-detail-name">
               {safeGroup.name}
@@ -216,6 +270,42 @@ export default function TeamDetail() {
         </p>
       )}
 
+      {/* T6 — tab row. Mirrored to ?tab=… for deep-linkability. */}
+      <nav
+        role="tablist"
+        aria-label="Team views"
+        data-testid="team-detail-tabs"
+        className="flex flex-wrap gap-2 border-b border-slate-200 dark:border-slate-700 pb-2"
+      >
+        {([
+          { id: 'details', label: 'Details', icon: Users },
+          { id: 'recipes', label: `Shared recipes (${sharedRecipes.length})`, icon: BookOpen },
+          { id: 'events', label: `Shared events (${sharedEvents.length})`, icon: CalendarDays },
+        ] as const).map(({ id: tid, label, icon: Icon }) => {
+          const isActive = activeTab === tid;
+          return (
+            <button
+              key={tid}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveTab(tid)}
+              data-testid={`team-detail-tab-${tid}`}
+              className={[
+                'inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm font-medium transition-colors',
+                isActive
+                  ? 'bg-accent/10 text-accent'
+                  : 'text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-surface-3',
+              ].join(' ')}
+            >
+              <Icon size={14} aria-hidden="true" />
+              {label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {activeTab === 'details' && (<>
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
           Invite a member
@@ -317,6 +407,56 @@ export default function TeamDetail() {
             <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             Delete team
           </button>
+        </div>
+      )}
+      </>)}
+
+      {activeTab === 'recipes' && (
+        <div data-testid="team-detail-shared-recipes">
+          {sharedRecipes.length === 0 ? (
+            <p className="text-sm text-slate-500 italic py-6">
+              No recipes shared with this team yet. Tick this team in
+              the "Visible to" row when editing a recipe.
+            </p>
+          ) : (
+            <ul className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
+              {sharedRecipes.map((r) => (
+                <li key={r.id} className="h-full relative">
+                  {/* Actions (pin / duplicate / delete) intentionally
+                      stubbed here — this tab is a view of what's shared,
+                      not a place to edit the recipe library itself.
+                      Card title still links to /recipes/:id for full
+                      edit access. */}
+                  <RecipeCard
+                    recipe={r}
+                    usedByCount={0}
+                    onTogglePin={() => {}}
+                    onDuplicate={() => {}}
+                    onDelete={() => {}}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'events' && (
+        <div data-testid="team-detail-shared-events">
+          {sharedEvents.length === 0 ? (
+            <p className="text-sm text-slate-500 italic py-6">
+              No events shared with this team yet. Tick this team in
+              the "Visible to" row when editing an event.
+            </p>
+          ) : (
+            <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {sharedEvents.map((e) => (
+                <li key={e.id} className="h-full relative">
+                  <EventCard event={e} onDelete={() => {}} />
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>

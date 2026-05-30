@@ -112,3 +112,76 @@ describe('TeamDetail (T5)', () => {
     expect(await screen.findByText('Morning shift')).toBeInTheDocument();
   });
 });
+
+describe('TeamDetail — tabs (T6)', () => {
+  // Why these matter: the 3-tab nav is the chef's primary way to see
+  // what's shared with this specific team. A regression that hides a
+  // tab or leaks across teams strands the share visibility.
+
+  it('renders the 3 tab triggers + defaults to Details when ?tab is missing', async () => {
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    renderDetail('grp_morning');
+
+    expect(await screen.findByTestId('team-detail-tabs')).toBeInTheDocument();
+    expect(screen.getByTestId('team-detail-tab-details')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('team-detail-tab-recipes')).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByTestId('team-detail-tab-events')).toHaveAttribute('aria-selected', 'false');
+    // Details body is rendered (invite form visible).
+    expect(screen.getByTestId('team-detail-invite-email')).toBeInTheDocument();
+  });
+
+  it('Shared recipes tab shows only recipes whose sharedWithGroupIds includes this team', async () => {
+    // Seed Dexie with mixed-team recipes; only the one tagged for
+    // grp_morning should show on this team's Recipes tab.
+    const { db } = await import('../../db/dexie');
+    await db.recipes.clear();
+    // Seeded without userId so listRecipes treats them as legacy/
+    // visible-to-current-user (matches the existing test fixtures).
+    await db.recipes.bulkPut([
+      { id: 'r1', title: 'Morning Lamb',  originalYield: 1, ingredients: [], steps: [], createdAt: 0, updatedAt: 0, sharedWithGroupIds: ['grp_morning'] } as never,
+      { id: 'r2', title: 'Evening Stock', originalYield: 1, ingredients: [], steps: [], createdAt: 0, updatedAt: 0, sharedWithGroupIds: ['grp_evening'] } as never,
+      { id: 'r3', title: 'Private Cake',  originalYield: 1, ingredients: [], steps: [], createdAt: 0, updatedAt: 0 } as never,
+    ]);
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    renderDetail('grp_morning');
+
+    await screen.findByTestId('team-detail-tabs');
+    await userEvent.click(screen.getByTestId('team-detail-tab-recipes'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-detail-shared-recipes')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Morning Lamb')).toBeInTheDocument();
+    expect(screen.queryByText('Evening Stock')).toBeNull();
+    expect(screen.queryByText('Private Cake')).toBeNull();
+  });
+
+  it('Shared events tab shows only events whose sharedWithGroupIds includes this team', async () => {
+    const { db } = await import('../../db/dexie');
+    await db.events.clear();
+    await db.events.bulkPut([
+      { id: 'e1', title: 'Morning Brunch', notes: '', dishes: [], createdAt: 0, updatedAt: 0, sharedWithGroupIds: ['grp_morning'] } as never,
+      { id: 'e2', title: 'Evening Banquet', notes: '', dishes: [], createdAt: 0, updatedAt: 0, sharedWithGroupIds: ['grp_evening'] } as never,
+    ]);
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    renderDetail('grp_morning');
+
+    await screen.findByTestId('team-detail-tabs');
+    await userEvent.click(screen.getByTestId('team-detail-tab-events'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('team-detail-shared-events')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Morning Brunch')).toBeInTheDocument();
+    expect(screen.queryByText('Evening Banquet')).toBeNull();
+  });
+});
