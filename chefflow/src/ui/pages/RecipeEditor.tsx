@@ -26,6 +26,7 @@ import AllergenAttestationModal from '../components/AllergenAttestationModal';
 import RecipeSaveAttestationModal from '../components/RecipeSaveAttestationModal';
 import PinGate from '../components/PinGate';
 import SharedReadOnlyBanner from '../components/SharedReadOnlyBanner';
+import GroupShareChipRow from '../components/GroupShareChipRow';
 import { useSessionAttestationStore } from '../../state/useSessionAttestationStore';
 import { usePublishedSet } from '../../state/usePublishedSet';
 import { useProfileStore } from '../../state/useProfileStore';
@@ -368,6 +369,16 @@ export default function RecipeEditor() {
             parent form's space-y-4 between siblings stays intact while
             still cascading `disabled` to every child input/button. */}
         <fieldset disabled={readOnly} className="contents">
+        {/* T4 Phase 3 — per-item team-share chips. Renders ABOVE the
+            field cluster so the chef sees the share state before they
+            start editing. Self-hides for non-Enterprise tiers and for
+            read-only views, so this is a no-op for the 99% of users
+            who aren't on a team. */}
+        <GroupShareChipRow
+          selectedGroupIds={r.sharedWithGroupIds}
+          onChange={(next) => update('sharedWithGroupIds', next)}
+          readOnly={readOnly}
+        />
         {/* Field order (2026-05-28): name first, then chef-declared
             allergens (so the safety-critical metadata is captured before
             the chef gets into the ingredient/step weeds), then the AI

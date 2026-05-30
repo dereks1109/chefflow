@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Layers, X, AlertTriangle } from 'lucide-react';
 import { randomId } from '../../core/util/id';
+import GroupShareChipRow from './GroupShareChipRow';
 import type { Menu, Recipe } from '../../core/types';
 
 interface Props {
@@ -29,12 +30,14 @@ export default function CreateMenuSheet({
 }: Props) {
   const [title, setTitle] = useState<string>(defaultTitle ?? '');
   const [description, setDescription] = useState<string>('');
+  const [sharedWithGroupIds, setSharedWithGroupIds] = useState<string[] | undefined>(undefined);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
   useEffect(() => {
     if (!open) return;
     setTitle(defaultTitle ?? '');
     setDescription('');
+    setSharedWithGroupIds(undefined);
     setStatus({ kind: 'idle' });
   }, [open, defaultTitle]);
 
@@ -65,6 +68,12 @@ export default function CreateMenuSheet({
       recipeIds: recipes.map((r) => r.id),
       createdAt: now,
       updatedAt: now,
+      // T4 Phase 3 — carry the chef's tick selection into the saved
+      // menu so members in the chosen groups see it on their next
+      // sync pull. Undefined when the chef isn't Enterprise (chip
+      // row doesn't render); the worker sync filter treats absent
+      // as "private, fan to nobody".
+      sharedWithGroupIds,
     };
     setStatus({ kind: 'submitting' });
     try {
@@ -108,6 +117,12 @@ export default function CreateMenuSheet({
         </header>
 
         <div className="px-5 py-4 space-y-4 text-sm">
+          {/* T4 Phase 3 — per-item team-share chips. Self-hides for
+              non-Enterprise tiers so non-team chefs see no UI change. */}
+          <GroupShareChipRow
+            selectedGroupIds={sharedWithGroupIds}
+            onChange={setSharedWithGroupIds}
+          />
           <label className="block">
             <span className="text-xs font-medium text-slate-500">Title</span>
             <input
