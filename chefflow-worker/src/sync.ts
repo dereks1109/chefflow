@@ -37,6 +37,15 @@ export interface SyncRow {
    *  with owner_user_id). Separate field so future "shared with edit"
    *  roles slot in cleanly. */
   read_only?: 0 | 1;
+  /** T6 — id of the team that satisfied the per-row sharedWithGroup
+   *  Ids filter for THIS viewer. When the recipe is shared with
+   *  multiple teams the viewer belongs to, we pick the first one.
+   *  Empty on the caller's own rows. */
+  team_id?: string;
+  /** T6 — the matched team's display name, looked up server-side
+   *  during the pull so the member's SPA doesn't need a separate
+   *  /api/teams/groups call to resolve names for the card tag. */
+  team_name?: string;
 }
 
 export interface PullResponse {
@@ -162,24 +171,51 @@ export async function pull(
       groupsByOwner.set(p.ownerUserId, set);
     }
 
+    /** Returns the (row, matchedGroupId) pairs where the matched id
+     *  is the FIRST entry in the row's sharedWithGroupIds that's also
+     *  in the viewer's allowed set. Multi-team rows pick the first
+     *  match deterministically (sharedWithGroupIds is array-ordered
+     *  by the chef's tick order). */
     const filterByGroup = (
       rows: { id: string; updated_at: number; is_deleted: number; payload: string }[],
       allowedGroupIds: Set<string>,
-    ) =>
-      rows.filter((r) => {
+    ): { row: typeof rows[number]; matchedGroupId: string }[] => {
+      const matched: { row: typeof rows[number]; matchedGroupId: string }[] = [];
+      for (const r of rows) {
         let parsed: { sharedWithGroupIds?: unknown };
         try {
           parsed = JSON.parse(r.payload) as { sharedWithGroupIds?: unknown };
         } catch {
-          return false;
+          continue;
         }
         const list = parsed.sharedWithGroupIds;
-        if (!Array.isArray(list)) return false;
+        if (!Array.isArray(list)) continue;
         for (const g of list) {
-          if (typeof g === 'string' && allowedGroupIds.has(g)) return true;
+          if (typeof g === 'string' && allowedGroupIds.has(g)) {
+            matched.push({ row: r, matchedGroupId: g });
+            break;
+          }
         }
-        return false;
-      });
+      }
+      return matched;
+    };
+
+    // T6 — preload (groupId → groupName) per owner so the row
+    // decoration below can include team_name without an extra
+    // round-trip. One small SELECT per owner; bounded by the
+    // owner's group count.
+    const groupNamesByOwner = new Map<string, Map<string, string>>();
+    await Promise.all(
+      Array.from(groupsByOwner.keys()).map(async (ownerId) => {
+        const res = await db
+          .prepare(`SELECT id, name FROM groups WHERE owner_user_id = ?`)
+          .bind(ownerId)
+          .all<{ id: string; name: string }>();
+        const map = new Map<string, string>();
+        for (const g of res.results ?? []) map.set(g.id, g.name);
+        groupNamesByOwner.set(ownerId, map);
+      }),
+    );
 
     const sharedPromises = Array.from(groupsByOwner.entries()).flatMap(
       ([ownerId, allowedGroupIds]) =>
@@ -195,16 +231,19 @@ export async function pull(
             .then((res) => ({
               kind: table,
               ownerId,
-              rows: filterByGroup(res.results ?? [], allowedGroupIds),
+              matched: filterByGroup(res.results ?? [], allowedGroupIds),
             })),
         ),
     );
     const sharedResults = await Promise.all(sharedPromises);
     for (const s of sharedResults) {
-      const decorated = s.rows.map((r) => ({
-        ...project(r),
+      const nameMap = groupNamesByOwner.get(s.ownerId) ?? new Map<string, string>();
+      const decorated: SyncRow[] = s.matched.map(({ row, matchedGroupId }) => ({
+        ...project(row),
         owner_user_id: s.ownerId,
         read_only: 1 as const,
+        team_id: matchedGroupId,
+        team_name: nameMap.get(matchedGroupId),
       }));
       if (s.kind === 'recipes') sharedRecipes = sharedRecipes.concat(decorated);
       else if (s.kind === 'events') sharedEvents = sharedEvents.concat(decorated);

@@ -5,11 +5,16 @@ import { pull, push, type PushBody } from './sync';
 // Keyed by (table, user_id, id). Returns a D1Database-shaped object so we
 // don't drag a real sqlite engine into unit tests.
 interface Row { user_id: string; id: string; updated_at: number; is_deleted: number; payload: string; }
+interface GroupRow { id: string; owner_user_id: string; name: string; }
 
 function makeDb() {
   const store: Record<string, Row[]> = {
     recipes: [], events: [], menus: [], allergen_audits: [],
   };
+  // T6 — groups table for the pull's team-name lookup. Tests that
+  // care about team_name decoration seed this directly; the rest
+  // leave it empty and team_name comes back undefined.
+  const groups: GroupRow[] = [];
 
   const prepare = (sql: string) => {
     let boundArgs: unknown[] = [];
@@ -26,6 +31,14 @@ function makeDb() {
         return null as T;
       },
       async all<T>() {
+        // T6 — pull's team-name lookup: SELECT id, name FROM groups WHERE owner_user_id = ?
+        if (sql.startsWith('SELECT id, name FROM groups')) {
+          const [ownerUserId] = boundArgs as [string];
+          const results = groups
+            .filter((g) => g.owner_user_id === ownerUserId)
+            .map((g) => ({ id: g.id, name: g.name }));
+          return { results, success: true } as T;
+        }
         if (sql.startsWith('SELECT id, updated_at, is_deleted, payload')) {
           const [userId, since] = boundArgs as [string, number];
           const results = (store[table] ?? [])
@@ -50,7 +63,7 @@ function makeDb() {
     };
   };
 
-  return { prepare, store } as unknown as D1Database & { store: typeof store };
+  return { prepare, store, groups } as unknown as D1Database & { store: typeof store; groups: GroupRow[] };
 }
 
 const fakePayload = (title: string) => ({ id: 'r1', title, ingredients: [], steps: [] });
@@ -268,5 +281,31 @@ describe('sync.pull — Phase 3 team-share fan-in (T3c)', () => {
     expect(out.recipes).toHaveLength(2);
     expect(out.recipes.find((r) => r.id === 'r_o1')!.owner_user_id).toBe('user_owner1');
     expect(out.recipes.find((r) => r.id === 'r_o2')!.owner_user_id).toBe('user_owner2');
+  });
+
+  it('decorates each shared row with team_id + team_name from the matched group (T6 — member SPA can render the team name on cards without an extra round-trip)', async () => {
+    const db = makeDb();
+    db.groups.push(
+      { id: 'grp_morning', owner_user_id: 'user_owner', name: 'Morning shift' },
+      { id: 'grp_evening', owner_user_id: 'user_owner', name: 'Evening shift' },
+    );
+    await push(db, 'user_owner', {
+      recipes: [
+        { id: 'r_m', updated_at: 100, payload: { id: 'r_m', sharedWithGroupIds: ['grp_morning'] } },
+        { id: 'r_e', updated_at: 100, payload: { id: 'r_e', sharedWithGroupIds: ['grp_evening'] } },
+      ],
+    });
+
+    const out = await pull(db, 'user_viewer', 0, [
+      { ownerUserId: 'user_owner', groupId: 'grp_morning' },
+      { ownerUserId: 'user_owner', groupId: 'grp_evening' },
+    ]);
+
+    const morning = out.recipes.find((r) => r.id === 'r_m')!;
+    const evening = out.recipes.find((r) => r.id === 'r_e')!;
+    expect(morning.team_id).toBe('grp_morning');
+    expect(morning.team_name).toBe('Morning shift');
+    expect(evening.team_id).toBe('grp_evening');
+    expect(evening.team_name).toBe('Evening shift');
   });
 });

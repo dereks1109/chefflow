@@ -16,7 +16,12 @@ export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
     <article className="flex flex-col min-h-[14rem] group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
-      <header className="flex items-start justify-between gap-3">
+      {/* T6: items-center keeps the trash icon vertically aligned with
+          the title's first line in the common 1-line case. Long titles
+          (line-clamp-2) shift the icon to the visual midline of the
+          two-line block — still readable, much tidier than items-start
+          which pushed the icon visibly above the title baseline. */}
+      <header className="flex items-center justify-between gap-3">
         <Link
           to={`/events/${event.id}`}
           className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2"

@@ -152,11 +152,18 @@ async function applyPullToDexie(
       if (serverRow.owner_user_id) {
         parsed.ownerUserId = serverRow.owner_user_id;
         parsed.readOnly = serverRow.read_only === 1;
+        // T6 — the worker decorated this row with the matched team.
+        if (serverRow.team_id) parsed.teamId = serverRow.team_id;
+        else delete parsed.teamId;
+        if (serverRow.team_name) parsed.teamName = serverRow.team_name;
+        else delete parsed.teamName;
       } else {
         // Clear stale share metadata in case a row was previously shared
         // and is now owned by the caller (or simply absent from server).
         delete parsed.ownerUserId;
         delete parsed.readOnly;
+        delete parsed.teamId;
+        delete parsed.teamName;
       }
       await table.put(parsed);
     }

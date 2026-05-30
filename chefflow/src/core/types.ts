@@ -116,6 +116,15 @@ export interface SyncMeta {
    *  that satisfy the filter, so members' local copies don't need
    *  this field (worker projects them with readOnly + ownerUserId). */
   sharedWithGroupIds?: string[];
+  /** T6 — id of the team that satisfied the per-row sharedWithGroup
+   *  Ids filter for THIS viewer. Only set on member-pulled rows;
+   *  the SPA renders the team-name tag and powers the per-team chip
+   *  filter from this field. */
+  teamId?: string;
+  /** T6 — the matched team's display name as the owner chose it.
+   *  Server-side lookup at pull time saves the member a separate
+   *  fetch to resolve names. */
+  teamName?: string;
 }
 
 export interface Recipe extends SyncMeta {

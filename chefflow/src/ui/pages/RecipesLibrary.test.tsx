@@ -368,26 +368,28 @@ describe('RecipesLibrary — Mine vs Shared scope filter (T3c follow-up)', () =>
     expect(screen.queryByTestId('recipes-scope-chip-row')).toBeNull();
   });
 
-  it('renders the chip row with correct counts when at least one shared recipe is present', async () => {
+  it('renders one chip per team (T6) using the worker-decorated team name; All + Mine show overall counts', async () => {
     await db.recipes.bulkPut([
       stew,                                              // mine
       cake,                                              // mine
-      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
-      { ...stew, id: 'r_shared_2', title: 'Owner Sauce', readOnly: true, ownerUserId: 'user_owner' },
+      { ...stew, id: 'r_morning_1', title: 'Owner Lamb',  readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_morning', teamName: 'Morning shift' },
+      { ...stew, id: 'r_morning_2', title: 'Owner Sauce', readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_morning', teamName: 'Morning shift' },
+      { ...stew, id: 'r_evening_1', title: 'Owner Stock', readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_evening', teamName: 'Evening shift' },
     ]);
     renderPage();
     await waitFor(() => {
       expect(screen.getByTestId('recipes-scope-chip-row')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('recipes-scope-all')).toHaveTextContent('All (4)');
+    expect(screen.getByTestId('recipes-scope-all')).toHaveTextContent('All (5)');
     expect(screen.getByTestId('recipes-scope-mine')).toHaveTextContent('Mine (2)');
-    expect(screen.getByTestId('recipes-scope-shared')).toHaveTextContent('Shared (2)');
+    expect(screen.getByTestId('recipes-scope-grp_morning')).toHaveTextContent('Morning shift (2)');
+    expect(screen.getByTestId('recipes-scope-grp_evening')).toHaveTextContent('Evening shift (1)');
   });
 
   it('clicking "Mine" hides shared cards', async () => {
     await db.recipes.bulkPut([
       stew,
-      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
+      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_a', teamName: 'Team A' },
     ]);
     renderPage();
     await waitFor(() => screen.getByTestId('recipes-scope-chip-row'));
@@ -396,15 +398,27 @@ describe('RecipesLibrary — Mine vs Shared scope filter (T3c follow-up)', () =>
     expect(screen.queryByText('Owner Lamb')).toBeNull();
   });
 
-  it('clicking "Shared" hides own cards (chef sees only borrowed content)', async () => {
+  it('clicking a team chip scopes to only that team\'s shared cards (T6)', async () => {
     await db.recipes.bulkPut([
       stew,
-      { ...stew, id: 'r_shared_1', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner' },
+      { ...stew, id: 'r_morning', title: 'Owner Lamb',  readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_morning', teamName: 'Morning shift' },
+      { ...stew, id: 'r_evening', title: 'Owner Stock', readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_evening', teamName: 'Evening shift' },
     ]);
     renderPage();
     await waitFor(() => screen.getByTestId('recipes-scope-chip-row'));
-    await userEvent.click(screen.getByTestId('recipes-scope-shared'));
+    await userEvent.click(screen.getByTestId('recipes-scope-grp_morning'));
     expect(screen.queryByText('Beef Stew')).toBeNull();
     expect(screen.getByText('Owner Lamb')).toBeInTheDocument();
+    expect(screen.queryByText('Owner Stock')).toBeNull();
+  });
+
+  it('renders the team NAME on the shared-card tag, not the generic "Shared" label (T6)', async () => {
+    await db.recipes.bulkPut([
+      { ...stew, id: 'r_morning', title: 'Owner Lamb', readOnly: true, ownerUserId: 'user_owner', teamId: 'grp_morning', teamName: 'Morning shift' },
+    ]);
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('recipe-card-shared-tag')).toHaveTextContent('Morning shift');
+    });
   });
 });

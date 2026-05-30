@@ -16,6 +16,11 @@ export interface SyncRow {
   owner_user_id?: string;
   /** 1 when read-only (paired with owner_user_id today). */
   read_only?: 0 | 1;
+  /** T6 — the team this shared row was fanned in through; mirrored
+   *  onto the local row's SyncMeta.teamId by the sync engine. */
+  team_id?: string;
+  /** T6 — chef-chosen display name of the matched team. */
+  team_name?: string;
 }
 
 export interface PullResponse {

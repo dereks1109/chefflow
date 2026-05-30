@@ -99,4 +99,17 @@ describe('EventsLibrary — Mine vs Shared scope filter (T3c follow-up)', () => 
     expect(screen.getByText("Owner's Wedding")).toBeInTheDocument();
     expect(screen.getByText("Owner's Pop-up")).toBeInTheDocument();
   });
+
+  it('renders the team NAME on the shared-event tag, not the generic "Shared" label (T6)', async () => {
+    await db.events.put({
+      ...dinner,
+      id: 'e_morning', title: "Owner's Brunch",
+      readOnly: true, ownerUserId: 'user_owner',
+      teamId: 'grp_morning', teamName: 'Morning shift',
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('event-card-shared-tag')).toHaveTextContent('Morning shift');
+    });
+  });
 });

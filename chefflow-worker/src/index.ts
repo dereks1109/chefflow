@@ -139,7 +139,7 @@ type Verifier = (token: string, opts: { secretKey: string; issuer: string }) => 
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Stripe-Signature',
 } as const;
 

@@ -21,11 +21,11 @@ export default function RecipesLibrary() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [menus, setMenus] = useState<Menu[] | null>(null);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-  // Library scope filter (T3c follow-up). Coarse first-pass filter that
-  // separates the chef's own content from rows fanned in by a team owner.
-  // Chip row hides entirely when no shared recipes exist so non-team
-  // chefs see no UI change at all.
-  const [scope, setScope] = useState<'all' | 'mine' | 'shared'>('all');
+  // Library scope filter (T3c follow-up, evolved in T6 to per-team).
+  // 'all' = everything, 'mine' = no shared rows, or a team id =
+  // recipes shared with that team. Chip row hides entirely when no
+  // shared recipes / no teams exist so non-team chefs see no UI change.
+  const [scope, setScope] = useState<string>('all');
   const [newRecipeOpen, setNewRecipeOpen] = useState(false);
   // Carried over when the chef clicked "Create new recipe: <name>" in the
   // event timeline's dish-name autocomplete; pre-fills the blank recipe's
@@ -171,20 +171,57 @@ export default function RecipesLibrary() {
       : recipes;
     const bySearch = filterRecipes(byMenu, debouncedQuery);
     if (scope === 'mine') return bySearch.filter((r) => r.readOnly !== true);
-    if (scope === 'shared') return bySearch.filter((r) => r.readOnly === true);
-    return bySearch;
+    if (scope === 'all') return bySearch;
+    // T6 — scope is a team id. Match either the worker-decorated
+    // teamId (member's pulled rows) or the owner-side
+    // sharedWithGroupIds (owner viewing own rows shared with that team).
+    return bySearch.filter((r) => {
+      if (r.teamId === scope) return true;
+      if (Array.isArray(r.sharedWithGroupIds) && r.sharedWithGroupIds.includes(scope)) return true;
+      return false;
+    });
   }, [recipes, activeMenu, debouncedQuery, scope]);
 
-  // Counts for the chip labels — derived from the FULL recipes list (or
-  // the menu-filtered set when a menu chip is active), NOT from
-  // `filtered`. Counts shifting as the chef types in the search box
-  // would be confusing.
-  const scopeCounts = useMemo(() => {
+  // Team-scoped chips (T6) — derived from the FULL recipes list (or
+  // the menu-filtered set) so counts stay stable across search input.
+  // Each chip = one team the user has access to, with a count of
+  // recipes shared with that team. Team list is the UNION of:
+  //   - teamId values on pulled-shared rows (member perspective)
+  //   - sharedWithGroupIds entries on own rows (owner perspective)
+  // Names come from the row's teamName (member side); for owner-side
+  // group ids without a teamName, we fall back to the id itself.
+  const { mineCount, allCount, teamChips } = useMemo(() => {
     const source = activeMenu && recipes
       ? filterRecipesByMenu(recipes, activeMenu.recipeIds)
       : recipes ?? [];
-    const shared = source.filter((r) => r.readOnly === true).length;
-    return { all: source.length, mine: source.length - shared, shared };
+    const mine = source.filter((r) => r.readOnly !== true);
+    // teamId → { name, count }
+    const map = new Map<string, { name: string; count: number }>();
+    const ownerNames = new Map<string, string>(); // populated by member-side teamName
+    for (const r of source) {
+      // Member's pulled shared row: prefer the worker-supplied team name.
+      if (r.readOnly === true && r.teamId) {
+        if (r.teamName) ownerNames.set(r.teamId, r.teamName);
+        const existing = map.get(r.teamId);
+        if (existing) existing.count++;
+        else map.set(r.teamId, { name: r.teamName ?? r.teamId, count: 1 });
+        continue;
+      }
+      // Owner's own row shared with one or more teams.
+      if (Array.isArray(r.sharedWithGroupIds)) {
+        for (const gid of r.sharedWithGroupIds) {
+          if (typeof gid !== 'string') continue;
+          const existing = map.get(gid);
+          if (existing) existing.count++;
+          else map.set(gid, { name: ownerNames.get(gid) ?? gid, count: 1 });
+        }
+      }
+    }
+    // Sort by name for stable ordering.
+    const teamChips = Array.from(map.entries())
+      .map(([id, v]) => ({ id, name: v.name, count: v.count }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { mineCount: mine.length, allCount: source.length, teamChips };
   }, [recipes, activeMenu]);
 
   // Maps of recipeId → count and recipeId → parent titles for "used in N"
@@ -363,24 +400,30 @@ export default function RecipesLibrary() {
           })}
         </div>
       )}
-      {scopeCounts.shared > 0 && (
+      {teamChips.length > 0 && (
         <div
           className="flex flex-wrap gap-2 mb-3"
           role="tablist"
           aria-label="Library scope filter"
           data-testid="recipes-scope-chip-row"
         >
-          {(['all', 'mine', 'shared'] as const).map((s) => {
-            const isActive = scope === s;
-            const label = s === 'all' ? 'All' : s === 'mine' ? 'Mine' : 'Shared';
+          {/* T6 — All / Mine baseline chips, then one chip per team
+              the chef has access to (own teams + joined teams,
+              union derived in scopeCounts above). */}
+          {([
+            { id: 'all', label: 'All', count: allCount },
+            { id: 'mine', label: 'Mine', count: mineCount },
+            ...teamChips.map((t) => ({ id: t.id, label: t.name, count: t.count })),
+          ] as const).map((s) => {
+            const isActive = scope === s.id;
             return (
               <button
-                key={s}
+                key={s.id}
                 type="button"
                 role="tab"
                 aria-selected={isActive}
-                onClick={() => setScope(s)}
-                data-testid={`recipes-scope-${s}`}
+                onClick={() => setScope(s.id)}
+                data-testid={`recipes-scope-${s.id}`}
                 className={[
                   'inline-flex items-center px-3 h-7 rounded-full text-xs font-medium transition-colors',
                   isActive
@@ -388,7 +431,7 @@ export default function RecipesLibrary() {
                     : 'bg-slate-100 text-slate-700 dark:bg-surface-2 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-surface-3',
                 ].join(' ')}
               >
-                {label} ({scopeCounts[s]})
+                {s.label} ({s.count})
               </button>
             );
           })}
@@ -431,16 +474,17 @@ export default function RecipesLibrary() {
             const checked = selectedIds.has(r.id);
             return (
               <li key={r.id} className="h-full relative">
-                {/* T3c Phase 4 — small "Shared" tag on rows that came
-                    from an Enterprise team owner the caller is a viewer
-                    of. Visual-only here; the editor + workflow gates
-                    are the real "no edits" enforcement. */}
+                {/* T3c Phase 4 + T6 — tag on rows fanned in from a
+                    team owner. T6 swaps the generic "Shared" label for
+                    the actual team name (worker decoration); falls back
+                    to "Shared" if the name didn't come through. */}
                 {r.readOnly && (
                   <span
                     data-testid="recipe-card-shared-tag"
-                    className="absolute top-2 right-2 z-10 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                    className="absolute top-2 right-2 z-10 px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200 truncate max-w-[10rem]"
+                    title={r.teamName ?? 'Shared'}
                   >
-                    Shared
+                    {r.teamName ?? 'Shared'}
                   </span>
                 )}
                 {selectMode && (
