@@ -563,3 +563,165 @@ export async function handleOwnersOfMe(
   const owners = await getAcceptedOwnersForMember(env.DB, memberUserId);
   return jsonResponse({ owners }, 200);
 }
+
+// ---------------------------------------------------------------------------
+// T4 Phase 2 — Groups CRUD handlers
+// ---------------------------------------------------------------------------
+
+const MAX_GROUP_NAME_LEN = 50;
+
+function isValidGroupName(s: unknown): s is string {
+  return typeof s === 'string' && s.trim().length > 0 && s.trim().length <= MAX_GROUP_NAME_LEN;
+}
+
+/** GET /api/teams/groups — owner-only. Returns the owner's groups
+ *  (default first, then by createdAt asc). Lazily provisions the
+ *  Default group so the chef ALWAYS sees at least one group on
+ *  first call — no empty-state spinner. */
+export async function handleListGroups(
+  env: TeamsEnv,
+  ownerUserId: string,
+): Promise<Response> {
+  await ensureDefaultGroup(env.DB, ownerUserId);
+  const rows = await env.DB
+    .prepare(
+      `SELECT id, name, is_default, created_at
+       FROM groups WHERE owner_user_id = ?
+       ORDER BY is_default DESC, created_at ASC`,
+    )
+    .bind(ownerUserId)
+    .all<{ id: string; name: string; is_default: number; created_at: number }>();
+  const groups = (rows.results ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    isDefault: r.is_default === 1,
+    createdAt: r.created_at,
+  }));
+  return jsonResponse({ groups }, 200);
+}
+
+/** POST /api/teams/groups — owner-only. Body { name }. Creates a new
+ *  group; rejects duplicate name (case-insensitive) for the owner. */
+export async function handleCreateGroup(
+  req: Request,
+  env: TeamsEnv,
+  ownerUserId: string,
+): Promise<Response> {
+  const body = await readJson(req);
+  const rawName = (body as { name?: unknown })?.name;
+  if (!isValidGroupName(rawName)) {
+    return jsonResponse({ error: 'Body must include a name (1-50 chars)' }, 400);
+  }
+  const name = rawName.trim();
+
+  // Make sure the Default exists first so the owner always has it,
+  // and so the case-insensitive duplicate check below catches a
+  // "Default" name collision.
+  await ensureDefaultGroup(env.DB, ownerUserId);
+  const existing = await env.DB
+    .prepare(
+      `SELECT id FROM groups
+       WHERE owner_user_id = ? AND lower(name) = lower(?)`,
+    )
+    .bind(ownerUserId, name)
+    .first<{ id: string }>();
+  if (existing) {
+    return jsonResponse({ error: 'A group with that name already exists' }, 409);
+  }
+
+  const id = `grp_${crypto.randomUUID()}`;
+  await env.DB
+    .prepare(
+      `INSERT INTO groups (id, owner_user_id, name, is_default, created_at)
+       VALUES (?, ?, ?, 0, ?)`,
+    )
+    .bind(id, ownerUserId, name, Date.now())
+    .run();
+  return jsonResponse({ id, name, isDefault: false }, 200);
+}
+
+/** PATCH /api/teams/groups/:id — owner-only. Body { name }. Renames a
+ *  group the caller owns; refuses to rename the Default group (the name
+ *  is the user-visible anchor for the "everything I own goes here by
+ *  default" guarantee). */
+export async function handleRenameGroup(
+  req: Request,
+  groupId: string,
+  env: TeamsEnv,
+  ownerUserId: string,
+): Promise<Response> {
+  const body = await readJson(req);
+  const rawName = (body as { name?: unknown })?.name;
+  if (!isValidGroupName(rawName)) {
+    return jsonResponse({ error: 'Body must include a name (1-50 chars)' }, 400);
+  }
+  const name = rawName.trim();
+  const existing = await env.DB
+    .prepare(
+      `SELECT is_default FROM groups WHERE owner_user_id = ? AND id = ?`,
+    )
+    .bind(ownerUserId, groupId)
+    .first<{ is_default: number }>();
+  if (!existing) {
+    return jsonResponse({ error: 'Group not found' }, 404);
+  }
+  if (existing.is_default === 1) {
+    return jsonResponse({ error: 'The Default group cannot be renamed' }, 409);
+  }
+  // Reject duplicate name (case-insensitive), excluding self.
+  const dup = await env.DB
+    .prepare(
+      `SELECT id FROM groups
+       WHERE owner_user_id = ? AND lower(name) = lower(?) AND id != ?`,
+    )
+    .bind(ownerUserId, name, groupId)
+    .first<{ id: string }>();
+  if (dup) {
+    return jsonResponse({ error: 'A group with that name already exists' }, 409);
+  }
+  await env.DB
+    .prepare(`UPDATE groups SET name = ? WHERE owner_user_id = ? AND id = ?`)
+    .bind(name, ownerUserId, groupId)
+    .run();
+  return jsonResponse({ id: groupId, name }, 200);
+}
+
+/** DELETE /api/teams/groups/:id — owner-only. Deletes a non-default
+ *  group. Cascades: every membership currently in this group is moved
+ *  to the owner's Default. Stale group_ids inside recipe/event/menu
+ *  payload.sharedWithGroupIds are NOT scrubbed eagerly — they're
+ *  harmless (no member can match them), and the next time the chef
+ *  edits the item the chip row simply won't show the deleted group
+ *  so they'll save without it. */
+export async function handleDeleteGroup(
+  groupId: string,
+  env: TeamsEnv,
+  ownerUserId: string,
+): Promise<Response> {
+  const target = await env.DB
+    .prepare(
+      `SELECT is_default FROM groups WHERE owner_user_id = ? AND id = ?`,
+    )
+    .bind(ownerUserId, groupId)
+    .first<{ is_default: number }>();
+  if (!target) {
+    return jsonResponse({ error: 'Group not found' }, 404);
+  }
+  if (target.is_default === 1) {
+    return jsonResponse({ error: 'The Default group cannot be deleted' }, 409);
+  }
+  const defaultGroupId = await ensureDefaultGroup(env.DB, ownerUserId);
+  // Move memberships first so they're never orphaned mid-delete.
+  await env.DB
+    .prepare(
+      `UPDATE team_memberships SET group_id = ?
+       WHERE owner_user_id = ? AND group_id = ?`,
+    )
+    .bind(defaultGroupId, ownerUserId, groupId)
+    .run();
+  await env.DB
+    .prepare(`DELETE FROM groups WHERE owner_user_id = ? AND id = ?`)
+    .bind(ownerUserId, groupId)
+    .run();
+  return jsonResponse({ removed: groupId, movedToDefault: true }, 200);
+}

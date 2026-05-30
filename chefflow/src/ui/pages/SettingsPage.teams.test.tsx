@@ -23,99 +23,153 @@ function renderSettingsPlan() {
   );
 }
 
-describe('SettingsPage — TeamMembersSection (T3c Phase 5)', () => {
-  // Why these matter: the Team members section is the ONLY UI surface
-  // through which Enterprise owners invite + manage team members. A
-  // regression here strands the entire feature (members can't be added,
-  // can't be removed, no error feedback). Tests pin the tier gate, the
-  // invite happy path, and error surfacing.
+describe('SettingsPage — TeamsSection (T4 Phase 2: per-group panels)', () => {
+  // Why these matter: TeamsSection is the only UI surface through
+  // which Enterprise owners manage groups + invite members. A
+  // regression here strands the entire team-share feature. Tests pin
+  // the tier gate, group-scoped invite, group create + rename + delete
+  // affordances + the Default group's protected status.
 
-  it('does NOT render the section for non-Enterprise tiers (free / pro / business stay clean)', async () => {
+  it('does NOT render the section for non-Enterprise tiers + does NOT call list endpoints', async () => {
     useTierStore.setState({ tier: 'free' });
-    const listSpy = vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    const groupsSpy = vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([]);
+    const membersSpy = vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderSettingsPlan();
-    // Wait for the page-level tablist to mount, then assert the
-    // section is absent. We deliberately don't depend on which tab is
-    // active (URL search-param wiring isn't part of this test's intent).
     await waitFor(() => {
       expect(screen.getByTestId('settings-tabs')).toBeInTheDocument();
     });
-    expect(screen.queryByTestId('settings-team-members-section')).toBeNull();
-    // listMembers must NOT be called for non-Enterprise users — saves a
-    // wasted round-trip + avoids a spurious 401 error toast.
-    expect(listSpy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('settings-teams-section')).toBeNull();
+    expect(groupsSpy).not.toHaveBeenCalled();
+    expect(membersSpy).not.toHaveBeenCalled();
   });
 
-  it('renders the section + empty-state for an Enterprise owner with no invites yet', async () => {
+  it('renders the Default group panel + new-group form for an Enterprise owner with no extra groups', async () => {
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_default', name: 'Default', isDefault: true },
+    ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderSettingsPlan();
-    await waitFor(() => {
-      expect(screen.getByTestId('settings-team-members-section')).toBeInTheDocument();
-    });
-    expect(await screen.findByTestId('settings-team-empty')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-team-invite-email')).toBeInTheDocument();
+
+    expect(await screen.findByTestId('settings-teams-group-grp_default')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-teams-group-name-grp_default')).toHaveTextContent('Default');
+    expect(screen.getByTestId('settings-teams-empty-grp_default')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-teams-new-group-form')).toBeInTheDocument();
+    // Default group panel: NO Rename, NO Delete button (it's protected).
+    expect(screen.queryByTestId('settings-teams-rename-grp_default')).toBeNull();
+    expect(screen.queryByTestId('settings-teams-delete-grp_default')).toBeNull();
   });
 
-  it('inviting a member calls teamsClient + refreshes the list', async () => {
-    const listSpy = vi
-      .spyOn(teamsClient, 'listMembers')
+  it('inviting into the Default panel calls inviteMember with that group\'s id', async () => {
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_default', name: 'Default', isDefault: true },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers')
       .mockResolvedValueOnce([]) // initial load
       .mockResolvedValueOnce([
-        { member_email: 'sous@k.uk', member_user_id: null, role: 'viewer', invited_at: 1, accepted_at: null },
-      ]);
+        { member_email: 'sous@k.uk', member_user_id: null, role: 'viewer', invited_at: 1, accepted_at: null, group_id: 'grp_default' },
+      ]); // after refresh
     const inviteSpy = vi.spyOn(teamsClient, 'inviteMember').mockResolvedValue({
       email: 'sous@k.uk',
-      token: 'tok_x',
-      acceptUrl: 'https://chefflow.uk/teams/accept?token=tok_x',
+      token: 'tok_long_enough',
+      acceptUrl: 'https://chefflow.uk/teams/accept?token=tok_long_enough',
       emailStatus: 'sent',
     });
 
     renderSettingsPlan();
-    await waitFor(() => screen.getByTestId('settings-team-invite-email'));
-    await userEvent.type(screen.getByTestId('settings-team-invite-email'), 'sous@k.uk');
-    await userEvent.click(screen.getByTestId('settings-team-invite-submit'));
+    const emailInput = await screen.findByTestId('settings-teams-invite-email-grp_default');
+    await userEvent.type(emailInput, 'sous@k.uk');
+    await userEvent.click(screen.getByTestId('settings-teams-invite-submit-grp_default'));
 
     await waitFor(() => {
-      expect(inviteSpy).toHaveBeenCalledWith('sous@k.uk');
+      expect(inviteSpy).toHaveBeenCalledWith('sous@k.uk', { groupId: 'grp_default' });
     });
-    // Status pill shows the email-sent confirmation.
-    expect(await screen.findByTestId('settings-team-invite-status')).toHaveTextContent(/email sent/i);
-    // List re-pulled → row visible.
-    expect(await screen.findByTestId('settings-team-row-sous@k.uk')).toBeInTheDocument();
-    expect(listSpy).toHaveBeenCalledTimes(2);
+    expect(await screen.findByTestId('settings-teams-invite-status-grp_default')).toHaveTextContent(/email sent/i);
+    expect(await screen.findByTestId('settings-teams-row-sous@k.uk')).toBeInTheDocument();
   });
 
-  it('surfaces the seat-cap error from the worker verbatim — chef sees actionable feedback (Rule 12)', async () => {
-    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
-    vi.spyOn(teamsClient, 'inviteMember').mockRejectedValue(
-      new teamsClient.TeamsClientError('Tier enterprise seat cap reached (50/50)', 409),
-    );
+  it('renders a non-default group panel with Rename + Delete affordances + scoped invite form', async () => {
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_default', name: 'Default', isDefault: true },
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([
+      { member_email: 'sous@k.uk', member_user_id: 'u_s', role: 'viewer', invited_at: 1, accepted_at: 2, group_id: 'grp_morning' },
+    ]);
     renderSettingsPlan();
-    await waitFor(() => screen.getByTestId('settings-team-invite-email'));
-    await userEvent.type(screen.getByTestId('settings-team-invite-email'), 'sous@k.uk');
-    await userEvent.click(screen.getByTestId('settings-team-invite-submit'));
 
-    expect(await screen.findByTestId('settings-team-invite-error'))
-      .toHaveTextContent(/seat cap reached/i);
+    expect(await screen.findByTestId('settings-teams-group-grp_morning')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-teams-group-name-grp_morning')).toHaveTextContent('Morning shift');
+    expect(screen.getByTestId('settings-teams-rename-grp_morning')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-teams-delete-grp_morning')).toBeInTheDocument();
+    // Member appears under the Morning group's list, not Default.
+    const morningList = screen.getByTestId('settings-teams-list-grp_morning');
+    expect(morningList).toHaveTextContent('sous@k.uk');
   });
 
-  it('shows the copy-paste accept URL when email send is skipped (no Resend key)', async () => {
+  it('creating a new group calls createGroup + refreshes the panel list', async () => {
+    const groupsSpy = vi.spyOn(teamsClient, 'listGroups')
+      .mockResolvedValueOnce([{ id: 'grp_default', name: 'Default', isDefault: true }])
+      .mockResolvedValueOnce([
+        { id: 'grp_default', name: 'Default', isDefault: true },
+        { id: 'grp_new', name: 'Evening shift', isDefault: false },
+      ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
-    vi.spyOn(teamsClient, 'inviteMember').mockResolvedValue({
-      email: 'sous@k.uk',
-      token: 'tok_x',
-      acceptUrl: 'https://chefflow.uk/teams/accept?token=tok_x',
-      emailStatus: 'skipped-no-key',
+    const createSpy = vi.spyOn(teamsClient, 'createGroup').mockResolvedValue({
+      id: 'grp_new', name: 'Evening shift', isDefault: false,
     });
-    renderSettingsPlan();
-    await waitFor(() => screen.getByTestId('settings-team-invite-email'));
-    await userEvent.type(screen.getByTestId('settings-team-invite-email'), 'sous@k.uk');
-    await userEvent.click(screen.getByTestId('settings-team-invite-submit'));
 
-    const status = await screen.findByTestId('settings-team-invite-status');
-    expect(status).toHaveTextContent(/email send disabled/i);
-    expect(status.querySelector('a')?.getAttribute('href')).toBe(
-      'https://chefflow.uk/teams/accept?token=tok_x',
+    renderSettingsPlan();
+    const input = await screen.findByTestId('settings-teams-new-group-name');
+    await userEvent.type(input, 'Evening shift');
+    await userEvent.click(screen.getByTestId('settings-teams-new-group-submit'));
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith('Evening shift');
+    });
+    expect(await screen.findByTestId('settings-teams-group-grp_new')).toBeInTheDocument();
+    expect(groupsSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces the worker\'s duplicate-name error verbatim on createGroup', async () => {
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_default', name: 'Default', isDefault: true },
+    ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    vi.spyOn(teamsClient, 'createGroup').mockRejectedValue(
+      new teamsClient.TeamsClientError('A group with that name already exists', 409),
     );
+    renderSettingsPlan();
+    const input = await screen.findByTestId('settings-teams-new-group-name');
+    await userEvent.type(input, 'Default');
+    await userEvent.click(screen.getByTestId('settings-teams-new-group-submit'));
+
+    expect(await screen.findByTestId('settings-teams-action-error'))
+      .toHaveTextContent(/already exists/i);
+  });
+
+  it('deleting a non-default group calls deleteGroup + refreshes', async () => {
+    const groupsSpy = vi.spyOn(teamsClient, 'listGroups')
+      .mockResolvedValueOnce([
+        { id: 'grp_default', name: 'Default', isDefault: true },
+        { id: 'grp_morning', name: 'Morning', isDefault: false },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'grp_default', name: 'Default', isDefault: true },
+      ]);
+    vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    const deleteSpy = vi.spyOn(teamsClient, 'deleteGroup').mockResolvedValue();
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderSettingsPlan();
+    await screen.findByTestId('settings-teams-group-grp_morning');
+    await userEvent.click(screen.getByTestId('settings-teams-delete-grp_morning'));
+
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith('grp_morning');
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('settings-teams-group-grp_morning')).toBeNull();
+    });
+    expect(groupsSpy).toHaveBeenCalledTimes(2);
   });
 });

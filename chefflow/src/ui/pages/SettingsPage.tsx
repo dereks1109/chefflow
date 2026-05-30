@@ -26,7 +26,12 @@ import {
   inviteMember,
   listMembers,
   removeMember,
+  listGroups,
+  createGroup,
+  renameGroup,
+  deleteGroup,
   type TeamMember,
+  type TeamGroup,
   type InviteResult,
 } from '../../core/teams/teamsClient';
 
@@ -571,7 +576,7 @@ export default function SettingsPage() {
       </section>
       )}
 
-      {activeTab === 'plan' && <TeamMembersSection />}
+      {activeTab === 'plan' && <TeamsSection />}
 
       {activeTab === 'preferences' && <AllergyKeywordsSection />}
 
@@ -1311,31 +1316,41 @@ function PinSection() {
 }
 
 // ---------------------------------------------------------------------------
-// Team members (T3c Phase 5) — Enterprise-only invite UI.
-// Lives inside the Plan tab. Lists pending + accepted members, invite-by-
-// email form, per-row Remove. The accept side lives at /teams/accept
-// (TeamAccept page). When the owner isn't on Enterprise tier, this whole
-// section renders nothing — keeps the Plan tab clean for the 99% of users.
+// Teams (T3c Phase 5 + T4 Phase 2) — Enterprise-only group + member UI.
+// One collapsible panel per group; Default is auto-created and always
+// present. Per-group: rename (non-default only), invite scoped to this
+// group, member list with Remove. Below the panels: "+ New group" form
+// + delete-group buttons on non-default panels.
+//
+// Hidden entirely for non-Enterprise tiers (clean Plan tab for 99% of
+// users). Owner identity, JWT, and seat-cap enforcement all live on
+// the worker — this component is purely the chef-facing surface.
 // ---------------------------------------------------------------------------
-function TeamMembersSection() {
+function TeamsSection() {
   const tier = useTierStore((s) => s.tier);
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [email, setEmail] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
-  const [lastInvite, setLastInvite] = useState<InviteResult | null>(null);
-
   const isEnterprise = tier === 'enterprise';
+
+  const [groups, setGroups] = useState<TeamGroup[]>([]);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function refresh() {
+    const [g, m] = await Promise.all([listGroups(), listMembers()]);
+    setGroups(g);
+    setMembers(m);
+  }
 
   useEffect(() => {
     if (!isEnterprise) return;
     let cancelled = false;
     void (async () => {
       try {
-        const list = await listMembers();
-        if (!cancelled) setMembers(list);
+        const [g, m] = await Promise.all([listGroups(), listMembers()]);
+        if (!cancelled) { setGroups(g); setMembers(m); }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Load failed');
       } finally {
@@ -1347,88 +1362,277 @@ function TeamMembersSection() {
 
   if (!isEnterprise) return null;
 
-  async function handleInvite(e: React.FormEvent) {
+  async function handleCreateGroup(e: React.FormEvent) {
     e.preventDefault();
-    if (!email.trim()) return;
-    setInviting(true);
-    setInviteError(null);
-    setLastInvite(null);
+    const name = newGroupName.trim();
+    if (!name) return;
+    setCreating(true);
+    setActionError(null);
     try {
-      const out = await inviteMember(email.trim());
-      setLastInvite(out);
-      setEmail('');
-      // Re-pull so the new pending row shows up immediately.
-      try {
-        setMembers(await listMembers());
-      } catch {
-        // Non-fatal — the next page load will reconcile.
-      }
+      await createGroup(name);
+      setNewGroupName('');
+      await refresh();
     } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'Invite failed');
+      setActionError(err instanceof Error ? err.message : 'Create failed');
     } finally {
-      setInviting(false);
+      setCreating(false);
     }
   }
 
-  async function handleRemove(memberEmail: string) {
-    if (!window.confirm(`Remove ${memberEmail} from your team?`)) return;
-    try {
-      await removeMember(memberEmail);
-      setMembers(await listMembers());
-    } catch (err) {
-      setInviteError(err instanceof Error ? err.message : 'Remove failed');
-    }
+  // Bucket members per group, falling back to Default for pre-T4 rows
+  // (group_id NULL during the deploy window — the worker's lazy
+  // migration backfills them, but the SPA may pull a snapshot before
+  // that runs).
+  const defaultGroupId = groups.find((g) => g.isDefault)?.id ?? '';
+  const membersByGroup = new Map<string, TeamMember[]>();
+  for (const m of members) {
+    const key = m.group_id ?? defaultGroupId;
+    if (!key) continue;
+    const arr = membersByGroup.get(key) ?? [];
+    arr.push(m);
+    membersByGroup.set(key, arr);
   }
 
   return (
     <section
       aria-labelledby="settings-teams-heading"
-      data-testid="settings-team-members-section"
+      data-testid="settings-teams-section"
       className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
     >
       <h2 id="settings-teams-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">
         Team members
       </h2>
       <p className="mt-2 text-xs text-slate-500">
-        Invite up to {TIER_LIMITS.enterprise.maxSeats} team members. Members can
-        view your recipes, events, and workflows but cannot edit or share them
-        — only you can. They sign in with their own ChefFlow account and
-        accept the invite via the link in the email.
+        Invite up to {TIER_LIMITS.enterprise.maxSeats} team members across any
+        number of groups (e.g. <em>Morning shift</em>, <em>Pop-up team</em>).
+        Members in a group can view items you've ticked for that group;
+        they cannot edit or share. They sign in with their own ChefFlow
+        account and accept via the link in the email.
       </p>
 
-      <form onSubmit={(e) => void handleInvite(e)} className="mt-3 flex flex-wrap gap-2 items-start">
+      {actionError && (
+        <p
+          role="alert"
+          data-testid="settings-teams-action-error"
+          className="mt-3 text-xs text-red-600 dark:text-red-400"
+        >
+          {actionError}
+        </p>
+      )}
+
+      {!loaded && <p className="mt-4 text-xs text-slate-500">Loading…</p>}
+      {loadError && (
+        <p role="alert" className="mt-4 text-xs text-red-600 dark:text-red-400">
+          {loadError}
+        </p>
+      )}
+
+      {loaded && !loadError && (
+        <div className="mt-4 space-y-4">
+          {groups.map((group) => (
+            <TeamGroupPanel
+              key={group.id}
+              group={group}
+              members={membersByGroup.get(group.id) ?? []}
+              onChange={refresh}
+              onActionError={setActionError}
+            />
+          ))}
+        </div>
+      )}
+
+      <form
+        onSubmit={(e) => void handleCreateGroup(e)}
+        data-testid="settings-teams-new-group-form"
+        className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-2 items-start"
+      >
+        <input
+          type="text"
+          value={newGroupName}
+          onChange={(ev) => setNewGroupName(ev.target.value)}
+          placeholder="New group name (e.g. Morning shift)"
+          maxLength={50}
+          data-testid="settings-teams-new-group-name"
+          className="input flex-1 min-w-[14rem]"
+          aria-label="New group name"
+        />
+        <button
+          type="submit"
+          disabled={creating || !newGroupName.trim()}
+          data-testid="settings-teams-new-group-submit"
+          className="btn-secondary disabled:opacity-60"
+        >
+          {creating ? 'Creating…' : '+ New group'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+// Per-group panel — rename / invite / member list / delete (non-default).
+// Lifted into its own component so each panel's local form state
+// (invite-email-input, rename-input) is isolated.
+function TeamGroupPanel({
+  group,
+  members,
+  onChange,
+  onActionError,
+}: {
+  group: TeamGroup;
+  members: TeamMember[];
+  onChange: () => Promise<void>;
+  onActionError: (msg: string | null) => void;
+}) {
+  const [renameMode, setRenameMode] = useState(false);
+  const [renameValue, setRenameValue] = useState(group.name);
+  const [email, setEmail] = useState('');
+  const [inviting, setInviting] = useState(false);
+  const [lastInvite, setLastInvite] = useState<InviteResult | null>(null);
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setInviting(true);
+    onActionError(null);
+    setLastInvite(null);
+    try {
+      const out = await inviteMember(email.trim(), { groupId: group.id });
+      setLastInvite(out);
+      setEmail('');
+      await onChange();
+    } catch (err) {
+      onActionError(err instanceof Error ? err.message : 'Invite failed');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleRemove(memberEmail: string) {
+    if (!window.confirm(`Remove ${memberEmail} from ${group.name}?`)) return;
+    onActionError(null);
+    try {
+      await removeMember(memberEmail);
+      await onChange();
+    } catch (err) {
+      onActionError(err instanceof Error ? err.message : 'Remove failed');
+    }
+  }
+
+  async function handleRename(e: React.FormEvent) {
+    e.preventDefault();
+    const name = renameValue.trim();
+    if (!name || name === group.name) {
+      setRenameMode(false);
+      return;
+    }
+    onActionError(null);
+    try {
+      await renameGroup(group.id, name);
+      setRenameMode(false);
+      await onChange();
+    } catch (err) {
+      onActionError(err instanceof Error ? err.message : 'Rename failed');
+    }
+  }
+
+  async function handleDeleteGroup() {
+    if (!window.confirm(`Delete the "${group.name}" group? Its members will move to Default.`)) return;
+    onActionError(null);
+    try {
+      await deleteGroup(group.id);
+      await onChange();
+    } catch (err) {
+      onActionError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
+
+  return (
+    <div
+      data-testid={`settings-teams-group-${group.id}`}
+      className="rounded-md border border-slate-200 dark:border-slate-700 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        {renameMode && !group.isDefault ? (
+          <form onSubmit={(e) => void handleRename(e)} className="flex-1 flex gap-2 items-center">
+            <input
+              type="text"
+              value={renameValue}
+              autoFocus
+              onChange={(ev) => setRenameValue(ev.target.value)}
+              data-testid={`settings-teams-rename-input-${group.id}`}
+              className="input text-sm flex-1"
+              maxLength={50}
+            />
+            <button type="submit" className="btn-secondary text-xs">Save</button>
+            <button
+              type="button"
+              onClick={() => { setRenameValue(group.name); setRenameMode(false); }}
+              className="btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm font-semibold truncate" data-testid={`settings-teams-group-name-${group.id}`}>
+              {group.name}
+            </p>
+            {group.isDefault && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Default
+              </span>
+            )}
+          </div>
+        )}
+        {!group.isDefault && !renameMode && (
+          <div className="flex gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setRenameMode(true)}
+              data-testid={`settings-teams-rename-${group.id}`}
+              className="btn-secondary text-xs"
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDeleteGroup()}
+              data-testid={`settings-teams-delete-${group.id}`}
+              className="btn-secondary text-xs"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+
+      <form
+        onSubmit={(e) => void handleInvite(e)}
+        className="mt-3 flex flex-wrap gap-2 items-start"
+      >
         <input
           type="email"
           required
           value={email}
           onChange={(ev) => setEmail(ev.target.value)}
           placeholder="member@example.com"
-          data-testid="settings-team-invite-email"
-          className="input flex-1 min-w-[14rem]"
-          aria-label="Member email"
+          data-testid={`settings-teams-invite-email-${group.id}`}
+          className="input flex-1 min-w-[14rem] text-sm"
+          aria-label={`Invite member to ${group.name}`}
         />
         <button
           type="submit"
           disabled={inviting || !email.trim()}
-          data-testid="settings-team-invite-submit"
-          className="btn-primary disabled:opacity-60"
+          data-testid={`settings-teams-invite-submit-${group.id}`}
+          className="btn-primary text-sm disabled:opacity-60"
         >
           {inviting ? 'Inviting…' : 'Invite'}
         </button>
       </form>
 
-      {inviteError && (
-        <p
-          role="alert"
-          data-testid="settings-team-invite-error"
-          className="mt-2 text-xs text-red-600 dark:text-red-400"
-        >
-          {inviteError}
-        </p>
-      )}
       {lastInvite && (
         <p
-          data-testid="settings-team-invite-status"
+          data-testid={`settings-teams-invite-status-${group.id}`}
           className="mt-2 text-xs text-emerald-700 dark:text-emerald-300"
         >
           Invited <strong>{lastInvite.email}</strong> ·{' '}
@@ -1446,45 +1650,42 @@ function TeamMembersSection() {
         </p>
       )}
 
-      <div className="mt-4">
-        {!loaded && <p className="text-xs text-slate-500">Loading members…</p>}
-        {loadError && (
-          <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-            {loadError}
-          </p>
-        )}
-        {loaded && !loadError && members.length === 0 && (
-          <p className="text-xs text-slate-500" data-testid="settings-team-empty">
-            No team members yet. Invite your first chef above.
-          </p>
-        )}
-        {members.length > 0 && (
-          <ul data-testid="settings-team-list" className="divide-y divide-slate-200 dark:divide-slate-700">
-            {members.map((m) => (
-              <li
-                key={m.member_email}
-                data-testid={`settings-team-row-${m.member_email}`}
-                className="py-2 flex items-center justify-between gap-3"
+      {members.length === 0 ? (
+        <p
+          className="mt-3 text-xs text-slate-500 italic"
+          data-testid={`settings-teams-empty-${group.id}`}
+        >
+          No members in this group yet.
+        </p>
+      ) : (
+        <ul
+          data-testid={`settings-teams-list-${group.id}`}
+          className="mt-3 divide-y divide-slate-200 dark:divide-slate-700"
+        >
+          {members.map((m) => (
+            <li
+              key={m.member_email}
+              data-testid={`settings-teams-row-${m.member_email}`}
+              className="py-2 flex items-center justify-between gap-3"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{m.member_email}</p>
+                <p className="text-xs text-slate-500">
+                  {m.accepted_at ? 'Accepted' : 'Pending invite'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRemove(m.member_email)}
+                data-testid={`settings-teams-remove-${m.member_email}`}
+                className="btn-secondary text-xs"
               >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{m.member_email}</p>
-                  <p className="text-xs text-slate-500">
-                    {m.accepted_at ? 'Accepted' : 'Pending invite'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleRemove(m.member_email)}
-                  data-testid={`settings-team-remove-${m.member_email}`}
-                  className="btn-secondary text-xs"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </section>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

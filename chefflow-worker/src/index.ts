@@ -58,6 +58,10 @@ import {
   handleList as teamsHandleList,
   handleDelete as teamsHandleDelete,
   handleOwnersOfMe as teamsHandleOwnersOfMe,
+  handleListGroups as teamsHandleListGroups,
+  handleCreateGroup as teamsHandleCreateGroup,
+  handleRenameGroup as teamsHandleRenameGroup,
+  handleDeleteGroup as teamsHandleDeleteGroup,
   getAcceptedGroupPairsForMember,
   migrateOwnerToDefaultGroup,
 } from './teams';
@@ -454,7 +458,32 @@ export async function handleRequest(
     const res = await teamsHandleOwnersOfMe(teamsEnv, userId);
     return withCors(res);
   }
-  const teamsDeleteMatch = /^\/api\/teams\/(.+)$/.exec(url.pathname);
+
+  // T4 Phase 2 — Groups CRUD. Specific routes before the catch-all
+  // /api/teams/:email DELETE below so /api/teams/groups/grp_xxx
+  // doesn't accidentally route to the member-delete handler.
+  if (req.method === 'GET' && url.pathname === '/api/teams/groups') {
+    const res = await teamsHandleListGroups(teamsEnv, userId);
+    return withCors(res);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/teams/groups') {
+    const res = await teamsHandleCreateGroup(req, teamsEnv, userId);
+    return withCors(res);
+  }
+  const groupIdMatch = /^\/api\/teams\/groups\/(grp_[A-Za-z0-9_-]+)$/.exec(url.pathname);
+  if (req.method === 'PATCH' && groupIdMatch) {
+    const res = await teamsHandleRenameGroup(req, groupIdMatch[1], teamsEnv, userId);
+    return withCors(res);
+  }
+  if (req.method === 'DELETE' && groupIdMatch) {
+    const res = await teamsHandleDeleteGroup(groupIdMatch[1], teamsEnv, userId);
+    return withCors(res);
+  }
+
+  // DELETE /api/teams/:email — member removal. Regex tightened to
+  // require an @ so the groups routes above always win for paths
+  // matching /api/teams/groups/... .
+  const teamsDeleteMatch = /^\/api\/teams\/([^/]+@[^/]+)$/.exec(url.pathname);
   if (req.method === 'DELETE' && teamsDeleteMatch) {
     const email = decodeURIComponent(teamsDeleteMatch[1]);
     const res = await teamsHandleDelete(email, teamsEnv, userId);

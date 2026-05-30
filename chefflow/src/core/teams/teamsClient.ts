@@ -11,6 +11,17 @@ export interface TeamMember {
   role: 'viewer';
   invited_at: number;
   accepted_at: number | null;
+  /** T4 Phase 1 — which group this member belongs to. May be null on
+   *  pre-migration rows during the brief deploy window; the SettingsPage
+   *  treats them as belonging to the Default group. */
+  group_id?: string | null;
+}
+
+export interface TeamGroup {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  createdAt?: number;
 }
 
 export interface InviteResult {
@@ -80,11 +91,16 @@ async function readError(res: Response, fallback: string): Promise<never> {
 
 /** Owner invites a member by email. Returns the accept URL the chef can
  *  copy if Resend isn't configured / the recipient's email is misspelled. */
-export async function inviteMember(email: string, opts: Options = {}): Promise<InviteResult> {
+export async function inviteMember(
+  email: string,
+  opts: Options & { groupId?: string } = {},
+): Promise<InviteResult> {
+  const body: { email: string; groupId?: string } = { email };
+  if (opts.groupId) body.groupId = opts.groupId;
   const res = await authedFetch(`${originOf(opts)}/api/teams/invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify(body),
     fetchImpl: opts.fetchImpl,
   });
   if (!res.ok) return readError(res, 'Invite failed');
@@ -121,4 +137,59 @@ export async function removeMember(email: string, opts: Options = {}): Promise<v
     { method: 'DELETE', fetchImpl: opts.fetchImpl },
   );
   if (!res.ok) return readError(res, 'Remove failed');
+}
+
+// ---------------------------------------------------------------------------
+// T4 Phase 2 — Groups CRUD wrappers
+// ---------------------------------------------------------------------------
+
+/** Owner lists their named groups (Default first). */
+export async function listGroups(opts: Options = {}): Promise<TeamGroup[]> {
+  const res = await authedFetch(`${originOf(opts)}/api/teams/groups`, {
+    method: 'GET',
+    fetchImpl: opts.fetchImpl,
+  });
+  if (!res.ok) return readError(res, 'List groups failed');
+  const body = (await res.json()) as { groups: TeamGroup[] };
+  return body.groups ?? [];
+}
+
+/** Owner creates a new named group. */
+export async function createGroup(name: string, opts: Options = {}): Promise<TeamGroup> {
+  const res = await authedFetch(`${originOf(opts)}/api/teams/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+    fetchImpl: opts.fetchImpl,
+  });
+  if (!res.ok) return readError(res, 'Create group failed');
+  return (await res.json()) as TeamGroup;
+}
+
+/** Owner renames a non-default group. */
+export async function renameGroup(
+  groupId: string,
+  name: string,
+  opts: Options = {},
+): Promise<{ id: string; name: string }> {
+  const res = await authedFetch(
+    `${originOf(opts)}/api/teams/groups/${encodeURIComponent(groupId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+      fetchImpl: opts.fetchImpl,
+    },
+  );
+  if (!res.ok) return readError(res, 'Rename group failed');
+  return (await res.json()) as { id: string; name: string };
+}
+
+/** Owner deletes a non-default group; memberships cascade to Default. */
+export async function deleteGroup(groupId: string, opts: Options = {}): Promise<void> {
+  const res = await authedFetch(
+    `${originOf(opts)}/api/teams/groups/${encodeURIComponent(groupId)}`,
+    { method: 'DELETE', fetchImpl: opts.fetchImpl },
+  );
+  if (!res.ok) return readError(res, 'Delete group failed');
 }

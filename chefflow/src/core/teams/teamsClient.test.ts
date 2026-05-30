@@ -4,6 +4,10 @@ import {
   acceptInvite,
   listMembers,
   removeMember,
+  listGroups,
+  createGroup,
+  renameGroup,
+  deleteGroup,
   TeamsClientError,
 } from './teamsClient';
 
@@ -104,5 +108,90 @@ describe('teamsClient', () => {
     }) as unknown as typeof fetch;
     await removeMember('a+test@x.com', { origin: 'https://api.test', fetchImpl });
     expect(capturedUrl).toBe('https://api.test/api/teams/a%2Btest%40x.com');
+  });
+
+  it('inviteMember threads opts.groupId into the body so an owner can invite into a specific group (T4 Phase 2)', async () => {
+    let capturedBody = '';
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({ email: 'a@x', token: 't', acceptUrl: 'u', emailStatus: 'sent' }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    await inviteMember('a@x', { fetchImpl, groupId: 'grp_morning' });
+    expect(JSON.parse(capturedBody)).toEqual({ email: 'a@x', groupId: 'grp_morning' });
+  });
+
+  it('listGroups GETs /api/teams/groups and returns the groups array', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({
+        groups: [
+          { id: 'grp_d', name: 'Default', isDefault: true },
+          { id: 'grp_m', name: 'Morning', isDefault: false },
+        ],
+      }), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const out = await listGroups({ fetchImpl });
+    expect(out).toHaveLength(2);
+    expect(out[0].isDefault).toBe(true);
+    expect(out[1].name).toBe('Morning');
+  });
+
+  it('createGroup POSTs the name and returns the new group', async () => {
+    let capturedBody = '';
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = String(init?.body ?? '');
+      return new Response(
+        JSON.stringify({ id: 'grp_x', name: 'Morning', isDefault: false }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+    const out = await createGroup('Morning', { fetchImpl });
+    expect(out.id).toBe('grp_x');
+    expect(JSON.parse(capturedBody)).toEqual({ name: 'Morning' });
+  });
+
+  it('createGroup surfaces the worker\'s 409 message verbatim (duplicate name)', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: 'A group with that name already exists' }), { status: 409 }),
+    ) as unknown as typeof fetch;
+    try {
+      await createGroup('Morning', { fetchImpl });
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(TeamsClientError);
+      expect((err as TeamsClientError).status).toBe(409);
+      expect((err as TeamsClientError).message).toMatch(/already exists/i);
+    }
+  });
+
+  it('renameGroup PATCHes /api/teams/groups/:id with the new name', async () => {
+    let capturedUrl = '';
+    let capturedBody = '';
+    let capturedMethod = '';
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedBody = String(init?.body ?? '');
+      capturedMethod = String(init?.method ?? '');
+      return new Response(JSON.stringify({ id: 'grp_m', name: 'Morning shift' }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await renameGroup('grp_m', 'Morning shift', { origin: 'https://api.test', fetchImpl });
+    expect(capturedUrl).toBe('https://api.test/api/teams/groups/grp_m');
+    expect(capturedMethod).toBe('PATCH');
+    expect(JSON.parse(capturedBody)).toEqual({ name: 'Morning shift' });
+  });
+
+  it('deleteGroup DELETEs /api/teams/groups/:id', async () => {
+    let capturedUrl = '';
+    let capturedMethod = '';
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedMethod = String(init?.method ?? '');
+      return new Response(JSON.stringify({ removed: 'grp_m', movedToDefault: true }), { status: 200 });
+    }) as unknown as typeof fetch;
+    await deleteGroup('grp_m', { origin: 'https://api.test', fetchImpl });
+    expect(capturedUrl).toBe('https://api.test/api/teams/groups/grp_m');
+    expect(capturedMethod).toBe('DELETE');
   });
 });
