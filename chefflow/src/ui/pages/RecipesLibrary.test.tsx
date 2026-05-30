@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import RecipesLibrary from './RecipesLibrary';
 import { db } from '../../db/dexie';
 import type { Recipe } from '../../core/types';
+import * as groupsCache from '../../core/teams/groupsCache';
 
 vi.mock('../../core/tier/quotaClient', async () => {
   const actual = await vi.importActual<typeof import('../../core/tier/quotaClient')>(
@@ -420,5 +421,23 @@ describe('RecipesLibrary — Mine vs Shared scope filter (T3c follow-up)', () =>
     await waitFor(() => {
       expect(screen.getByTestId('recipe-card-shared-tag')).toHaveTextContent('Morning shift');
     });
+  });
+
+  it('owner-side chip falls back to listGroups() cache so the chip reads the team name, not the raw grp_… id (T8)', async () => {
+    // Mirror the reported bug: admin owns a recipe shared with team
+    // grp_9f56… whose human name is "test". The row has
+    // sharedWithGroupIds but no member-supplied teamName.
+    vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
+      { id: 'grp_9f56492b', name: 'test', isDefault: false },
+    ]);
+    await db.recipes.put({
+      ...stew,
+      sharedWithGroupIds: ['grp_9f56492b'],
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('recipes-scope-grp_9f56492b')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('recipes-scope-grp_9f56492b')).toHaveTextContent('test (1)');
   });
 });

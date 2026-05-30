@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Globe2, Users } from 'lucide-react';
 import { useTierStore } from '../../state/useTierStore';
 import { getGroupsCached } from '../../core/teams/groupsCache';
@@ -54,7 +55,12 @@ export default function VisibilityControl({
 
   const showCommunity = community !== undefined;
   const isEnterprise = tier === 'enterprise';
-  const showTeams = isEnterprise && groups !== null && groups.length > 0;
+  // T8 — Enterprise always sees the row, even with zero groups: an
+  // inline "Create a team" link surfaces the next action instead of
+  // self-hiding the control. We still suppress the row while the
+  // cache is loading (groups === null) so we don't flash an empty
+  // pill row before the request resolves.
+  const showTeams = isEnterprise && groups !== null;
 
   // Nothing to render: non-Enterprise on an entity without a community
   // pill (Event / Menu callers) means there's no choice to make.
@@ -97,6 +103,16 @@ export default function VisibilityControl({
           {community.checked && <span aria-hidden="true">✓</span>}
           Community
         </button>
+      )}
+
+      {showTeams && groups && groups.length === 0 && (
+        <Link
+          to="/teams"
+          data-testid="visibility-no-teams"
+          className="inline-flex items-center gap-1 px-3 h-7 rounded-full text-xs text-slate-500 underline hover:text-accent"
+        >
+          Create a team to share with
+        </Link>
       )}
 
       {showTeams && groups && groups.map((group) => {

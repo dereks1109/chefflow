@@ -15,7 +15,7 @@ function isDemo(event: KitchenEvent): boolean {
 export default function EventCard({ event, onDelete }: Props) {
   const dishCount = event.dishes.length;
   return (
-    <article className="flex flex-col min-h-[14rem] group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
+    <article className="flex flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
       {/* T6: items-center keeps the trash icon vertically aligned with
           the title's first line in the common 1-line case. Long titles
           (line-clamp-2) shift the icon to the visual midline of the
@@ -48,18 +48,21 @@ export default function EventCard({ event, onDelete }: Props) {
           <Layers className="h-3.5 w-3.5" aria-hidden="true" />
           <span>{dishCount} dish{dishCount === 1 ? '' : 'es'}</span>
         </div>
-        {event.workflow && event.workflow.length > 0 && (
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+        {/* T8 — always render the workflow row so cards line up across
+            the grid; chefs see "No workflow yet" instead of the row
+            collapsing. */}
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          {event.workflow && event.workflow.length > 0 ? (
             <span>Workflow · {event.workflow.length} step{event.workflow.length === 1 ? '' : 's'}</span>
-          </div>
-        )}
+          ) : (
+            <span className="italic opacity-60">No workflow yet</span>
+          )}
+        </div>
       </dl>
-      {event.notes && (
-        <p className="mt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
-          {event.notes}
-        </p>
-      )}
+      <p className="mt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
+        {event.notes ? event.notes : <span className="italic opacity-60">No description</span>}
+      </p>
     </article>
   );
 }

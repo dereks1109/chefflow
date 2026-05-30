@@ -13,6 +13,7 @@ import { useAuthGate, useIsGuest } from '../../state/useAuthGate';
 import { fetchPublicDemos } from '../../core/demos/demosClient';
 import GuestBrowseBanner from '../components/GuestBrowseBanner';
 import { filterRecipes, filterRecipesByMenu } from '../../core/util/recipeSearch';
+import { getGroupsCached } from '../../core/teams/groupsCache';
 import type { Menu, Recipe } from '../../core/types';
 
 export default function RecipesLibrary() {
@@ -36,8 +37,25 @@ export default function RecipesLibrary() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  // T8 — owner-side groupId → name map so the team-chip row shows the
+  // human-readable team name instead of the raw `grp_…` UUID for
+  // recipes the owner themselves shared. Member-pulled rows already
+  // carry `teamName` from the worker decoration; this map fills the
+  // gap for the owner's own recipes.
+  const [ownGroupNames, setOwnGroupNames] = useState<Map<string, string>>(new Map());
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    let cancelled = false;
+    void getGroupsCached()
+      .then((gs) => {
+        if (cancelled) return;
+        setOwnGroupNames(new Map(gs.map((g) => [g.id, g.name])));
+      })
+      .catch(() => { /* leave map empty — chip row falls back to id, same as today */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // Auto-open the new-recipe sheet when navigated here with
   // `state: { openNewRecipe: true, prefillTitle? }`. Consume the state
@@ -207,13 +225,16 @@ export default function RecipesLibrary() {
         else map.set(r.teamId, { name: r.teamName ?? r.teamId, count: 1 });
         continue;
       }
-      // Owner's own row shared with one or more teams.
+      // Owner's own row shared with one or more teams. T8 — falls back
+      // to the local groups cache (`ownGroupNames`) when the row has no
+      // member-supplied teamName, so the chip reads "test" instead of
+      // "grp_9f56492b-…".
       if (Array.isArray(r.sharedWithGroupIds)) {
         for (const gid of r.sharedWithGroupIds) {
           if (typeof gid !== 'string') continue;
           const existing = map.get(gid);
           if (existing) existing.count++;
-          else map.set(gid, { name: ownerNames.get(gid) ?? gid, count: 1 });
+          else map.set(gid, { name: ownerNames.get(gid) ?? ownGroupNames.get(gid) ?? gid, count: 1 });
         }
       }
     }
@@ -222,7 +243,7 @@ export default function RecipesLibrary() {
       .map(([id, v]) => ({ id, name: v.name, count: v.count }))
       .sort((a, b) => a.name.localeCompare(b.name));
     return { mineCount: mine.length, allCount: source.length, teamChips };
-  }, [recipes, activeMenu]);
+  }, [recipes, activeMenu, ownGroupNames]);
 
   // Maps of recipeId → count and recipeId → parent titles for "used in N"
   // badge + hover tooltip. Lets RecipeCard render which OTHER recipes

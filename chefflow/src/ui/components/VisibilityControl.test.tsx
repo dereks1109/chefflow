@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import VisibilityControl from './VisibilityControl';
 import { useTierStore } from '../../state/useTierStore';
 import * as groupsCache from '../../core/teams/groupsCache';
@@ -9,6 +10,12 @@ beforeEach(() => {
   vi.restoreAllMocks();
   useTierStore.setState({ tier: 'enterprise' });
 });
+
+function renderControl(node: React.ReactNode) {
+  // The control renders a react-router Link in the empty-state path
+  // (T8 — "Create a team"), so every test path needs a Router in scope.
+  return render(<MemoryRouter>{node}</MemoryRouter>);
+}
 
 describe('VisibilityControl (T5 Phase B)', () => {
   // Why these matter: this row is the chef's single decision point for
@@ -20,7 +27,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
       { id: 'grp_a', name: 'Team A', isDefault: false },
     ]);
-    const { container } = render(
+    const { container } = renderControl(
       <VisibilityControl
         selectedGroupIds={['grp_a']}
         community={{ checked: true, onChange: vi.fn() }}
@@ -33,7 +40,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
 
   it('renders nothing for non-Enterprise without a community pill (Event / Menu callers)', () => {
     useTierStore.setState({ tier: 'free' });
-    const { container } = render(
+    const { container } = renderControl(
       <VisibilityControl
         selectedGroupIds={undefined}
         onGroupsChange={vi.fn()}
@@ -44,7 +51,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
 
   it('renders JUST the Community pill for non-Enterprise on a recipe (any chef can publish to community)', () => {
     useTierStore.setState({ tier: 'free' });
-    render(
+    renderControl(
       <VisibilityControl
         selectedGroupIds={undefined}
         community={{ checked: false, onChange: vi.fn() }}
@@ -61,7 +68,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
       { id: 'grp_a', name: 'Team A', isDefault: false },
       { id: 'grp_b', name: 'Team B', isDefault: false },
     ]);
-    render(
+    renderControl(
       <VisibilityControl
         selectedGroupIds={['grp_a']}
         community={{ checked: false, onChange: vi.fn() }}
@@ -77,8 +84,9 @@ describe('VisibilityControl (T5 Phase B)', () => {
   });
 
   it('clicking the Community pill toggles the community.checked boolean (debounced to handleSave at the editor)', async () => {
+    vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([]);
     const onCommunityChange = vi.fn();
-    render(
+    renderControl(
       <VisibilityControl
         selectedGroupIds={undefined}
         community={{ checked: false, onChange: onCommunityChange }}
@@ -95,7 +103,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
       { id: 'grp_b', name: 'Team B', isDefault: false },
     ]);
     const onGroupsChange = vi.fn();
-    render(
+    renderControl(
       <VisibilityControl
         selectedGroupIds={['grp_a']}
         community={{ checked: false, onChange: vi.fn() }}
@@ -112,16 +120,17 @@ describe('VisibilityControl (T5 Phase B)', () => {
     expect(onGroupsChange).toHaveBeenCalledWith([]);
   });
 
-  it('Enterprise chef with zero teams + no community pill renders nothing (the chef hasn\'t created any teams yet)', async () => {
+  it('Enterprise chef with zero teams renders an inline "Create a team" link instead of self-hiding (T8 — events used to lose the row entirely)', async () => {
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([]);
-    const { container } = render(
+    renderControl(
       <VisibilityControl
         selectedGroupIds={undefined}
         onGroupsChange={vi.fn()}
       />,
     );
     await waitFor(() => {
-      expect(container.firstChild).toBeNull();
+      expect(screen.getByTestId('visibility-no-teams')).toBeInTheDocument();
     });
+    expect(screen.getByTestId('visibility-no-teams')).toHaveAttribute('href', '/teams');
   });
 });
