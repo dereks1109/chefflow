@@ -127,9 +127,7 @@ export default function SideNav({ onNavigate }: Props) {
           </NavLink>
         )}
 
-        <div className="px-1">
-          <UpgradeButton />
-        </div>
+        <UpgradeButton />
 
         <NavLink
           to="/settings"

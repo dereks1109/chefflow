@@ -17,6 +17,10 @@ import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 //
 // The UpgradeSheet itself decides what to show for each current tier;
 // this button only controls the entry-point copy.
+//
+// T11 — styled as a nav row (h-10 icon + label) to match the Admin /
+// Settings / Account rows in SideNav's footer block. Keeps an accent
+// text colour so it still reads as a CTA against the muted slate rows.
 
 interface TierCopy {
   label: string;
@@ -44,15 +48,16 @@ export default function UpgradeButton() {
       aria-label={copy.ariaLabel}
       data-testid="nav-upgrade-button"
       className={[
-        'inline-flex items-center gap-1.5',
-        'px-2.5 h-7 rounded-full',
-        'text-xs font-semibold',
-        'bg-accent text-white hover:bg-accent/90',
-        'transition-colors',
+        'flex items-center gap-3 px-3 h-10 rounded-md text-sm font-medium',
+        'transition-colors duration-150',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        // Accent colour keeps the upgrade CTA visually distinct from
+        // the muted slate Admin / Settings / Account rows that bracket
+        // it in the SideNav footer.
+        'text-accent hover:bg-accent/10',
       ].join(' ')}
     >
-      <Sparkles size={13} aria-hidden="true" />
+      <Sparkles size={18} aria-hidden="true" />
       <span>{copy.label}</span>
     </button>
   );
