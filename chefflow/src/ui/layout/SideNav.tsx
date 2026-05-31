@@ -14,7 +14,6 @@ import BrandLogo from '../components/BrandLogo';
 import UpgradeButton from '../components/UpgradeButton';
 import AccountAvatar from '../components/AccountAvatar';
 import { useAdminStore } from '../../state/useAdminStore';
-import { useTierStore } from '../../state/useTierStore';
 
 // T8 — single source of truth for the chef's nav. Replaces the three
 // pre-T8 surfaces (TopNav lg-only, MobileTopBar lg:hidden, BottomNav
@@ -23,8 +22,12 @@ import { useTierStore } from '../../state/useTierStore';
 // desktop aside, once inside a slide-in drawer for mobile. `onNavigate`
 // fires on every link click so the drawer can close itself.
 //
-// The Teams link is Enterprise-only (unchanged from T5) and the Admin
-// link is gated to isAdmin. Everything else renders for every chef.
+// T11 — Teams is now visible to ALL signed-in chefs, not just
+// Enterprise. Non-Enterprise users can be MEMBERS of an Enterprise
+// owner's team via the invite flow and need /teams access to see what's
+// shared with them. The /teams page itself handles the role-based view
+// (member-only chefs see read-only "View" cards; only Enterprise sees
+// "+ New team"). Admin stays gated to isAdmin.
 
 interface Props {
   /** Called whenever a primary or footer nav link is clicked. Drawer
@@ -44,19 +47,19 @@ const BASE_NAV_ITEMS = [
 
 export default function SideNav({ onNavigate }: Props) {
   const isAdmin = useAdminStore((s) => s.isAdmin);
-  const tier = useTierStore((s) => s.tier);
   const { isSignedIn } = useUser();
   const clerk = useClerk();
   const isE2E = (import.meta.env.VITE_E2E_MODE as string | undefined) === 'true';
   const showSignedInChrome = isE2E || isSignedIn;
 
-  const navItems = tier === 'enterprise'
-    ? [
-        ...BASE_NAV_ITEMS.slice(0, 3),
-        { to: '/teams', label: 'Teams', icon: Users } as const,
-        ...BASE_NAV_ITEMS.slice(3),
-      ]
-    : BASE_NAV_ITEMS;
+  // T11 — Teams is visible to everyone; the /teams page itself decides
+  // whether to render owner-only chrome (create team / rename / invite)
+  // based on the per-group `role` returned from the worker.
+  const navItems = [
+    ...BASE_NAV_ITEMS.slice(0, 3),
+    { to: '/teams', label: 'Teams', icon: Users } as const,
+    ...BASE_NAV_ITEMS.slice(3),
+  ];
 
   function handleNavigate() {
     onNavigate?.();

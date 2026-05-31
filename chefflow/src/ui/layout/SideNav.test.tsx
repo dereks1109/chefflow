@@ -59,15 +59,15 @@ describe('SideNav (T8)', () => {
     expect(screen.getByRole('link', { name: /^contact$/i })).toHaveAttribute('href', '/contact');
   });
 
-  it('hides the Teams link for non-Enterprise tiers', () => {
-    renderNav();
-    expect(screen.queryByRole('link', { name: /^teams$/i })).toBeNull();
-  });
-
-  it('shows the Teams link for Enterprise chefs (T5 gate preserved)', () => {
-    useTierStore.setState({ tier: 'enterprise' });
+  it('always shows the Teams link regardless of tier (T11 — non-Enterprise chefs can be team members)', () => {
+    // Non-Enterprise: still visible. Members of an Enterprise owner's
+    // team need /teams to see what's shared with them.
     renderNav();
     expect(screen.getByRole('link', { name: /^teams$/i })).toHaveAttribute('href', '/teams');
+    // Enterprise: also visible.
+    useTierStore.setState({ tier: 'enterprise' });
+    renderNav();
+    expect(screen.getAllByRole('link', { name: /^teams$/i })[0]).toHaveAttribute('href', '/teams');
   });
 
   it('hides the Admin link when isAdmin is false', () => {

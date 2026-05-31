@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, Navigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Users, Plus, X, AlertTriangle } from 'lucide-react';
 import {
   listGroups,
@@ -11,13 +11,17 @@ import {
 } from '../../core/teams/teamsClient';
 import { useTierStore } from '../../state/useTierStore';
 
-// /teams (T5): top-nav landing for the Enterprise team-share feature.
-// Lists the chef's teams as cards (member count + Manage link); a
-// "+ New team" button opens a small modal to create the first one.
+// /teams (T5, expanded in T11): top-nav landing for the team-share
+// feature. Lists every team visible to the caller:
+//   - Teams the chef created themselves (role='owner') — render with
+//     a member count + "Manage" link.
+//   - Teams the chef is a MEMBER of (role='member', T11) — render with
+//     an "Owned by …" subtext + "View" link. Member-only chefs can
+//     drill into a per-team page to see what's been shared with them.
 //
-// Tier gate: non-Enterprise chefs are redirected to /recipes. The
-// TopNav link is already gated to Enterprise, but the redirect here
-// covers the deep-link case.
+// "+ New team" is gated to Enterprise tier (the worker rejects
+// non-enterprise create calls). Non-Enterprise chefs with no
+// memberships see a "you're not in any team yet" empty state.
 
 export default function TeamsList() {
   const tier = useTierStore((s) => s.tier);
@@ -30,23 +34,30 @@ export default function TeamsList() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
+  const canCreateTeams = tier === 'enterprise';
+
   useEffect(() => {
-    if (tier !== 'enterprise') return;
     let cancelled = false;
     void (async () => {
       try {
-        const [g, m] = await Promise.all([listGroups(), listMembers()]);
-        if (!cancelled) { setGroups(g); setMembers(m); }
+        const g = await listGroups();
+        if (cancelled) return;
+        setGroups(g);
+        // listMembers is owner-only on the worker (chef sees their
+        // own invite roster), so skip the call when the chef hasn't
+        // created any teams themselves — pure-member callers don't
+        // need it for the member-count badge anyway.
+        const ownsAny = g.some((x) => x.role === 'owner');
+        if (ownsAny) {
+          const m = await listMembers();
+          if (!cancelled) setMembers(m);
+        }
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to load teams');
       }
     })();
     return () => { cancelled = true; };
-  }, [tier]);
-
-  if (tier !== 'enterprise') {
-    return <Navigate to="/recipes" replace />;
-  }
+  }, []);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -71,20 +82,22 @@ export default function TeamsList() {
 
   return (
     <section className="p-4 md:p-6 max-w-5xl mx-auto">
-      <header className="flex items-center justify-between mb-6 gap-2 flex-wrap">
+      <header className="flex items-center justify-between mb-6 gap-2 flex-wrap min-h-touch">
         <div className="flex items-center gap-2">
           <Users className="h-6 w-6 text-accent" aria-hidden="true" />
           <h1 className="text-2xl font-bold">Teams</h1>
         </div>
-        <button
-          type="button"
-          onClick={() => { setNewName(''); setCreateError(null); setCreateOpen(true); }}
-          data-testid="teams-new-team-button"
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          New team
-        </button>
+        {canCreateTeams && (
+          <button
+            type="button"
+            onClick={() => { setNewName(''); setCreateError(null); setCreateOpen(true); }}
+            data-testid="teams-new-team-button"
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            New team
+          </button>
+        )}
       </header>
 
       {loadError && (
@@ -103,20 +116,33 @@ export default function TeamsList() {
           className="rounded-lg border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center"
         >
           <Users className="h-10 w-10 mx-auto text-slate-400" aria-hidden="true" />
-          <p className="mt-3 text-base font-medium">No teams yet</p>
-          <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
-            Create your first team to start inviting members. You decide
-            which recipes, events, and menus each team can see when you
-            edit them.
-          </p>
-          <button
-            type="button"
-            onClick={() => { setNewName(''); setCreateError(null); setCreateOpen(true); }}
-            className="mt-4 btn-primary inline-flex items-center gap-2"
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Create your first team
-          </button>
+          {canCreateTeams ? (
+            <>
+              <p className="mt-3 text-base font-medium">No teams yet</p>
+              <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
+                Create your first team to start inviting members. You decide
+                which recipes, events, and menus each team can see when you
+                edit them.
+              </p>
+              <button
+                type="button"
+                onClick={() => { setNewName(''); setCreateError(null); setCreateOpen(true); }}
+                className="mt-4 btn-primary inline-flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Create your first team
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="mt-3 text-base font-medium">You're not in any team yet</p>
+              <p className="mt-1 text-sm text-slate-500 max-w-md mx-auto">
+                Teams are created by Enterprise chefs. If a colleague invites
+                you to one, the team will appear here and any recipes or
+                events they share with it will show up in your library.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -133,11 +159,21 @@ export default function TeamsList() {
             >
               <Link to={`/teams/${group.id}`} className="block">
                 <p className="font-semibold truncate">{group.name}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {memberCountFor(group.id)} member
-                  {memberCountFor(group.id) === 1 ? '' : 's'}
+                {group.role === 'owner' ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {memberCountFor(group.id)} member
+                    {memberCountFor(group.id) === 1 ? '' : 's'}
+                  </p>
+                ) : (
+                  // T11 — member-only card: skip the member-count
+                  // (worker doesn't expose other members' roster to
+                  // non-owners) and call out that the team is shared
+                  // with the caller rather than owned by them.
+                  <p className="mt-1 text-xs text-slate-500">Shared team</p>
+                )}
+                <p className="mt-3 text-xs text-accent">
+                  {group.role === 'owner' ? 'Manage →' : 'View →'}
                 </p>
-                <p className="mt-3 text-xs text-accent">Manage →</p>
               </Link>
             </li>
           ))}

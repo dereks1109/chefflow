@@ -22,6 +22,14 @@ export interface TeamGroup {
   name: string;
   isDefault: boolean;
   createdAt?: number;
+  /** T11 — 'owner' for groups the caller created; 'member' for
+   *  groups the caller has been invited into and accepted. Lets the
+   *  SPA show member-only teams in /teams and gate write actions
+   *  (rename, invite, remove, delete) on the owner-role rows. */
+  role: 'owner' | 'member';
+  /** T11 — clerk userId of the team's actual owner. Same as the
+   *  caller when role === 'owner'. */
+  ownerUserId: string;
 }
 
 export interface InviteResult {

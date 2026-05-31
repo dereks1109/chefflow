@@ -23,25 +23,23 @@ function renderTeams() {
   );
 }
 
-describe('TeamsList (T5)', () => {
+describe('TeamsList (T5, expanded T11)', () => {
   // Why these matter: this is the top-nav landing for the team-share
-  // feature. A regression here strands the chef before they can create
-  // a team. Tests pin the tier-redirect, empty-state CTA, and the
-  // create-then-navigate-to-detail flow.
+  // feature. T11 made the page available to every signed-in chef
+  // (not just Enterprise) so team MEMBERS can see what they're in.
+  // Tests pin the role-aware rendering (Manage vs View, member-empty
+  // vs owner-empty copy) and that the "+ New team" button is
+  // gated to Enterprise only.
 
-  it('redirects non-Enterprise tiers to /recipes (no dead-end page)', async () => {
+  it('shows the member-only empty-state copy + hides "+ New team" for non-Enterprise chefs with no memberships', async () => {
     useTierStore.setState({ tier: 'free' });
-    const groupsSpy = vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([]);
-    const membersSpy = vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([]);
     renderTeams();
-    await waitFor(() => {
-      expect(screen.getByTestId('recipes-redirect')).toBeInTheDocument();
-    });
-    expect(groupsSpy).not.toHaveBeenCalled();
-    expect(membersSpy).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('teams-empty-state')).toHaveTextContent(/not in any team yet/i);
+    expect(screen.queryByTestId('teams-new-team-button')).toBeNull();
   });
 
-  it('shows empty-state when the chef has no teams yet, with a Create-your-first-team CTA', async () => {
+  it('shows the owner empty-state with a Create-your-first-team CTA for Enterprise chefs with no teams', async () => {
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderTeams();
@@ -49,10 +47,10 @@ describe('TeamsList (T5)', () => {
     expect(screen.getByRole('button', { name: /create your first team/i })).toBeInTheDocument();
   });
 
-  it('lists existing teams as cards with member counts derived from listMembers', async () => {
+  it('lists owner-role teams with member counts derived from listMembers', async () => {
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
-      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
-      { id: 'grp_evening', name: 'Evening shift', isDefault: false },
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
+      { id: 'grp_evening', name: 'Evening shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([
       { member_email: 'a@x', member_user_id: 'u_a', role: 'viewer', invited_at: 1, accepted_at: 2, group_id: 'grp_morning' },
@@ -68,7 +66,7 @@ describe('TeamsList (T5)', () => {
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     const createSpy = vi.spyOn(teamsClient, 'createGroup').mockResolvedValue({
-      id: 'grp_new', name: 'Morning shift', isDefault: false,
+      id: 'grp_new', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me',
     });
     renderTeams();
     await screen.findByTestId('teams-empty-state');
@@ -93,5 +91,25 @@ describe('TeamsList (T5)', () => {
     await userEvent.type(screen.getByTestId('teams-create-name-input'), 'Morning');
     await userEvent.click(screen.getByTestId('teams-create-submit'));
     expect(await screen.findByTestId('teams-create-error')).toHaveTextContent(/already exists/i);
+  });
+
+  it('T11 — non-Enterprise chef with a member-role team sees a View card + no New team button + no listMembers call', async () => {
+    useTierStore.setState({ tier: 'free' });
+    const groupsSpy = vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_shared', name: "Anna's Kitchen", isDefault: false, role: 'member', ownerUserId: 'u_anna' },
+    ]);
+    const membersSpy = vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    renderTeams();
+    const card = await screen.findByTestId('teams-card-grp_shared');
+    expect(card).toHaveTextContent(/Anna's Kitchen/);
+    // Member card: "Shared team" subtext + "View →" CTA, not the
+    // owner-only "Manage →" / member-count copy.
+    expect(card).toHaveTextContent(/Shared team/);
+    expect(card).toHaveTextContent(/View/);
+    expect(screen.queryByTestId('teams-new-team-button')).toBeNull();
+    expect(groupsSpy).toHaveBeenCalledTimes(1);
+    // listMembers is skipped because the caller owns no groups —
+    // worker would reject the call anyway for pure-member callers.
+    expect(membersSpy).not.toHaveBeenCalled();
   });
 });

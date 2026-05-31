@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Users, Trash2, AlertTriangle, BookOpen, CalendarDays } from 'lucide-react';
 import {
   listGroups,
@@ -13,7 +13,6 @@ import {
   type TeamMember,
   type InviteResult,
 } from '../../core/teams/teamsClient';
-import { useTierStore } from '../../state/useTierStore';
 import RecipeCard from '../components/RecipeCard';
 import EventCard from '../components/EventCard';
 import { subscribeRecipes } from '../../db/recipesRepo';
@@ -26,13 +25,18 @@ function isTeamTab(v: string | null): v is TeamTab {
   return v === 'details' || v === 'recipes' || v === 'events';
 }
 
-// /teams/:id (T5): manage a single team — rename, invite + remove
-// members, delete the team. Tier-gated like /teams.
+// /teams/:id (T5, expanded T11): per-team page. For OWNER role (chef
+// created this team) it's the management surface: rename, invite,
+// remove members, delete. For MEMBER role (chef was invited and
+// accepted) it's a read-only view: team name + the Recipes / Events
+// tabs showing what the owner has shared with this team. The Recipes
+// + Events tabs work identically for both roles — they filter local
+// Dexie by sharedWithGroupIds, which already contains the team's
+// content because T3c sync.pull fans it in for accepted members.
 
 export default function TeamDetail() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const tier = useTierStore((s) => s.tier);
 
   // T6 — tab state mirrored to ?tab=… for deep-linkability.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,15 +91,23 @@ export default function TeamDetail() {
   const [lastInvite, setLastInvite] = useState<InviteResult | null>(null);
 
   async function refresh() {
-    const [groups, m] = await Promise.all([listGroups(), listMembers()]);
+    // listGroups now returns owner + member-of teams (T11), so it's
+    // the right call regardless of role. We only fetch listMembers
+    // when the caller owns the team — the worker rejects member
+    // callers asking for the roster (it's the owner's data).
+    const groups = await listGroups();
     const found = groups.find((g) => g.id === id) ?? null;
     setGroup(found);
-    setMembers(m.filter((x) => x.group_id === id));
     if (found) setRenameValue(found.name);
+    if (found?.role === 'owner') {
+      const m = await listMembers();
+      setMembers(m.filter((x) => x.group_id === id));
+    } else {
+      setMembers([]);
+    }
   }
 
   useEffect(() => {
-    if (tier !== 'enterprise') return;
     let cancelled = false;
     void (async () => {
       try {
@@ -106,11 +118,7 @@ export default function TeamDetail() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tier, id]);
-
-  if (tier !== 'enterprise') {
-    return <Navigate to="/recipes" replace />;
-  }
+  }, [id]);
 
   if (loadError) {
     return (
@@ -145,6 +153,11 @@ export default function TeamDetail() {
 
   // `group` is narrowed to TeamGroup from here down.
   const safeGroup: TeamGroup = group;
+  // T11 — every write action (rename / invite / remove / delete) is
+  // gated on this. Member callers see a read-only view of the team
+  // name + the Recipes / Events tabs; they can't mutate the owner's
+  // team config.
+  const isOwner = safeGroup.role === 'owner';
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -245,7 +258,7 @@ export default function TeamDetail() {
             <h1 className="text-2xl font-bold" data-testid="team-detail-name">
               {safeGroup.name}
             </h1>
-            {!safeGroup.isDefault && (
+            {isOwner && !safeGroup.isDefault && (
               <button
                 type="button"
                 onClick={() => setRenameMode(true)}
@@ -306,6 +319,7 @@ export default function TeamDetail() {
       </nav>
 
       {activeTab === 'details' && (<>
+      {isOwner && (<>
       <div>
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
           Invite a member
@@ -408,6 +422,17 @@ export default function TeamDetail() {
             Delete team
           </button>
         </div>
+      )}
+      </>)}
+      {!isOwner && (
+        <p
+          data-testid="team-detail-member-notice"
+          className="text-sm text-slate-500 italic"
+        >
+          You're a member of this team. Use the Shared recipes /
+          Shared events tabs above to see what the team's owner has
+          shared with you.
+        </p>
       )}
       </>)}
 

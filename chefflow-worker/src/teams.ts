@@ -600,26 +600,50 @@ function isValidGroupName(s: unknown): s is string {
   return typeof s === 'string' && s.trim().length > 0 && s.trim().length <= MAX_GROUP_NAME_LEN;
 }
 
-/** GET /api/teams/groups — owner-only. Returns the owner's groups
- *  in createdAt asc. T5: no lazy default; an empty list is the
- *  expected state until the chef creates their first team from /teams. */
+/** GET /api/teams/groups — returns every team visible to the caller,
+ *  decorated with their role:
+ *    - `role: 'owner'` for groups the caller created.
+ *    - `role: 'member'` for groups the caller has been invited into
+ *      and accepted (T11). This lets non-Enterprise chefs who belong
+ *      to an Enterprise team's roster see /teams in their nav and
+ *      open the per-team page to view shared content.
+ *  Each group also carries the actual owner's userId so the SPA can
+ *  show "Owned by …" labels without an extra Clerk lookup.
+ *  No lazy default: an empty list is the expected state until the
+ *  chef creates their first team from /teams (Enterprise) or accepts
+ *  an invite (any tier).
+ */
 export async function handleListGroups(
   env: TeamsEnv,
-  ownerUserId: string,
+  callerUserId: string,
 ): Promise<Response> {
   const rows = await env.DB
     .prepare(
-      `SELECT id, name, is_default, created_at
-       FROM groups WHERE owner_user_id = ?
+      `SELECT id, name, is_default, created_at, owner_user_id, 'owner' AS role
+       FROM groups WHERE owner_user_id = ?1
+       UNION
+       SELECT g.id, g.name, g.is_default, g.created_at, g.owner_user_id, 'member' AS role
+       FROM groups g
+       JOIN team_memberships m ON m.group_id = g.id
+       WHERE m.member_user_id = ?1 AND m.accepted_at IS NOT NULL
        ORDER BY is_default DESC, created_at ASC`,
     )
-    .bind(ownerUserId)
-    .all<{ id: string; name: string; is_default: number; created_at: number }>();
+    .bind(callerUserId)
+    .all<{
+      id: string;
+      name: string;
+      is_default: number;
+      created_at: number;
+      owner_user_id: string;
+      role: 'owner' | 'member';
+    }>();
   const groups = (rows.results ?? []).map((r) => ({
     id: r.id,
     name: r.name,
     isDefault: r.is_default === 1,
     createdAt: r.created_at,
+    ownerUserId: r.owner_user_id,
+    role: r.role,
   }));
   return jsonResponse({ groups }, 200);
 }

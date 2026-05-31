@@ -25,7 +25,7 @@ describe('VisibilityControl (T5 Phase B)', () => {
 
   it('renders nothing when readOnly is true (viewer can\'t change owner\'s sharing)', () => {
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
-      { id: 'grp_a', name: 'Team A', isDefault: false },
+      { id: 'grp_a', name: 'Team A', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     const { container } = renderControl(
       <VisibilityControl
@@ -65,8 +65,8 @@ describe('VisibilityControl (T5 Phase B)', () => {
 
   it('renders Community + one pill per team for Enterprise chefs', async () => {
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
-      { id: 'grp_a', name: 'Team A', isDefault: false },
-      { id: 'grp_b', name: 'Team B', isDefault: false },
+      { id: 'grp_a', name: 'Team A', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
+      { id: 'grp_b', name: 'Team B', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     renderControl(
       <VisibilityControl
@@ -99,8 +99,8 @@ describe('VisibilityControl (T5 Phase B)', () => {
 
   it('clicking a team pill calls onGroupsChange with the full next array (toggle in/out)', async () => {
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
-      { id: 'grp_a', name: 'Team A', isDefault: false },
-      { id: 'grp_b', name: 'Team B', isDefault: false },
+      { id: 'grp_a', name: 'Team A', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
+      { id: 'grp_b', name: 'Team B', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     const onGroupsChange = vi.fn();
     renderControl(

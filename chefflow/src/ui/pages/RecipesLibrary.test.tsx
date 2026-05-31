@@ -428,7 +428,7 @@ describe('RecipesLibrary — Mine vs Shared scope filter (T3c follow-up)', () =>
     // grp_9f56… whose human name is "test". The row has
     // sharedWithGroupIds but no member-supplied teamName.
     vi.spyOn(groupsCache, 'getGroupsCached').mockResolvedValue([
-      { id: 'grp_9f56492b', name: 'test', isDefault: false },
+      { id: 'grp_9f56492b', name: 'test', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     await db.recipes.put({
       ...stew,

@@ -29,10 +29,25 @@ describe('TeamDetail (T5)', () => {
   // invites (members can't be added) or worse — silently fails the
   // delete (chef thinks the team's gone, it isn't).
 
-  it('redirects non-Enterprise tiers to /recipes', async () => {
+  it('T11 — non-Enterprise chef can land on /teams/:id and see member-only chrome (no rename / invite / delete)', async () => {
     useTierStore.setState({ tier: 'free' });
-    renderDetail('grp_x');
-    expect(await screen.findByTestId('recipes-redirect')).toBeInTheDocument();
+    // Worker returns the team with role='member' for the caller —
+    // their accepted membership row joined to the owner's group.
+    vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
+      { id: 'grp_shared', name: "Anna's Kitchen", isDefault: false, role: 'member', ownerUserId: 'u_anna' },
+    ]);
+    const listMembersSpy = vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
+    renderDetail('grp_shared');
+    // Team name renders, member notice replaces the owner chrome.
+    expect(await screen.findByTestId('team-detail-name')).toHaveTextContent("Anna's Kitchen");
+    expect(screen.getByTestId('team-detail-member-notice')).toBeInTheDocument();
+    // None of the owner-only write surfaces render.
+    expect(screen.queryByTestId('team-detail-rename-button')).toBeNull();
+    expect(screen.queryByTestId('team-detail-invite-email')).toBeNull();
+    expect(screen.queryByTestId('team-detail-delete-team')).toBeNull();
+    // Worker rejects member callers asking for the owner's roster,
+    // so the SPA must skip the listMembers call entirely.
+    expect(listMembersSpy).not.toHaveBeenCalled();
   });
 
   it('shows a not-found state when the team id does NOT belong to the chef', async () => {
@@ -44,8 +59,8 @@ describe('TeamDetail (T5)', () => {
 
   it('inviting a member calls inviteMember with the team\'s id + refreshes the list', async () => {
     vi.spyOn(teamsClient, 'listGroups')
-      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false }])
-      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false }]);
+      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false, role: 'owner', ownerUserId: 'u_me' }])
+      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false, role: 'owner', ownerUserId: 'u_me' }]);
     vi.spyOn(teamsClient, 'listMembers')
       .mockResolvedValueOnce([]) // initial
       .mockResolvedValueOnce([
@@ -72,7 +87,7 @@ describe('TeamDetail (T5)', () => {
 
   it('clicking Delete team calls deleteGroup + navigates back to /teams', async () => {
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
-      { id: 'grp_morning', name: 'Morning', isDefault: false },
+      { id: 'grp_morning', name: 'Morning', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     const deleteSpy = vi.spyOn(teamsClient, 'deleteGroup').mockResolvedValue();
@@ -91,8 +106,8 @@ describe('TeamDetail (T5)', () => {
   it('renaming a team calls renameGroup + refreshes (Rename button hidden on legacy Default)', async () => {
     // Two-pass mock: initial list shows "Morning"; second list shows "Morning shift".
     vi.spyOn(teamsClient, 'listGroups')
-      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false }])
-      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning shift', isDefault: false }]);
+      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning', isDefault: false, role: 'owner', ownerUserId: 'u_me' }])
+      .mockResolvedValueOnce([{ id: 'grp_morning', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' }]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     const renameSpy = vi.spyOn(teamsClient, 'renameGroup').mockResolvedValue({
       id: 'grp_morning', name: 'Morning shift',
@@ -120,7 +135,7 @@ describe('TeamDetail — tabs (T6)', () => {
 
   it('renders the 3 tab triggers + defaults to Details when ?tab is missing', async () => {
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
-      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderDetail('grp_morning');
@@ -146,7 +161,7 @@ describe('TeamDetail — tabs (T6)', () => {
       { id: 'r3', title: 'Private Cake',  originalYield: 1, ingredients: [], steps: [], createdAt: 0, updatedAt: 0 } as never,
     ]);
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
-      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderDetail('grp_morning');
@@ -170,7 +185,7 @@ describe('TeamDetail — tabs (T6)', () => {
       { id: 'e2', title: 'Evening Banquet', notes: '', dishes: [], createdAt: 0, updatedAt: 0, sharedWithGroupIds: ['grp_evening'] } as never,
     ]);
     vi.spyOn(teamsClient, 'listGroups').mockResolvedValue([
-      { id: 'grp_morning', name: 'Morning shift', isDefault: false },
+      { id: 'grp_morning', name: 'Morning shift', isDefault: false, role: 'owner', ownerUserId: 'u_me' },
     ]);
     vi.spyOn(teamsClient, 'listMembers').mockResolvedValue([]);
     renderDetail('grp_morning');

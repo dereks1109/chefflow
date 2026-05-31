@@ -200,22 +200,42 @@ function makeMembershipDb(
               .map((g) => ({ id: g.id }));
             return { success: true, results: mine as T[], meta: {} } as unknown as D1Result<T>;
           }
-          // T4 Phase 2 — handleListGroups: SELECT id, name, is_default, created_at FROM groups
-          if (sql.includes('SELECT id, name, is_default, created_at')) {
-            const [ownerUserId] = bindings as [string];
-            const mine = groups
-              .filter((g) => g.owner_user_id === ownerUserId)
-              .sort((a, b) => {
-                if (a.is_default !== b.is_default) return b.is_default - a.is_default;
-                return a.created_at - b.created_at;
-              })
+          // T11 — handleListGroups (UNION owner + member-of):
+          // SELECT id, name, is_default, created_at, owner_user_id, 'owner'/'member' AS role
+          // The query takes a single ?1 callerUserId bound once and reused
+          // for both branches of the UNION.
+          if (sql.includes('SELECT id, name, is_default, created_at') && sql.includes('UNION')) {
+            const [callerUserId] = bindings as [string];
+            const owned = groups
+              .filter((g) => g.owner_user_id === callerUserId)
               .map((g) => ({
                 id: g.id,
                 name: g.name,
                 is_default: g.is_default,
                 created_at: g.created_at,
+                owner_user_id: g.owner_user_id,
+                role: 'owner' as const,
               }));
-            return { success: true, results: mine as T[], meta: {} } as unknown as D1Result<T>;
+            const memberOfGroupIds = new Set(
+              rows
+                .filter((r) => r.member_user_id === callerUserId && r.accepted_at !== null && r.group_id)
+                .map((r) => r.group_id as string),
+            );
+            const memberOf = groups
+              .filter((g) => memberOfGroupIds.has(g.id) && g.owner_user_id !== callerUserId)
+              .map((g) => ({
+                id: g.id,
+                name: g.name,
+                is_default: g.is_default,
+                created_at: g.created_at,
+                owner_user_id: g.owner_user_id,
+                role: 'member' as const,
+              }));
+            const merged = [...owned, ...memberOf].sort((a, b) => {
+              if (a.is_default !== b.is_default) return b.is_default - a.is_default;
+              return a.created_at - b.created_at;
+            });
+            return { success: true, results: merged as T[], meta: {} } as unknown as D1Result<T>;
           }
           if (sql.includes('SELECT member_email, member_user_id, role, invited_at, accepted_at')) {
             const [ownerUserId] = bindings as [string];
@@ -754,6 +774,44 @@ describe('Groups CRUD handlers (T5: no auto-Default)', () => {
     const out = (await res.json()) as { groups: unknown[] };
     expect(out.groups).toEqual([]);
     expect(groups).toHaveLength(0);
+  });
+
+  it('handleListGroups (T11) returns owner-created groups + member-of groups for the caller, decorated with role + ownerUserId', async () => {
+    // Setup: user_A owns Team A; user_B is an ACCEPTED member of Team A
+    // (group_id set + accepted_at non-null). Calling handleListGroups
+    // as user_B should return Team A with role='member' + ownerUserId='u_A',
+    // not the old empty response that pre-T11 worker would have given.
+    const { db } = makeMembershipDb(
+      [{
+        owner_user_id: 'u_A',
+        member_email: 'b@k.uk',
+        member_user_id: 'u_B',
+        role: 'viewer',
+        invite_token: 't1',
+        invited_at: 100,
+        accepted_at: 200,
+        group_id: 'grp_A',
+      }],
+      [{ id: 'grp_A', owner_user_id: 'u_A', name: 'Team A', is_default: 0, created_at: 50 }],
+    );
+    const { impl } = makeClerkAndResendFetch({});
+    const env = makeEnv(db, impl, 're_test_long_enough');
+    const { handleListGroups } = await import('./teams');
+
+    // Owner perspective — Team A appears as role='owner'.
+    const ownerRes = await handleListGroups(env, 'u_A');
+    expect(ownerRes.status).toBe(200);
+    const ownerOut = (await ownerRes.json()) as { groups: Array<Record<string, unknown>> };
+    expect(ownerOut.groups).toHaveLength(1);
+    expect(ownerOut.groups[0]).toMatchObject({ id: 'grp_A', role: 'owner', ownerUserId: 'u_A' });
+
+    // Member perspective — Team A appears as role='member' with the
+    // actual owner's userId so the SPA can render "Owned by …".
+    const memberRes = await handleListGroups(env, 'u_B');
+    expect(memberRes.status).toBe(200);
+    const memberOut = (await memberRes.json()) as { groups: Array<Record<string, unknown>> };
+    expect(memberOut.groups).toHaveLength(1);
+    expect(memberOut.groups[0]).toMatchObject({ id: 'grp_A', role: 'member', ownerUserId: 'u_A' });
   });
 
   it('handleCreateGroup adds a non-default group and rejects duplicate names (case-insensitive)', async () => {
