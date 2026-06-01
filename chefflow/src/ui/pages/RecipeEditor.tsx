@@ -319,7 +319,14 @@ export default function RecipeEditor() {
 
   return (
     <PinGate>
-    <section className="p-4 md:p-6">
+    {/* T13 — max-w-3xl + mx-auto: pre-T12 the bordered fieldsets gave
+        each section a visual anchor even though the form was full-
+        width. T12 dropped the fieldsets, exposing the sprawl across
+        ~1500px on desktop (Analyse-with-AI button at the right edge,
+        Calorie inputs at 750px each, ingredient name floating in
+        empty space). Constraining the section to 768px centred fixes
+        all of those in one move without re-adding the heavy chrome. */}
+    <section className="p-4 md:p-6 max-w-3xl mx-auto">
       {attestOpen && (
         <AllergenAttestationModal
           allergens={getRecipeAllergens(r) as string[]}
@@ -464,7 +471,7 @@ export default function RecipeEditor() {
               min={1}
               value={r.originalYield}
               onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
-              className="input mt-1"
+              className="input mt-1 max-w-[8rem]"
             />
           </label>
           <label className="block">
@@ -481,7 +488,7 @@ export default function RecipeEditor() {
                 if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
               }}
               placeholder="—"
-              className="input mt-1"
+              className="input mt-1 max-w-[8rem]"
               aria-label="Price per portion in GBP"
             />
           </label>

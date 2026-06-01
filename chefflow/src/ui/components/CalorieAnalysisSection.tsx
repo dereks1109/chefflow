@@ -119,7 +119,7 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
             value={analysis.caloriesPerPortion ?? ''}
             onChange={(e) => setKcalPerPortion(e.target.value)}
             placeholder="—"
-            className="input mt-1"
+            className="input mt-1 max-w-[8rem]"
             aria-label="Calories per portion"
           />
         </label>
@@ -131,7 +131,7 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
             value={analysis.caloriesTotal ?? ''}
             onChange={(e) => setKcalTotal(e.target.value)}
             placeholder="—"
-            className="input mt-1"
+            className="input mt-1 max-w-[8rem]"
             aria-label="Calories total"
           />
         </label>
