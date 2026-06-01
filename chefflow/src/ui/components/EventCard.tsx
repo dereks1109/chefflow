@@ -26,9 +26,7 @@ export default function EventCard({ event, onDelete }: Props) {
           to={`/events/${event.id}`}
           className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2 leading-snug"
         >
-          {event.title
-            ? event.title
-            : <span className="italic opacity-60">Untitled event</span>}
+          {event.title || 'Untitled event'}
         </Link>
         {!isDemo(event) && (
           <button
@@ -52,14 +50,16 @@ export default function EventCard({ event, onDelete }: Props) {
         </div>
         {/* T8 — always render the workflow row so cards line up across
             the grid; chefs see "No workflow yet" instead of the row
-            collapsing. */}
+            collapsing. T12 — fallback uses the same typography as a
+            real workflow row so Untitled + Demo cards look identical
+            in format regardless of content. */}
         <div className="flex items-center gap-2">
           <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          {event.workflow && event.workflow.length > 0 ? (
-            <span>Workflow · {event.workflow.length} step{event.workflow.length === 1 ? '' : 's'}</span>
-          ) : (
-            <span className="italic opacity-60">No workflow yet</span>
-          )}
+          <span>
+            {event.workflow && event.workflow.length > 0
+              ? `Workflow · ${event.workflow.length} step${event.workflow.length === 1 ? '' : 's'}`
+              : 'No workflow yet'}
+          </span>
         </div>
       </dl>
       {/* mt-auto pins the description to the bottom of the card so it
@@ -69,7 +69,7 @@ export default function EventCard({ event, onDelete }: Props) {
           grid shares the row's height + bottom padding (p-4 on
           article = uniform inset on every side). */}
       <p className="mt-auto pt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
-        {event.notes ? event.notes : <span className="italic opacity-60">No description</span>}
+        {event.notes || 'No description'}
       </p>
     </article>
   );

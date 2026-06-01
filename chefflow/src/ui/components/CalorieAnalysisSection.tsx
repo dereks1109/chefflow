@@ -81,9 +81,11 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
   }
 
   return (
-    <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+    // T12 — fieldset+border+bg chrome removed; section sits inline in
+    // the recipe-editor form alongside the other rows.
+    <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <legend className="text-sm font-medium px-1">Calorie estimate (AI)</legend>
+        <h3 className="text-sm font-medium">Calorie estimate (AI)</h3>
         <button
           type="button"
           onClick={() => void handleAnalyze()}
@@ -134,7 +136,7 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
           />
         </label>
       </div>
-    </fieldset>
+    </div>
   );
 }
 

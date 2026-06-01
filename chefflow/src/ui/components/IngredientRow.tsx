@@ -145,52 +145,12 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
         <span className="text-sm font-semibold w-6 shrink-0 text-slate-500" aria-hidden="true">
           {index + 1}.
         </span>
-        <div className="relative flex-1 min-w-[10rem]">
-          <input
-            type="text"
-            value={value.name}
-            onChange={(e) => onNameChange(e.target.value)}
-            onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
-            className="input w-full text-sm py-1.5"
-            aria-label="Ingredient name"
-            placeholder="Ingredient (type @ to link another recipe)"
-          />
-          {showAutocomplete && (
-            <RecipeAutocomplete
-              query={autocompleteQuery}
-              excludeRecipeId={currentRecipeId}
-              onSelect={selectComponentRecipe}
-              onClose={() => setAutocompleteOpen(false)}
-            />
-          )}
-        </div>
-        <input
-          type="number"
-          step="any"
-          value={value.amount}
-          onChange={(e) => update('amount', Number(e.target.value))}
-          className="input w-20 text-sm py-1.5 text-right shrink-0"
-          aria-label="Amount"
-        />
-        <select
-          value={value.unit}
-          onChange={(e) => update('unit', e.target.value)}
-          className="input w-24 text-sm py-1.5 shrink-0"
-          aria-label="Unit"
-        >
-          <optgroup label="Weight">
-            {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </optgroup>
-          <optgroup label="Volume">
-            {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </optgroup>
-        </select>
-        {/* Allergen icon button — replaces the prior full-row select
-            picker. Click opens a small popover listing the available
-            allergens. Picking one triggers AllergenAdditionModal (the
-            same 5-second-cooldown confirmation as before). Red ring
-            when the row already carries allergen flags so the chef
-            can scan the column visually. */}
+        {/* T12 — allergen icon moved BEFORE the name input so it reads
+            as a safety marker for the ingredient it qualifies, not a
+            trailing action. The popover anchors `left-0` from this
+            new position so it opens under the icon instead of off
+            the right edge. Red ring when the row already carries
+            allergen flags so the chef can scan the column visually. */}
         <div className="relative shrink-0" ref={pickerRef}>
           <button
             type="button"
@@ -212,7 +172,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
             <div
               role="listbox"
               aria-label="Allergens"
-              className="absolute z-20 right-0 mt-1 w-48 max-h-64 overflow-auto rounded-md
+              className="absolute z-20 left-0 mt-1 w-48 max-h-64 overflow-auto rounded-md
                          border border-slate-200 dark:border-slate-700
                          bg-white dark:bg-kitchen-ink shadow-lg"
             >
@@ -235,6 +195,49 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
             </div>
           )}
         </div>
+        <div className="relative flex-1 min-w-[10rem]">
+          <input
+            type="text"
+            value={value.name}
+            onChange={(e) => onNameChange(e.target.value)}
+            onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
+            className="input w-full text-sm py-1.5"
+            aria-label="Ingredient name"
+            placeholder="Ingredient (type @ to link another recipe)"
+          />
+          {showAutocomplete && (
+            <RecipeAutocomplete
+              query={autocompleteQuery}
+              excludeRecipeId={currentRecipeId}
+              onSelect={selectComponentRecipe}
+              onClose={() => setAutocompleteOpen(false)}
+            />
+          )}
+        </div>
+        {/* T12 — w-16/w-20 (was w-20/w-24): amount + unit are narrower
+            so the freed pixels flow to the name input. "250" fits in
+            4rem; "tbsp"/"fl oz" still fit comfortably at 5rem. */}
+        <input
+          type="number"
+          step="any"
+          value={value.amount}
+          onChange={(e) => update('amount', Number(e.target.value))}
+          className="input w-16 text-sm py-1.5 text-right shrink-0"
+          aria-label="Amount"
+        />
+        <select
+          value={value.unit}
+          onChange={(e) => update('unit', e.target.value)}
+          className="input w-20 text-sm py-1.5 shrink-0"
+          aria-label="Unit"
+        >
+          <optgroup label="Weight">
+            {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </optgroup>
+          <optgroup label="Volume">
+            {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </optgroup>
+        </select>
         <button
           type="button"
           onClick={handleRemoveIngredient}
@@ -251,7 +254,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
           without consuming a third vertical row when no allergens
           are present. */}
       {(flags.length > 0 || inheritedAllergens.length > 0) && (
-        <div className="mt-1.5 ml-8 flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
+        <div className="mt-1.5 ml-16 flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
           {flags.map((tag) => (
             <span
               key={tag}

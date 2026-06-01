@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import LocationAutocomplete from './LocationAutocomplete';
+import VisibilityControl from './VisibilityControl';
 import { toLocalInputValue, fromLocalInputValue } from '../../core/util/datetime';
 import type { KitchenEvent } from '../../core/types';
 
@@ -48,6 +49,10 @@ interface FormState {
   budget: string; // raw input string so '' / partial typing is preserved
   numberOfGuests: string; // raw input string — same reasoning as budget
   notes: string;
+  // T12 — team-visibility chips. Undefined when the event isn't shared
+  // with any team. Carried through eventToForm / applyForm so the
+  // existing onSave path persists changes without extra wiring.
+  sharedWithGroupIds: string[] | undefined;
 }
 
 function eventToForm(e: KitchenEvent): FormState {
@@ -61,6 +66,7 @@ function eventToForm(e: KitchenEvent): FormState {
     budget: e.budget !== undefined ? String(e.budget) : '',
     numberOfGuests: e.numberOfGuests !== undefined ? String(e.numberOfGuests) : '',
     notes: e.notes,
+    sharedWithGroupIds: e.sharedWithGroupIds,
   };
 }
 
@@ -74,8 +80,18 @@ function formsEqual(a: FormState, b: FormState): boolean {
     a.contactPhone === b.contactPhone &&
     a.budget === b.budget &&
     a.numberOfGuests === b.numberOfGuests &&
-    a.notes === b.notes
+    a.notes === b.notes &&
+    sharedGroupsEqual(a.sharedWithGroupIds, b.sharedWithGroupIds)
   );
+}
+
+function sharedGroupsEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+  // Treat undefined + [] as equivalent — both mean "not shared".
+  const aa = a ?? [];
+  const bb = b ?? [];
+  if (aa.length !== bb.length) return false;
+  for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+  return true;
 }
 
 function applyForm(base: KitchenEvent, f: FormState): KitchenEvent {
@@ -104,6 +120,7 @@ function applyForm(base: KitchenEvent, f: FormState): KitchenEvent {
     budget,
     numberOfGuests,
     notes: f.notes,
+    sharedWithGroupIds: f.sharedWithGroupIds,
   };
 }
 
@@ -191,6 +208,14 @@ export default function EventDetailsSheet({ open, event, onClose, onSave }: Prop
             void handleSave();
           }}
         >
+          {/* T12 — per-team visibility chips at the top of the sheet.
+              Mirrors the row in EventEditor so the chef can manage
+              team access without leaving the event view. Self-hides
+              for non-Enterprise tiers (handled inside the control). */}
+          <VisibilityControl
+            selectedGroupIds={form.sharedWithGroupIds}
+            onGroupsChange={(next) => setForm({ ...form, sharedWithGroupIds: next })}
+          />
           <label className="block">
             <span className="text-sm font-medium">Event title</span>
             <input

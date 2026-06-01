@@ -118,8 +118,11 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
 
   return (
     <>
-    <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
-      <legend className="text-sm font-medium px-1">Allergens (chef-declared) and other tags</legend>
+    {/* T12 — fieldset+border+bg chrome removed; section sits inline in
+        the recipe-editor form's space-y-4 flow alongside the title /
+        description / yield rows. */}
+    <div>
+      <h3 className="text-sm font-medium">Allergens (chef-declared) and other tags</h3>
       <p className="mt-1 text-xs text-slate-500">
         Allergens come from the ingredient rows below. To tag an allergen,
         flag it on the specific ingredient — the union shows here. Use
@@ -207,7 +210,7 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
           Add other tags
         </button>
       </div>
-    </fieldset>
+    </div>
     <AllergenRemovalModal
       open={pendingRemovalTag !== null}
       allergenLabel={pendingRemovalTag ? ALLERGEN_LABEL[pendingRemovalTag] : ''}
