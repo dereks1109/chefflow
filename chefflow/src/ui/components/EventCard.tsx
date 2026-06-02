@@ -1,75 +1,116 @@
 import { Link } from 'react-router-dom';
-import { Calendar, Layers, Sparkles, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import type { KitchenEvent } from '../../core/types';
 import { formatDateTime } from '../../core/util/datetime';
 
 interface Props {
   event: KitchenEvent;
-  onDelete: (e: KitchenEvent) => void;
+  /** Tap handler for the trash button. When omitted (e.g. on /workflows
+   *  where deleting an event from a workflow listing doesn't make sense)
+   *  the trash button hides entirely. */
+  onDelete?: (e: KitchenEvent) => void;
+  /** Override the card's primary link. Defaults to /events/:id. The
+   *  WorkflowsLibrary surface passes (e) => `/workflows/${e.id}` so a
+   *  tap takes the chef to the per-event workflow page. */
+  linkTo?: (e: KitchenEvent) => string;
 }
 
 function isDemo(event: KitchenEvent): boolean {
   return event.id.startsWith('e_demo_');
 }
 
-export default function EventCard({ event, onDelete }: Props) {
-  const dishCount = event.dishes.length;
+// State-pill toning. Tailwind purges classes statically — keep the
+// full class strings inline so each one survives the build.
+const TONES = {
+  slate: 'bg-slate-500/15 text-slate-400',
+  emerald: 'bg-emerald-500/15 text-emerald-300',
+  accent: 'bg-accent/15 text-accent',
+  amber: 'bg-amber-500/15 text-amber-300',
+} as const;
+
+function Pill({ tone, children, testId }: {
+  tone: keyof typeof TONES;
+  children: React.ReactNode;
+  testId?: string;
+}) {
   return (
-    <article className="flex flex-1 flex-col group rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors">
-      {/* T6: items-center keeps the trash icon vertically aligned with
-          the title's first line in the common 1-line case. Long titles
-          (line-clamp-2) shift the icon to the visual midline of the
-          two-line block — still readable, much tidier than items-start
-          which pushed the icon visibly above the title baseline. */}
-      <header className="flex items-center justify-between gap-3">
+    <span
+      data-testid={testId}
+      className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+export default function EventCard({ event, onDelete, linkTo }: Props) {
+  const dishCount = event.dishes.length;
+  // State derivation — pure from event data, no new component state.
+  const now = Date.now();
+  const serveAtMs = event.serveAt ? new Date(event.serveAt).getTime() : null;
+  const isPast = serveAtMs !== null && serveAtMs < now;
+  const isUpcoming = serveAtMs !== null && serveAtMs >= now;
+  const isDraft = !event.title && dishCount === 0 && serveAtMs === null;
+  const hasWorkflow = (event.workflow?.length ?? 0) > 0;
+  const isShared = event.readOnly === true ||
+    (Array.isArray(event.sharedWithGroupIds) && event.sharedWithGroupIds.length > 0);
+
+  const href = linkTo ? linkTo(event) : `/events/${event.id}`;
+  const showTrash = !!onDelete && !isDemo(event);
+
+  return (
+    <article className="flex flex-1 flex-col group rounded-xl ring-1 ring-white/5 bg-surface-2/40 hover:bg-surface-2/70 hover:ring-accent/40 p-4 transition-colors">
+      {/* State pill row — at-a-glance scan of what's in the card without
+          opening it. Pills are pure-render derivations from event data
+          (no extra state, no async). */}
+      <div className="flex flex-wrap items-center gap-1 mb-2">
+        {isDraft && <Pill tone="slate" testId="event-card-pill-draft">Draft</Pill>}
+        {isUpcoming && <Pill tone="emerald" testId="event-card-pill-upcoming">Upcoming</Pill>}
+        {isPast && <Pill tone="slate" testId="event-card-pill-past">Past</Pill>}
+        {hasWorkflow && <Pill tone="accent" testId="event-card-pill-workflow">Workflow ✓</Pill>}
+        {isShared && <Pill tone="amber" testId="event-card-pill-shared">Team-shared</Pill>}
+      </div>
+
+      <header className="flex items-start justify-between gap-3">
         <Link
-          to={`/events/${event.id}`}
-          className="text-lg font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2 leading-snug"
+          to={href}
+          className="text-base font-semibold hover:text-accent flex-1 min-w-0 line-clamp-2 leading-snug"
         >
           {event.title || 'Untitled event'}
         </Link>
-        {!isDemo(event) && (
+        {showTrash && (
           <button
             type="button"
-            onClick={() => onDelete(event)}
-            className="touch-target px-2 rounded-md text-slate-400 hover:text-danger opacity-0 group-hover:opacity-100 focus:opacity-100"
+            onClick={() => onDelete!(event)}
+            // T15 — opacity-60 (was 0) so touch-only chefs can see the
+            // action without hover; bumps to 100% on hover for emphasis.
+            className="h-7 w-7 rounded-md text-slate-500 hover:text-danger hover:bg-danger/10 inline-flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity"
             aria-label={`Delete event ${event.title || 'Untitled event'}`}
           >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
         )}
       </header>
-      <dl className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{formatDateTime(event.serveAt)}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>{dishCount} dish{dishCount === 1 ? '' : 'es'}</span>
-        </div>
-        {/* T8 — always render the workflow row so cards line up across
-            the grid; chefs see "No workflow yet" instead of the row
-            collapsing. T12 — fallback uses the same typography as a
-            real workflow row so Untitled + Demo cards look identical
-            in format regardless of content. */}
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>
-            {event.workflow && event.workflow.length > 0
-              ? `Workflow · ${event.workflow.length} step${event.workflow.length === 1 ? '' : 's'}`
-              : 'No workflow yet'}
-          </span>
-        </div>
-      </dl>
-      {/* mt-auto pins the description to the bottom of the card so it
-          lines up across the row even when titles wrap to two lines.
-          Combined with `h-full` on the article and CSS Grid's default
-          align-items: stretch on the parent <ul>, every card in the
-          grid shares the row's height + bottom padding (p-4 on
-          article = uniform inset on every side). */}
-      <p className="mt-auto pt-3 text-sm text-slate-500 dark:text-slate-500 line-clamp-2">
-        {event.notes || 'No description'}
+
+      {/* Single-line meta — replaces 3 icon-rows. Dot-separated so
+          missing fields (no serveAt, no workflow) just drop from the
+          line without leaving icon-only gaps. */}
+      <p className="mt-1 text-xs text-slate-400">
+        {event.serveAt ? formatDateTime(event.serveAt) : 'No date'}
+        {' · '}
+        {dishCount} dish{dishCount === 1 ? '' : 'es'}
+        {hasWorkflow && ` · ${event.workflow!.length} step${event.workflow!.length === 1 ? '' : 's'}`}
+      </p>
+
+      {/* Description / placeholder. mt-auto pins to the card's bottom
+          (T9 equal-height behaviour preserved). Real notes get body
+          weight (text-slate-300); empty gets italic-muted "Add a
+          description…" hint instead of the post-T12 "No description"
+          which read as filler. */}
+      <p className="mt-auto pt-3 text-sm line-clamp-3">
+        {event.notes
+          ? <span className="text-slate-300">{event.notes}</span>
+          : <span className="italic text-slate-500">Add a description…</span>}
       </p>
     </article>
   );
