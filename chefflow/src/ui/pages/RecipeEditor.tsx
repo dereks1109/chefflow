@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Sparkles } from 'lucide-react';
+import { AlertTriangle, Sparkles } from 'lucide-react';
 import IngredientRow, { blankIngredient } from '../components/IngredientRow';
 import StepRow, { blankStep } from '../components/StepRow';
 import TimePicker from '../components/TimePicker';
 import AllergensSection from '../components/AllergensSection';
-import CalorieAnalysisSection from '../components/CalorieAnalysisSection';
 import AllergenHistorySection from '../components/AllergenHistorySection';
 import SubRecipeStepsPanel from '../components/SubRecipeStepsPanel';
 import { getRecipe, saveRecipe } from '../../db/recipesRepo';
@@ -19,6 +18,7 @@ import {
 import { loadReviewDraft } from '../../core/events/reviewDraft';
 import { publishRecipe, unpublishRecipe } from '../../core/community/communityClient';
 import { generateDescription } from '../../core/recipes/llm/descriptionGen';
+import { analyzeRecipe } from '../../core/recipes/llm/recipeGen';
 import { LlmDailyQuotaExceededError } from '../../core/llm/llmClient';
 import { useUpgradeSheetStore } from '../../state/useUpgradeSheetStore';
 import { getRecipeAllergens } from '../../core/recipes/llm/allergens';
@@ -47,8 +47,11 @@ export default function RecipeEditor() {
   const [dirty, setDirty] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
-  const [descBusy, setDescBusy] = useState(false);
-  const [descError, setDescError] = useState<string | null>(null);
+  // T17 — combined "Recipe details" section runs calorie analysis +
+  // description generation from ONE button. Shared busy/error state
+  // replaces the per-field flags from T16 and earlier.
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const [attestOpen, setAttestOpen] = useState(false);
   const [saveAttestOpen, setSaveAttestOpen] = useState(false);
@@ -297,24 +300,59 @@ export default function RecipeEditor() {
     }
   }
 
-  async function handleGenerateDescription() {
-    if (r.description && r.description.trim().length > 0) {
-      if (!window.confirm('Replace existing description?')) return;
+  /**
+   * T17 — single AI handler covering the whole Recipe-details section.
+   * Runs analyzeRecipe (kcal) + generateDescription in parallel via
+   * Promise.allSettled so a partial failure still ships the other
+   * result. Skips description generation when the chef has already
+   * written one (description regeneration was previously gated by a
+   * window.confirm — preserve that "don't trample chef-typed copy"
+   * intent by silently skipping instead).
+   */
+  async function handleAnalyzeAll() {
+    if (!hasLlmAccess) {
+      setAiError('Connect Groq in Settings to enable AI features.');
+      return;
     }
-    setDescError(null);
-    setDescBusy(true);
-    try {
-      const next = await generateDescription({ recipe: r, apiKey, model });
-      update('description', next);
-    } catch (err) {
-      if (err instanceof LlmDailyQuotaExceededError) {
-        useUpgradeSheetStore.getState().openWith('llm');
-        return;
-      }
-      setDescError(err instanceof Error ? err.message : 'Failed to generate description');
-    } finally {
-      setDescBusy(false);
+    setAiBusy(true);
+    setAiError(null);
+    const hasExistingDescription = !!(r.description && r.description.trim().length > 0);
+    const [calorieRes, descRes] = await Promise.allSettled([
+      analyzeRecipe({ recipe: r, apiKey, model }),
+      hasExistingDescription
+        ? Promise.resolve(r.description!)
+        : generateDescription({ recipe: r, apiKey, model }),
+    ]);
+    // Quota exhaustion is a session-wide signal — open the upgrade sheet
+    // even if only one of the two calls hit it.
+    const quotaHit = [calorieRes, descRes].some(
+      (res) => res.status === 'rejected' && res.reason instanceof LlmDailyQuotaExceededError,
+    );
+    if (quotaHit) {
+      useUpgradeSheetStore.getState().openWith('llm');
+      setAiBusy(false);
+      return;
     }
+    let next: Recipe = r;
+    if (calorieRes.status === 'fulfilled') {
+      next = { ...next, analysis: { ...(next.analysis ?? {}), ...calorieRes.value } };
+    }
+    if (
+      descRes.status === 'fulfilled' &&
+      typeof descRes.value === 'string' &&
+      !hasExistingDescription
+    ) {
+      next = { ...next, description: descRes.value };
+    }
+    if (next !== r) commitRecipe(next);
+    if (calorieRes.status === 'rejected' && descRes.status === 'rejected') {
+      setAiError('AI analysis failed. Check your Groq connection and try again.');
+    } else if (calorieRes.status === 'rejected') {
+      setAiError('Calorie analysis failed (description was generated).');
+    } else if (descRes.status === 'rejected') {
+      setAiError('Description generation failed (calories were analysed).');
+    }
+    setAiBusy(false);
   }
 
   return (
@@ -382,7 +420,7 @@ export default function RecipeEditor() {
         </p>
       )}
 
-      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-8" onSubmit={(e) => e.preventDefault()}>
         {/* `contents` keeps the fieldset out of the box model so the
             parent form's space-y-4 between siblings stays intact while
             still cascading `disabled` to every child input/button. */}
@@ -421,102 +459,146 @@ export default function RecipeEditor() {
         />
         <AllergenHistorySection recipeId={r.id} refreshKey={auditRefreshKey} />
 
-        <CalorieAnalysisSection
-          recipe={r}
-          onChange={updateRecipeFromSection}
-        />
+        {/* T17 — combined "Recipe details" section. Description, Calories,
+            Yield/Price, Prep/Cook all sit in one box with a single
+            "Analyse with AI" button at the top that runs calorie
+            analysis + description generation in parallel. */}
+        <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink space-y-4">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <legend className="text-base font-semibold px-1">Recipe details</legend>
+            <button
+              type="button"
+              onClick={() => requireAuth(() => void handleAnalyzeAll())}
+              disabled={aiBusy || !hasLlmAccess}
+              data-testid="recipe-editor-analyse-all"
+              title={hasLlmAccess ? 'Run AI for calories + description' : 'Connect Groq in Settings to enable AI features'}
+              className="text-xs text-accent hover:underline inline-flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed disabled:no-underline"
+            >
+              <Sparkles className={`h-3 w-3 ${aiBusy ? 'animate-pulse' : ''}`} aria-hidden="true" />
+              {aiBusy ? 'Analysing…' : 'Analyse with AI'}
+            </button>
+          </div>
 
-        <label className="block">
-          <span className="text-sm font-medium">Description</span>
-          <div className="relative mt-1">
+          {!hasLlmAccess && (
+            <p className="text-xs text-slate-500">
+              AI features need a Groq API key.{' '}
+              <Link to="/settings" className="text-accent hover:underline">Connect Groq in Settings</Link>.
+            </p>
+          )}
+          {aiError && (
+            <p
+              data-testid="recipe-editor-ai-error"
+              role="alert"
+              className="text-xs text-rose-600 dark:text-rose-400 inline-flex items-start gap-1.5"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+              {aiError}
+            </p>
+          )}
+
+          {/* Description */}
+          <label className="block">
+            <span className="text-sm font-medium">Description</span>
             <textarea
               value={r.description ?? ''}
               onChange={(e) => update('description', e.target.value || undefined)}
               rows={2}
               placeholder="Short description of the dish (optional)"
-              className="input resize-y pr-10"
+              className="input resize-y mt-1"
               data-testid="recipe-editor-description-input"
             />
-            <button
-              type="button"
-              onClick={() => requireAuth(() => void handleGenerateDescription())}
-              disabled={descBusy || !hasLlmAccess}
-              aria-label="Generate description with AI"
-              title={hasLlmAccess ? 'Generate with AI' : 'Connect Groq in Settings to enable AI features'}
-              data-testid="recipe-editor-description-ai"
-              className="absolute top-2 right-2 p-1.5 rounded-md text-slate-500 hover:text-accent hover:bg-slate-100 dark:hover:bg-surface-3 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <Sparkles className={`h-4 w-4 ${descBusy ? 'animate-pulse' : ''}`} aria-hidden="true" />
-            </button>
-          </div>
-          {!hasLlmAccess && (
-            <p className="mt-1 text-xs text-slate-500">
-              AI features need a Groq API key.{' '}
-              <Link to="/settings" className="text-accent hover:underline">Connect Groq in Settings</Link>.
-            </p>
-          )}
-          {descError && (
-            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400" role="alert">
-              {descError}
-            </p>
-          )}
-        </label>
+          </label>
 
-        {/* T16 (a)(b) — inline-label rows so the input's right edge lines
-            up with the TimePicker's minutes input right edge (same
-            pattern as CalorieAnalysisSection). All numeric inputs sit
-            at w-20 (80px) for consistent vertical alignment. */}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium">Yield (portions)</span>
-            <input
-              type="number"
-              min={1}
-              value={r.originalYield}
-              onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
-              className="input w-20 text-right"
+          {/* Calorie row — inline labels, right-aligned w-20 inputs */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-500">Calories / portion (kcal)</span>
+              <input
+                type="number"
+                min={0}
+                value={r.analysis?.caloriesPerPortion ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const next = raw === '' ? undefined : (Number.isFinite(Number.parseInt(raw, 10)) ? Number.parseInt(raw, 10) : undefined);
+                  commitRecipe({ ...r, analysis: { ...(r.analysis ?? {}), caloriesPerPortion: next } });
+                }}
+                placeholder="—"
+                className="input w-20 text-right"
+                aria-label="Calories per portion"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-500">Calories total (kcal)</span>
+              <input
+                type="number"
+                min={0}
+                value={r.analysis?.caloriesTotal ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const next = raw === '' ? undefined : (Number.isFinite(Number.parseInt(raw, 10)) ? Number.parseInt(raw, 10) : undefined);
+                  commitRecipe({ ...r, analysis: { ...(r.analysis ?? {}), caloriesTotal: next } });
+                }}
+                placeholder="—"
+                className="input w-20 text-right"
+                aria-label="Calories total"
+              />
+            </label>
+          </div>
+
+          {/* Yield + Price */}
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Yield (portions)</span>
+              <input
+                type="number"
+                min={1}
+                value={r.originalYield}
+                onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
+                className="input w-20 text-right"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">Price / portion (£)</span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={r.pricePerPortion ?? ''}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') return update('pricePerPortion', undefined);
+                  const n = Number(raw);
+                  if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
+                }}
+                placeholder="—"
+                className="input w-20 text-right"
+                aria-label="Price per portion in GBP"
+              />
+            </label>
+          </div>
+
+          {/* Prep + Cook */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <TimePicker
+              label="Prep time"
+              value={r.prepTime}
+              onChange={(v) => update('prepTime', v)}
             />
-          </label>
-          <label className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium">Price / portion (£)</span>
-            <input
-              type="number"
-              min={0}
-              step="0.01"
-              value={r.pricePerPortion ?? ''}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (raw === '') return update('pricePerPortion', undefined);
-                const n = Number(raw);
-                if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
-              }}
-              placeholder="—"
-              className="input w-20 text-right"
-              aria-label="Price per portion in GBP"
+            <TimePicker
+              label="Cook time"
+              value={r.cookTime}
+              onChange={(v) => update('cookTime', v)}
             />
-          </label>
-        </div>
-        {/* Prep + Cook in the same 2-col grid as the Calorie + Yield-Price
-            rows above. T16 (a)(b) — TimePicker's minutes input now sits
-            at the right edge of its cell (justify-between inside
-            TimePicker), aligning with the Cal/portion + Yield inputs. */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <TimePicker
-            label="Prep time"
-            value={r.prepTime}
-            onChange={(v) => update('prepTime', v)}
-          />
-          <TimePicker
-            label="Cook time"
-            value={r.cookTime}
-            onChange={(v) => update('cookTime', v)}
-          />
-        </div>
+          </div>
+        </fieldset>
 
         {/* T16 (e) — 30/70 split: Ingredients column for short labels
             (1-3 words), Steps column for sentence-long instructions.
-            Smaller gap (gap-3) shifts Steps left for compactness. */}
-        <div className="grid gap-3 md:grid-cols-[3fr_7fr] items-start">
+            Smaller gap (gap-3) shifts Steps left for compactness.
+            T17 (1) — items-stretch so the Steps panel matches the
+            Ingredients panel height even when step count < ingredient
+            count (extra blank space sits at the Steps panel's bottom). */}
+        <div className="grid gap-3 md:grid-cols-[3fr_7fr] items-stretch">
           {/* T15 — match the boxed-panel chrome of the Allergens / Calorie
               sections above so the form reads consistently as grouped
               sections rather than loose fields. */}
