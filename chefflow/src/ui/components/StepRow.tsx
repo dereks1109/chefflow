@@ -11,17 +11,18 @@ interface Props {
 export default function StepRow({ index, value, onChange, onRemove }: Props) {
   return (
     <li className="py-1">
-      {/* T16 (d) — single-row textarea matching ingredient name input
-          height (rows={1} + py-1.5, no min-h cap). Chefs can still drag
-          the corner or type to scroll if the step is long; the default
-          height stays uniform with the ingredient column on the left. */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold w-6 shrink-0">{index + 1}.</span>
+      {/* T20 — rows={3} gives each step ~60px of typing room (~3 lines
+          of text) so chefs can write a typical kitchen instruction
+          without horizontal scroll. T17's items-stretch on the
+          Ingredients+Steps grid keeps the columns aligned regardless.
+          resize-y stays so the chef can drag for more room. */}
+      <div className="flex items-start gap-2">
+        <span className="text-sm font-semibold w-6 shrink-0 pt-1.5">{index + 1}.</span>
         <textarea
           value={value.text}
           onChange={(e) => onChange({ ...value, text: e.target.value })}
           className="input flex-1 text-sm py-1.5 resize-y"
-          rows={1}
+          rows={3}
           aria-label={`Step ${index + 1} text`}
           placeholder="Describe this step…"
         />

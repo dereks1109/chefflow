@@ -216,25 +216,25 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
           </div>
         </div>
         <div className="flex items-center justify-end gap-1.5">
-          {/* T18 — explicit pixel widths via inline style override the
-              .input class's `width: 100%` from @apply (which the build
-              order can let win over Tailwind's w-N utilities in some
-              edge cases). Inline style guarantees the exact width
-              regardless of cascade. Amount fits "999"; unit fits
-              "tbsp"/"fl oz" with px-1.5 padding. */}
+          {/* T20 — amount + unit share an identical 64×32 box. Explicit
+              pixel width (vs Tailwind utility) survives the `.input`
+              cascade override; explicit height anchors the select's
+              native chrome (which renders slightly taller than text
+              inputs at the same `py-1.5`) to the same physical size
+              as the amount input. */}
           <input
             type="number"
             step="any"
             value={value.amount}
             onChange={(e) => update('amount', Number(e.target.value))}
-            style={{ width: '52px' }}
+            style={{ width: '64px', height: '32px' }}
             className="input text-sm py-1.5 px-1.5 text-right shrink-0"
             aria-label="Amount"
           />
           <select
             value={value.unit}
             onChange={(e) => update('unit', e.target.value)}
-            style={{ width: '64px' }}
+            style={{ width: '64px', height: '32px' }}
             className="input text-sm py-1.5 px-1.5 shrink-0"
             aria-label="Unit"
           >

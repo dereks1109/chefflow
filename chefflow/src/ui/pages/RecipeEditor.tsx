@@ -464,15 +464,14 @@ export default function RecipeEditor() {
             "Analyse with AI" button at the top that runs calorie
             analysis + description generation in parallel. */}
         <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink space-y-4">
-          {/* T19 — <legend> as DIRECT child of <fieldset> so the browser's
-              native "legend cuts through the top border" behaviour fires.
-              T17 had wrapped the legend in a <div> to inline the AI
-              button next to the title, but that wrapper made the legend
-              a non-direct child and broke the border-cut. inline-flex
-              on the legend itself keeps the AI button positioned inline
-              without losing the cut-through. */}
-          <legend className="text-base font-semibold px-1 inline-flex items-baseline gap-3 flex-wrap">
-            <span>Recipe details</span>
+          {/* T19/T20 — <legend> stays a direct child of <fieldset> so the
+              border-cut-through fires. T19 had stuffed the AI button
+              inside the legend; T20 moves it to its own row inside the
+              section body (right-aligned, above the Description), so
+              the legend chrome reads cleanly + the AI control reads as
+              actionable in-content rather than glued to the border. */}
+          <legend className="text-base font-semibold px-1">Recipe details</legend>
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => requireAuth(() => void handleAnalyzeAll())}
@@ -484,7 +483,7 @@ export default function RecipeEditor() {
               <Sparkles className={`h-3 w-3 ${aiBusy ? 'animate-pulse' : ''}`} aria-hidden="true" />
               {aiBusy ? 'Analysing…' : 'Analyse with AI'}
             </button>
-          </legend>
+          </div>
 
           {!hasLlmAccess && (
             <p className="text-xs text-slate-500">
