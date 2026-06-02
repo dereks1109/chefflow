@@ -382,7 +382,7 @@ export default function RecipeEditor() {
         </p>
       )}
 
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
         {/* `contents` keeps the fieldset out of the box model so the
             parent form's space-y-4 between siblings stays intact while
             still cascading `disabled` to every child input/button. */}
@@ -462,19 +462,22 @@ export default function RecipeEditor() {
           )}
         </label>
 
-        {/* Yield + Price/portion: compact numeric inputs, fit nicely in a 2-col grid. */}
+        {/* T16 (a)(b) — inline-label rows so the input's right edge lines
+            up with the TimePicker's minutes input right edge (same
+            pattern as CalorieAnalysisSection). All numeric inputs sit
+            at w-20 (80px) for consistent vertical alignment. */}
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
+          <label className="flex items-center justify-between gap-3">
             <span className="text-sm font-medium">Yield (portions)</span>
             <input
               type="number"
               min={1}
               value={r.originalYield}
               onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
-              className="input mt-1 max-w-[8rem]"
+              className="input w-20 text-right"
             />
           </label>
-          <label className="block">
+          <label className="flex items-center justify-between gap-3">
             <span className="text-sm font-medium">Price / portion (£)</span>
             <input
               type="number"
@@ -488,14 +491,15 @@ export default function RecipeEditor() {
                 if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
               }}
               placeholder="—"
-              className="input mt-1 max-w-[8rem]"
+              className="input w-20 text-right"
               aria-label="Price per portion in GBP"
             />
           </label>
         </div>
-        {/* TimePicker takes ~310px (hours input + minutes input + labels), so
-            it gets its own 2-col row instead of sharing the narrow 4-col grid
-            above. Below the md breakpoint they stack vertically. */}
+        {/* Prep + Cook in the same 2-col grid as the Calorie + Yield-Price
+            rows above. T16 (a)(b) — TimePicker's minutes input now sits
+            at the right edge of its cell (justify-between inside
+            TimePicker), aligning with the Cal/portion + Yield inputs. */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <TimePicker
             label="Prep time"
@@ -509,7 +513,10 @@ export default function RecipeEditor() {
           />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 items-start">
+        {/* T16 (e) — 30/70 split: Ingredients column for short labels
+            (1-3 words), Steps column for sentence-long instructions.
+            Smaller gap (gap-3) shifts Steps left for compactness. */}
+        <div className="grid gap-3 md:grid-cols-[3fr_7fr] items-start">
           {/* T15 — match the boxed-panel chrome of the Allergens / Calorie
               sections above so the form reads consistently as grouped
               sections rather than loose fields. */}

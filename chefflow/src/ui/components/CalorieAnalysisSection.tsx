@@ -111,28 +111,32 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
         </div>
       )}
 
+      {/* T16 (a)(b) — inline-label structure mirroring TimePicker so the
+          input's right edge lines up with the TimePicker's minutes input
+          right edge across the 3 numeric rows (Calorie / Yield-Price /
+          Prep-Cook). Input width matches TimePicker's `w-20`. */}
       <div className="grid grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-xs font-medium text-slate-500">Calories / portion (kcal)</span>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm text-slate-500">Calories / portion (kcal)</span>
           <input
             type="number"
             min={0}
             value={analysis.caloriesPerPortion ?? ''}
             onChange={(e) => setKcalPerPortion(e.target.value)}
             placeholder="—"
-            className="input mt-1 max-w-[8rem]"
+            className="input w-20 text-right"
             aria-label="Calories per portion"
           />
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-slate-500">Calories total (kcal)</span>
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm text-slate-500">Calories total (kcal)</span>
           <input
             type="number"
             min={0}
             value={analysis.caloriesTotal ?? ''}
             onChange={(e) => setKcalTotal(e.target.value)}
             placeholder="—"
-            className="input mt-1 max-w-[8rem]"
+            className="input w-20 text-right"
             aria-label="Calories total"
           />
         </label>

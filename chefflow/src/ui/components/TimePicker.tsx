@@ -22,10 +22,15 @@ export default function TimePicker({ label, value, onChange }: Props) {
     onChange(formatTime(hours, m));
   }
 
+  // T16 (a)(b) — restructured to inline label + right-anchored inputs
+  // so the minutes input's right edge sits at the cell's right edge,
+  // matching CalorieAnalysisSection + Yield/Price rows. The whole row
+  // is `flex items-center justify-between` so the label is pushed left
+  // and the [hh] Hours [mm] Minutes group is pushed right.
   return (
-    <div>
+    <div className="flex items-center justify-between gap-3">
       <div className="text-sm font-medium">{label}</div>
-      <div className="mt-1 flex items-center gap-2">
+      <div className="flex items-center gap-2">
         <input
           type="number"
           inputMode="numeric"
@@ -35,9 +40,9 @@ export default function TimePicker({ label, value, onChange }: Props) {
           aria-label={`${label} hours`}
           value={hours}
           onChange={(e) => setHours(Number(e.target.value))}
-          className="input w-20"
+          className="input w-14 text-right"
         />
-        <span className="text-sm text-slate-500 dark:text-slate-400">Hours</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">h</span>
         <input
           type="number"
           inputMode="numeric"
@@ -47,9 +52,9 @@ export default function TimePicker({ label, value, onChange }: Props) {
           aria-label={`${label} minutes`}
           value={minutes}
           onChange={(e) => setMinutes(Number(e.target.value))}
-          className="input w-20"
+          className="input w-20 text-right"
         />
-        <span className="text-sm text-slate-500 dark:text-slate-400">Minutes</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">m</span>
       </div>
     </div>
   );

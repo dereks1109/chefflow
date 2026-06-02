@@ -214,21 +214,21 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
             />
           )}
         </div>
-        {/* T12 then tightened — amount w-14 (3.5rem) fits "999";
-            unit w-16 (4rem) fits "tbsp"/"fl oz" with px-2 padding
-            override. Visibly smaller than the flex-1 name input. */}
+        {/* T16 (d) — minimum-readable widths. amount w-12 (3rem = 48px)
+            fits "999" with px-1.5 padding; unit w-14 (3.5rem = 56px)
+            fits "tbsp" / "fl oz" with px-1.5 padding. */}
         <input
           type="number"
           step="any"
           value={value.amount}
           onChange={(e) => update('amount', Number(e.target.value))}
-          className="input w-14 text-sm py-1.5 px-2 text-right shrink-0"
+          className="input w-12 text-sm py-1.5 px-1.5 text-right shrink-0"
           aria-label="Amount"
         />
         <select
           value={value.unit}
           onChange={(e) => update('unit', e.target.value)}
-          className="input w-16 text-sm py-1.5 px-2 shrink-0"
+          className="input w-14 text-sm py-1.5 px-1.5 shrink-0"
           aria-label="Unit"
         >
           <optgroup label="Weight">
