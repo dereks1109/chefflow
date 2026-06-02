@@ -464,8 +464,15 @@ export default function RecipeEditor() {
             "Analyse with AI" button at the top that runs calorie
             analysis + description generation in parallel. */}
         <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink space-y-4">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <legend className="text-base font-semibold px-1">Recipe details</legend>
+          {/* T19 — <legend> as DIRECT child of <fieldset> so the browser's
+              native "legend cuts through the top border" behaviour fires.
+              T17 had wrapped the legend in a <div> to inline the AI
+              button next to the title, but that wrapper made the legend
+              a non-direct child and broke the border-cut. inline-flex
+              on the legend itself keeps the AI button positioned inline
+              without losing the cut-through. */}
+          <legend className="text-base font-semibold px-1 inline-flex items-baseline gap-3 flex-wrap">
+            <span>Recipe details</span>
             <button
               type="button"
               onClick={() => requireAuth(() => void handleAnalyzeAll())}
@@ -477,7 +484,7 @@ export default function RecipeEditor() {
               <Sparkles className={`h-3 w-3 ${aiBusy ? 'animate-pulse' : ''}`} aria-hidden="true" />
               {aiBusy ? 'Analysing…' : 'Analyse with AI'}
             </button>
-          </div>
+          </legend>
 
           {!hasLlmAccess && (
             <p className="text-xs text-slate-500">
@@ -523,7 +530,8 @@ export default function RecipeEditor() {
                   commitRecipe({ ...r, analysis: { ...(r.analysis ?? {}), caloriesPerPortion: next } });
                 }}
                 placeholder="—"
-                className="input w-20 text-right"
+                style={{ width: '80px' }}
+                className="input text-right"
                 aria-label="Calories per portion"
               />
             </label>
@@ -539,7 +547,8 @@ export default function RecipeEditor() {
                   commitRecipe({ ...r, analysis: { ...(r.analysis ?? {}), caloriesTotal: next } });
                 }}
                 placeholder="—"
-                className="input w-20 text-right"
+                style={{ width: '80px' }}
+                className="input text-right"
                 aria-label="Calories total"
               />
             </label>
@@ -554,7 +563,8 @@ export default function RecipeEditor() {
                 min={1}
                 value={r.originalYield}
                 onChange={(e) => update('originalYield', Math.max(1, Number(e.target.value)))}
-                className="input w-20 text-right"
+                style={{ width: '80px' }}
+                className="input text-right"
               />
             </label>
             <label className="flex items-center justify-between gap-3">
@@ -571,7 +581,8 @@ export default function RecipeEditor() {
                   if (Number.isFinite(n) && n >= 0) update('pricePerPortion', n);
                 }}
                 placeholder="—"
-                className="input w-20 text-right"
+                style={{ width: '80px' }}
+                className="input text-right"
                 aria-label="Price per portion in GBP"
               />
             </label>

@@ -31,6 +31,11 @@ export default function TimePicker({ label, value, onChange }: Props) {
     <div className="flex items-center justify-between gap-3">
       <div className="text-sm font-medium">{label}</div>
       <div className="flex items-center gap-2">
+        {/* T19 — inline pixel widths so `.input`'s `width: 100%` from
+            @apply can't override (same cascade quirk that bit the
+            Cal/Yield inputs in RecipeEditor). Hours 56px + Minutes
+            80px; the 80px matches the Cal/Yield inputs in the parent
+            section so all 6 numeric inputs right-align in their cells. */}
         <input
           type="number"
           inputMode="numeric"
@@ -40,7 +45,8 @@ export default function TimePicker({ label, value, onChange }: Props) {
           aria-label={`${label} hours`}
           value={hours}
           onChange={(e) => setHours(Number(e.target.value))}
-          className="input w-14 text-right"
+          style={{ width: '56px' }}
+          className="input text-right"
         />
         <span className="text-xs text-slate-500 dark:text-slate-400">h</span>
         <input
@@ -52,7 +58,8 @@ export default function TimePicker({ label, value, onChange }: Props) {
           aria-label={`${label} minutes`}
           value={minutes}
           onChange={(e) => setMinutes(Number(e.target.value))}
-          className="input w-20 text-right"
+          style={{ width: '80px' }}
+          className="input text-right"
         />
         <span className="text-xs text-slate-500 dark:text-slate-400">m</span>
       </div>
