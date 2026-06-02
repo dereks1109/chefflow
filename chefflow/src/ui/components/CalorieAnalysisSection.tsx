@@ -81,18 +81,19 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
   }
 
   return (
-    // T12 — fieldset+border+bg chrome removed; section sits inline in
-    // the recipe-editor form alongside the other rows.
-    <div>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <h3 className="text-sm font-medium">Calorie estimate (AI)</h3>
+    // T15 — boxed panel chrome restored; heading row uses inline accent
+    // link for the AI button (was justify-between → button floated to the
+    // right edge of the form, looked detached from its heading).
+    <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+      <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+        <legend className="text-base font-semibold px-1">Calorie estimate (AI)</legend>
         <button
           type="button"
           onClick={() => void handleAnalyze()}
           disabled={status.kind === 'analyzing'}
-          className="btn-secondary text-sm inline-flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="text-xs text-accent hover:underline inline-flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed disabled:no-underline"
         >
-          <Sparkles className={`h-3.5 w-3.5 ${status.kind === 'analyzing' ? 'animate-pulse' : ''}`} aria-hidden="true" />
+          <Sparkles className={`h-3 w-3 ${status.kind === 'analyzing' ? 'animate-pulse' : ''}`} aria-hidden="true" />
           {status.kind === 'analyzing' ? 'Analysing…' : 'Analyse with AI'}
         </button>
       </div>
@@ -136,7 +137,7 @@ export default function CalorieAnalysisSection({ recipe, onChange }: Props) {
           />
         </label>
       </div>
-    </div>
+    </fieldset>
   );
 }
 

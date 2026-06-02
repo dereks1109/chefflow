@@ -72,14 +72,16 @@ export default function AllergenHistorySection({ recipeId, refreshKey = 0 }: Pro
 
   if (!entries || entries.length === 0) return null;
 
-  // T12 — fieldset+border+bg chrome removed; section sits inline in
-  // the recipe-editor form alongside the other rows.
+  // T15 — boxed panel chrome restored (matches Settings tabs).
   return (
-    <div data-testid="allergen-history-section">
-      <h3 className="text-sm font-medium inline-flex items-center gap-1.5">
+    <fieldset
+      className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink"
+      data-testid="allergen-history-section"
+    >
+      <legend className="text-base font-semibold px-1 inline-flex items-center gap-1.5">
         <History className="h-3.5 w-3.5" aria-hidden="true" />
         Allergen history ({entries.length})
-      </h3>
+      </legend>
       <p className="text-xs text-slate-500 mb-3">
         Record of allergen tags removed from this recipe. Local to this device.
       </p>
@@ -112,6 +114,6 @@ export default function AllergenHistorySection({ recipeId, refreshKey = 0 }: Pro
           </li>
         ))}
       </ul>
-    </div>
+    </fieldset>
   );
 }

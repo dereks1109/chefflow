@@ -510,8 +510,11 @@ export default function RecipeEditor() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 items-start">
-          <fieldset>
-            <legend className="text-sm font-medium">Ingredients</legend>
+          {/* T15 — match the boxed-panel chrome of the Allergens / Calorie
+              sections above so the form reads consistently as grouped
+              sections rather than loose fields. */}
+          <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+            <legend className="text-base font-semibold px-1">Ingredients</legend>
             <p className="text-xs text-slate-500 mt-1 mb-2">
               Tip: type <code className="px-1 rounded bg-slate-100 dark:bg-surface-2">#</code> in an ingredient name to link another recipe (e.g. a sauce). The linked recipe expands inline and its steps merge into the kitchen timeline.
             </p>
@@ -533,8 +536,8 @@ export default function RecipeEditor() {
             </button>
           </fieldset>
 
-          <fieldset>
-            <legend className="text-sm font-medium">Steps</legend>
+          <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+            <legend className="text-base font-semibold px-1">Steps</legend>
             {/* Sub-recipes referenced via `#` get their steps surfaced here,
                 ABOVE the parent's own steps. Each panel is collapsed by default
                 so the editor stays compact. Read-only — edit the sub-recipe

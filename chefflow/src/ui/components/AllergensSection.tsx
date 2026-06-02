@@ -118,16 +118,14 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
 
   return (
     <>
-    {/* T12 — fieldset+border+bg chrome removed; section sits inline in
-        the recipe-editor form's space-y-4 flow alongside the title /
-        description / yield rows. */}
-    <div>
-      <h3 className="text-sm font-medium">Allergens (chef-declared) and other tags</h3>
+    {/* T15 — boxed panel chrome restored (matches Settings tabs).
+        T12 had stripped it, T13 capped form width, T15 reinstates the
+        per-section anchor so the recipe editor reads as grouped
+        sections again. Verbose 4-line intro dropped — chefs skipped it. */}
+    <fieldset className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-kitchen-ink">
+      <legend className="text-base font-semibold px-1">Allergens &amp; tags</legend>
       <p className="mt-1 text-xs text-slate-500">
-        Allergens come from the ingredient rows below. To tag an allergen,
-        flag it on the specific ingredient — the union shows here. Use
-        <strong> Add other tags </strong>for non-safety labels (cuisine,
-        occasion, dietary preferences). ChefFlow never detects allergens.
+        Flag allergens on ingredient rows below; free-text tags for cuisine, occasion, diet.
       </p>
 
       {auditError && (
@@ -210,7 +208,7 @@ export default function AllergensSection({ recipe, onChange, onAllergenAudit }: 
           Add other tags
         </button>
       </div>
-    </div>
+    </fieldset>
     <AllergenRemovalModal
       open={pendingRemovalTag !== null}
       allergenLabel={pendingRemovalTag ? ALLERGEN_LABEL[pendingRemovalTag] : ''}
