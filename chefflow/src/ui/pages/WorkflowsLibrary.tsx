@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Calendar, Compass, Layers } from 'lucide-react';
+import { ArrowRight, Compass } from 'lucide-react';
 import { listEvents } from '../../db/eventsRepo';
-import { formatDateTime } from '../../core/util/datetime';
+import EventCard from '../components/EventCard';
 import type { KitchenEvent } from '../../core/types';
+
+// T15 — Workflows library uses the same EventCard the /events library
+// does, with linkTo overridden to `/workflows/:id` so a tap takes the
+// chef to the per-event workflow page. Trash button hides on this
+// surface (onDelete omitted) — deleting an event from a workflows
+// listing isn't a supported action; the chef does that from /events.
 
 export default function WorkflowsLibrary() {
   const [events, setEvents] = useState<KitchenEvent[] | null>(null);
@@ -44,35 +50,11 @@ export default function WorkflowsLibrary() {
         <h1 className="text-2xl font-bold">Workflows</h1>
       </header>
       <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {events.map((e) => {
-          const dishCount = e.dishes.length;
-          return (
-            <li key={e.id}>
-              <Link
-                to={`/workflows/${e.id}`}
-                className="group block rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 hover:border-accent transition-colors"
-              >
-                <h3 className="text-lg font-semibold group-hover:text-accent">
-                  {e.title || 'Untitled event'}
-                </h3>
-                <dl className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>{formatDateTime(e.serveAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>{dishCount} dish{dishCount === 1 ? '' : 'es'}</span>
-                  </div>
-                </dl>
-                <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-accent">
-                  Open workflow
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </div>
-              </Link>
-            </li>
-          );
-        })}
+        {events.map((e) => (
+          <li key={e.id} className="flex flex-col relative">
+            <EventCard event={e} linkTo={(ev) => `/workflows/${ev.id}`} />
+          </li>
+        ))}
       </ul>
     </section>
   );
