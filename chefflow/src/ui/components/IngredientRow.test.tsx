@@ -23,39 +23,36 @@ function mkIngredient(over: Partial<Ingredient> = {}): Ingredient {
   };
 }
 
-describe('IngredientRow horizontal layout (post-condense)', () => {
-  it('renders name + amount + unit + allergen-button + delete as siblings in ONE flex row (no separate vertical row per input)', () => {
+describe('IngredientRow 2-row layout (T18 — narrow 30%-column fit)', () => {
+  it('renders allergen + name on row 1, amount + unit + remove on row 2 (the Ingredients column is too narrow for one row)', () => {
     const onChange = vi.fn();
     const onRemove = vi.fn();
     render(<IngredientRow index={0} value={mkIngredient()} onChange={onChange} onRemove={onRemove} />);
 
-    // Name input + Amount input + Unit select + the allergen icon
-    // button + the delete button should all share the same flex parent
-    // (the new horizontal row).
     const nameInput = screen.getByLabelText('Ingredient name');
     const amountInput = screen.getByLabelText('Amount');
     const unitSelect = screen.getByLabelText('Unit');
     const allergenButton = screen.getByTestId('ingredient-allergen-button-0');
     const removeButton = screen.getByLabelText('Remove ingredient');
 
-    // Walk up to the nearest flex container — they should all share it.
+    // Allergen icon button + name input share the SAME flex row.
     const nameRow = nameInput.closest('div.flex');
     expect(nameRow).not.toBeNull();
-    // The four other controls share the same flex row (they may be
-    // direct children OR nested via wrapper divs — assert via
-    // parentElement chain instead of strict siblinghood).
-    function shareTopRow(el: HTMLElement): boolean {
-      let node: HTMLElement | null = el;
-      while (node) {
-        if (node === nameRow) return true;
-        node = node.parentElement;
-      }
-      return false;
-    }
-    expect(shareTopRow(amountInput)).toBe(true);
-    expect(shareTopRow(unitSelect)).toBe(true);
-    expect(shareTopRow(allergenButton)).toBe(true);
-    expect(shareTopRow(removeButton)).toBe(true);
+    expect(allergenButton.closest('div.flex')).toBe(nameRow);
+
+    // Amount + unit + remove share a DIFFERENT flex row (the second
+    // visual line of the 2-row layout).
+    const actionRow = amountInput.closest('div.flex');
+    expect(actionRow).not.toBeNull();
+    expect(actionRow).not.toBe(nameRow);
+    expect(unitSelect.closest('div.flex')).toBe(actionRow);
+    expect(removeButton.closest('div.flex')).toBe(actionRow);
+
+    // Both rows still belong to the same <li> wrapper so the chef sees
+    // them as one logical ingredient entry.
+    const li = nameInput.closest('li');
+    expect(li).not.toBeNull();
+    expect(actionRow!.closest('li')).toBe(li);
   });
 
   it('allergen icon button opens a popover listing available allergens; picking one queues the confirmation modal', () => {

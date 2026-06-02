@@ -597,8 +597,12 @@ export default function RecipeEditor() {
             Smaller gap (gap-3) shifts Steps left for compactness.
             T17 (1) — items-stretch so the Steps panel matches the
             Ingredients panel height even when step count < ingredient
-            count (extra blank space sits at the Steps panel's bottom). */}
-        <div className="grid gap-3 md:grid-cols-[3fr_7fr] items-stretch">
+            count (extra blank space sits at the Steps panel's bottom).
+            T18 — minmax(0, Nfr) prevents the column from growing to fit
+            ingredient-row content (the prior `3fr_7fr` default is
+            `minmax(auto, 1fr)` which lets a child's min-content push the
+            column wider, breaking the 30/70 ratio when chefs add ingredients). */}
+        <div className="grid gap-3 md:grid-cols-[minmax(0,3fr)_minmax(0,7fr)] items-stretch">
           {/* T15 — match the boxed-panel chrome of the Allergens / Calorie
               sections above so the form reads consistently as grouped
               sections rather than loose fields. */}

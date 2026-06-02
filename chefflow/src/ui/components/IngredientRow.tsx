@@ -137,115 +137,123 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
         hasAllergens ? 'border-l-2 border-red-500 bg-red-50/40 dark:bg-red-900/10' : '',
       ].join(' ')}
     >
-      {/* Top row — single horizontal line on desktop. Wraps on narrow
-          viewports so the qty/unit drop under the name; the allergen
-          icon + delete stay on the top line so the chef can act on the
-          row without scrolling. */}
-      <div className="flex flex-wrap md:flex-nowrap items-center gap-2">
-        <span className="text-sm font-semibold w-6 shrink-0 text-slate-500" aria-hidden="true">
-          {index + 1}.
-        </span>
-        {/* T12 — allergen icon moved BEFORE the name input so it reads
-            as a safety marker for the ingredient it qualifies, not a
-            trailing action. The popover anchors `left-0` from this
-            new position so it opens under the icon instead of off
-            the right edge. Red ring when the row already carries
-            allergen flags so the chef can scan the column visually. */}
-        <div className="relative shrink-0" ref={pickerRef}>
+      {/* T18 — explicit 2-row layout for the narrow 30%-width Ingredients
+          column. The ingredients column on a 768px form is ~227px wide,
+          which can't fit allergen + name + amount + unit + remove on one
+          horizontal line even with shrunk buttons. So instead of relying
+          on flex-wrap producing an unpredictable cascade, we split:
+            Row 1: [⚠] [name input fills remaining]
+            Row 2: [amount] [unit] [✕]  (right-aligned)
+          This keeps the row readable + preserves the 30/70 split with
+          Steps.
+          Empty inline-block spacer on row 2 lifts the trio to the right
+          edge via `ml-auto` on the wrapping div. */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-1.5">
+          {/* T12 — allergen icon BEFORE the name input as a safety marker. */}
+          <div className="relative shrink-0" ref={pickerRef}>
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              data-testid={`ingredient-allergen-button-${index}`}
+              aria-label="Tag allergen on this ingredient"
+              aria-expanded={pickerOpen}
+              title="Tag allergen on this ingredient"
+              className={[
+                'inline-flex items-center justify-center h-7 w-7 rounded-md',
+                'border border-slate-300 dark:border-slate-700',
+                'hover:bg-red-50 dark:hover:bg-red-900/20',
+                hasAllergens ? 'ring-2 ring-red-300 dark:ring-red-700 text-red-600 dark:text-red-400' : 'text-slate-500',
+              ].join(' ')}
+            >
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            {pickerOpen && (
+              <div
+                role="listbox"
+                aria-label="Allergens"
+                className="absolute z-20 left-0 mt-1 w-48 max-h-64 overflow-auto rounded-md
+                           border border-slate-200 dark:border-slate-700
+                           bg-white dark:bg-kitchen-ink shadow-lg"
+              >
+                {availableToAdd.length === 0 ? (
+                  <p className="px-3 py-1.5 text-xs text-slate-500 italic">
+                    All allergens already flagged.
+                  </p>
+                ) : (
+                  availableToAdd.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => { setPendingAddTag(t); setPickerOpen(false); }}
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
+                    >
+                      {ALLERGEN_LABEL[t]}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+          <div className="relative flex-1 min-w-0">
+            <input
+              type="text"
+              value={value.name}
+              onChange={(e) => onNameChange(e.target.value)}
+              onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
+              className="input w-full text-sm py-1.5"
+              aria-label="Ingredient name"
+              placeholder="Ingredient"
+            />
+            {showAutocomplete && (
+              <RecipeAutocomplete
+                query={autocompleteQuery}
+                excludeRecipeId={currentRecipeId}
+                onSelect={selectComponentRecipe}
+                onClose={() => setAutocompleteOpen(false)}
+              />
+            )}
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-1.5">
+          {/* T18 — explicit pixel widths via inline style override the
+              .input class's `width: 100%` from @apply (which the build
+              order can let win over Tailwind's w-N utilities in some
+              edge cases). Inline style guarantees the exact width
+              regardless of cascade. Amount fits "999"; unit fits
+              "tbsp"/"fl oz" with px-1.5 padding. */}
+          <input
+            type="number"
+            step="any"
+            value={value.amount}
+            onChange={(e) => update('amount', Number(e.target.value))}
+            style={{ width: '52px' }}
+            className="input text-sm py-1.5 px-1.5 text-right shrink-0"
+            aria-label="Amount"
+          />
+          <select
+            value={value.unit}
+            onChange={(e) => update('unit', e.target.value)}
+            style={{ width: '64px' }}
+            className="input text-sm py-1.5 px-1.5 shrink-0"
+            aria-label="Unit"
+          >
+            <optgroup label="Weight">
+              {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </optgroup>
+            <optgroup label="Volume">
+              {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </optgroup>
+          </select>
           <button
             type="button"
-            onClick={() => setPickerOpen((o) => !o)}
-            data-testid={`ingredient-allergen-button-${index}`}
-            aria-label="Tag allergen on this ingredient"
-            aria-expanded={pickerOpen}
-            title="Tag allergen on this ingredient"
-            className={[
-              'inline-flex items-center justify-center h-8 w-8 rounded-md',
-              'border border-slate-300 dark:border-slate-700',
-              'hover:bg-red-50 dark:hover:bg-red-900/20',
-              hasAllergens ? 'ring-2 ring-red-300 dark:ring-red-700 text-red-600 dark:text-red-400' : 'text-slate-500',
-            ].join(' ')}
+            onClick={handleRemoveIngredient}
+            className="inline-flex items-center justify-center h-7 w-7 rounded-md text-sm bg-slate-100 dark:bg-slate-800 shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700"
+            aria-label="Remove ingredient"
           >
-            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+            ✕
           </button>
-          {pickerOpen && (
-            <div
-              role="listbox"
-              aria-label="Allergens"
-              className="absolute z-20 left-0 mt-1 w-48 max-h-64 overflow-auto rounded-md
-                         border border-slate-200 dark:border-slate-700
-                         bg-white dark:bg-kitchen-ink shadow-lg"
-            >
-              {availableToAdd.length === 0 ? (
-                <p className="px-3 py-1.5 text-xs text-slate-500 italic">
-                  All allergens already flagged.
-                </p>
-              ) : (
-                availableToAdd.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => { setPendingAddTag(t); setPickerOpen(false); }}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    {ALLERGEN_LABEL[t]}
-                  </button>
-                ))
-              )}
-            </div>
-          )}
         </div>
-        <div className="relative flex-1 min-w-[10rem]">
-          <input
-            type="text"
-            value={value.name}
-            onChange={(e) => onNameChange(e.target.value)}
-            onFocus={() => { if (hasLinkPrefix && !hasPickedRecipe) setAutocompleteOpen(true); }}
-            className="input w-full text-sm py-1.5"
-            aria-label="Ingredient name"
-            placeholder="Ingredient (type @ to link another recipe)"
-          />
-          {showAutocomplete && (
-            <RecipeAutocomplete
-              query={autocompleteQuery}
-              excludeRecipeId={currentRecipeId}
-              onSelect={selectComponentRecipe}
-              onClose={() => setAutocompleteOpen(false)}
-            />
-          )}
-        </div>
-        {/* T16 (d) — minimum-readable widths. amount w-12 (3rem = 48px)
-            fits "999" with px-1.5 padding; unit w-14 (3.5rem = 56px)
-            fits "tbsp" / "fl oz" with px-1.5 padding. */}
-        <input
-          type="number"
-          step="any"
-          value={value.amount}
-          onChange={(e) => update('amount', Number(e.target.value))}
-          className="input w-12 text-sm py-1.5 px-1.5 text-right shrink-0"
-          aria-label="Amount"
-        />
-        <select
-          value={value.unit}
-          onChange={(e) => update('unit', e.target.value)}
-          className="input w-14 text-sm py-1.5 px-1.5 shrink-0"
-          aria-label="Unit"
-        >
-          <optgroup label="Weight">
-            {WEIGHT_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </optgroup>
-          <optgroup label="Volume">
-            {VOLUME_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </optgroup>
-        </select>
-        <button
-          type="button"
-          onClick={handleRemoveIngredient}
-          className="inline-flex items-center justify-center h-8 w-8 rounded-md text-lg bg-slate-100 dark:bg-slate-800 shrink-0 hover:bg-slate-200 dark:hover:bg-slate-700"
-          aria-label="Remove ingredient"
-        >
-          ✕
-        </button>
       </div>
 
       {/* Allergen pill row — rendered ONLY when the ingredient has
@@ -254,7 +262,7 @@ export default function IngredientRow({ index, value, onChange, onRemove, curren
           without consuming a third vertical row when no allergens
           are present. */}
       {(flags.length > 0 || inheritedAllergens.length > 0) && (
-        <div className="mt-1.5 ml-16 flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
+        <div className="mt-1.5 ml-9 flex flex-wrap items-center gap-1" aria-label="Ingredient allergens">
           {flags.map((tag) => (
             <span
               key={tag}
