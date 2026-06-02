@@ -98,6 +98,14 @@ export default function EventCard({ event, onDelete, linkTo }: Props) {
   // array, and "0 dishes" is meaningful information rather than missing.
   const dishesValue = `${dishCount} dish${dishCount === 1 ? '' : 'es'}`;
 
+  // Notes are stored as one freeform string with `\n`-joined bullets
+  // (see worker demoSeed). Counting non-empty trimmed lines gives the
+  // chef a quick "how much was captured" number without dragging the
+  // full text onto the card.
+  const noteCount = event.notes
+    ? event.notes.split('\n').map((s) => s.trim()).filter(Boolean).length
+    : 0;
+
   return (
     <article className="flex flex-1 flex-col group rounded-xl ring-1 ring-white/5 bg-surface-2/40 hover:bg-surface-2/70 hover:ring-accent/40 p-4 transition-colors">
       {/* State pill row — at-a-glance scan of what's in the card without
@@ -143,14 +151,12 @@ export default function EventCard({ event, onDelete, linkTo }: Props) {
         <Meta icon={Layers} label="Dishes" value={dishesValue} />
       </div>
 
-      {/* Description / placeholder. mt-auto pins to the card's bottom
-          (T9 equal-height behaviour preserved). Real notes get body
-          weight (text-slate-300); empty gets italic-muted "Add a
-          description…" hint instead of the post-T12 "No description"
-          which read as filler. */}
-      <p className="mt-auto pt-3 text-sm line-clamp-3">
-        {event.notes
-          ? <span className="text-slate-300">{event.notes}</span>
+      {/* Notes summary — shows the count of bullets the chef captured
+          rather than the full text (which crowded the card and forced
+          line-clamp). mt-auto preserves T9's equal-height behaviour. */}
+      <p className="mt-auto pt-3 text-sm">
+        {noteCount > 0
+          ? <span className="text-slate-300">{noteCount} note{noteCount === 1 ? '' : 's'} for the event</span>
           : <span className="italic text-slate-500">Add a description…</span>}
       </p>
     </article>

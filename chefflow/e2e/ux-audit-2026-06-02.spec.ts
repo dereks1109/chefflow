@@ -91,7 +91,17 @@ async function seedDexie(page: Page) {
         contactName: 'Priscilla Morgan',
         contactEmail: 'priscilla.morgan@example.com',
         contactPhone: '+44 7700 900456',
-        notes: '8 guests for a birthday dinner. Anna and Ben are vegetarian (no meat or fish). Carla has a nut allergy.',
+        // T21 follow-up — `\n`-joined bullets so the EventCard "N notes
+        // for the event" count reflects how chefs actually structure
+        // their notes (matches the worker demoSeed shape).
+        notes: [
+          '8 guests for a birthday dinner.',
+          'Anna and Ben are vegetarian (no meat or fish).',
+          'Carla has a confirmed peanut allergy — strict.',
+          'Dave (birthday) loves a classic steak with peppercorn sauce.',
+          'Budget is generous (~£600 total food cost) — go for a five-dish lineup.',
+          'Casual ambience, no formal courses needed.',
+        ].join('\n'),
         dishes: [
           { id: 'd1', recipeId, name: 'Crème Brûlée', portions: 8, startAt: '2026-05-14T17:00:00.000Z' },
           { id: 'd2', name: 'Starter salad', portions: 8, startAt: '2026-05-14T17:30:00.000Z' },

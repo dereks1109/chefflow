@@ -47,8 +47,29 @@ describe('EventCard (T15 redesign)', () => {
     // T21 — 6-row metadata block; Dishes row shows "1 dish".
     const meta = screen.getByTestId('event-card-meta');
     expect(meta.textContent).toContain('1 dish');
-    // Real description renders in body-weight slate-300.
-    expect(screen.getByText('8 guests for a birthday dinner.')).toBeInTheDocument();
+    // T21 follow-up — notes render as a count, not full text. baseEvent
+    // has a single-line `notes` string, so the count reads "1 note".
+    expect(screen.getByText('1 note for the event')).toBeInTheDocument();
+    expect(screen.queryByText('8 guests for a birthday dinner.')).toBeNull();
+  });
+
+  // T21 follow-up — notes count off non-empty lines. The worker demo
+  // event uses `\n`-joined bullets; this spec pins that a 6-line notes
+  // string renders as "6 notes for the event" (the example the user
+  // requested when asking for a count instead of the full text).
+  it('multi-line notes render as a count: "N notes for the event"', () => {
+    renderCard({
+      ...baseEvent,
+      notes: [
+        '8 guests for a birthday dinner.',
+        'Anna and Ben are vegetarian (no meat or fish).',
+        'Carla has a confirmed peanut allergy — strict.',
+        'Dave (birthday) loves a classic steak with peppercorn sauce.',
+        'Budget is generous (~£600 total food cost) — go for a five-dish lineup.',
+        'Casual ambience, no formal courses needed.',
+      ].join('\n'),
+    }, { onDelete: vi.fn() });
+    expect(screen.getByText('6 notes for the event')).toBeInTheDocument();
   });
 
   it('past event → Past pill, NOT Upcoming', () => {
