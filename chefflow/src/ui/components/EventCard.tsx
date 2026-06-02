@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Calendar, MapPin, User, Users, Wallet, Layers } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { KitchenEvent } from '../../core/types';
 import { formatDateTime } from '../../core/util/datetime';
+import { formatGBP } from '../../core/util/money';
 
 interface Props {
   event: KitchenEvent;
@@ -43,6 +45,31 @@ function Pill({ tone, children, testId }: {
   );
 }
 
+const MISSING_COPY = 'This info is not filled';
+
+function Meta({ icon: Icon, label, value }: {
+  icon: LucideIcon;
+  label: string;
+  value: string | null;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" aria-hidden="true" />
+      <span className="sr-only">{label}:</span>
+      {value !== null
+        ? <span className="text-slate-300 truncate">{value}</span>
+        : <span className="italic text-slate-500 truncate">{MISSING_COPY}</span>}
+    </div>
+  );
+}
+
+function firstNonEmpty(...vals: Array<string | undefined>): string | null {
+  for (const v of vals) {
+    if (v && v.trim()) return v.trim();
+  }
+  return null;
+}
+
 export default function EventCard({ event, onDelete, linkTo }: Props) {
   const dishCount = event.dishes.length;
   // State derivation — pure from event data, no new component state.
@@ -57,6 +84,19 @@ export default function EventCard({ event, onDelete, linkTo }: Props) {
 
   const href = linkTo ? linkTo(event) : `/events/${event.id}`;
   const showTrash = !!onDelete && !isDemo(event);
+
+  const dateValue = event.serveAt ? formatDateTime(event.serveAt) : null;
+  const locationValue = firstNonEmpty(event.location);
+  const contactValue = firstNonEmpty(event.contactName, event.contactEmail, event.contactPhone);
+  const guestsValue = typeof event.numberOfGuests === 'number' && event.numberOfGuests > 0
+    ? `${event.numberOfGuests} guest${event.numberOfGuests === 1 ? '' : 's'}`
+    : null;
+  const budgetValue = typeof event.budget === 'number' && event.budget > 0
+    ? formatGBP(event.budget)
+    : null;
+  // Dishes always renders a real value — events always have a dishes
+  // array, and "0 dishes" is meaningful information rather than missing.
+  const dishesValue = `${dishCount} dish${dishCount === 1 ? '' : 'es'}`;
 
   return (
     <article className="flex flex-1 flex-col group rounded-xl ring-1 ring-white/5 bg-surface-2/40 hover:bg-surface-2/70 hover:ring-accent/40 p-4 transition-colors">
@@ -82,8 +122,6 @@ export default function EventCard({ event, onDelete, linkTo }: Props) {
           <button
             type="button"
             onClick={() => onDelete!(event)}
-            // T15 — opacity-60 (was 0) so touch-only chefs can see the
-            // action without hover; bumps to 100% on hover for emphasis.
             className="h-7 w-7 rounded-md text-slate-500 hover:text-danger hover:bg-danger/10 inline-flex items-center justify-center opacity-60 group-hover:opacity-100 transition-opacity"
             aria-label={`Delete event ${event.title || 'Untitled event'}`}
           >
@@ -92,15 +130,18 @@ export default function EventCard({ event, onDelete, linkTo }: Props) {
         )}
       </header>
 
-      {/* Single-line meta — replaces 3 icon-rows. Dot-separated so
-          missing fields (no serveAt, no workflow) just drop from the
-          line without leaving icon-only gaps. */}
-      <p className="mt-1 text-xs text-slate-400">
-        {event.serveAt ? formatDateTime(event.serveAt) : 'No date'}
-        {' · '}
-        {dishCount} dish{dishCount === 1 ? '' : 'es'}
-        {hasWorkflow && ` · ${event.workflow!.length} step${event.workflow!.length === 1 ? '' : 's'}`}
-      </p>
+      {/* T21 — six labelled metadata rows. Each surfaces a key event
+          field with an icon; empty fields show the "This info is not
+          filled" placeholder so chefs see at a glance what's missing
+          before tapping in. */}
+      <div className="mt-2 space-y-1 text-xs" data-testid="event-card-meta">
+        <Meta icon={Calendar} label="Date" value={dateValue} />
+        <Meta icon={MapPin} label="Location" value={locationValue} />
+        <Meta icon={User} label="Contact" value={contactValue} />
+        <Meta icon={Users} label="Guests" value={guestsValue} />
+        <Meta icon={Wallet} label="Budget" value={budgetValue} />
+        <Meta icon={Layers} label="Dishes" value={dishesValue} />
+      </div>
 
       {/* Description / placeholder. mt-auto pins to the card's bottom
           (T9 equal-height behaviour preserved). Real notes get body

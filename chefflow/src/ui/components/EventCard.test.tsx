@@ -38,17 +38,15 @@ function renderCard(event: KitchenEvent, opts: { onDelete?: typeof vi.fn extends
 }
 
 describe('EventCard (T15 redesign)', () => {
-  it('upcoming + workflow + populated description → Upcoming pill + Workflow ✓ pill + body-weight notes + dot-separated meta', () => {
+  it('upcoming + workflow + populated description → Upcoming pill + Workflow ✓ pill + body-weight notes + dish count in metadata grid', () => {
     renderCard(baseEvent, { onDelete: vi.fn() });
     expect(screen.getByTestId('event-card-pill-upcoming')).toBeInTheDocument();
     expect(screen.getByTestId('event-card-pill-workflow')).toBeInTheDocument();
     expect(screen.queryByTestId('event-card-pill-draft')).toBeNull();
     expect(screen.queryByTestId('event-card-pill-past')).toBeNull();
-    // Single-line meta: date · dishes · steps. Dot separators present.
-    const meta = screen.getByText(/dish/);
+    // T21 — 6-row metadata block; Dishes row shows "1 dish".
+    const meta = screen.getByTestId('event-card-meta');
     expect(meta.textContent).toContain('1 dish');
-    expect(meta.textContent).toContain('1 step');
-    expect(meta.textContent).toContain('·');
     // Real description renders in body-weight slate-300.
     expect(screen.getByText('8 guests for a birthday dinner.')).toBeInTheDocument();
   });
@@ -100,5 +98,49 @@ describe('EventCard (T15 redesign)', () => {
     renderCard(baseEvent, { onDelete: vi.fn() });
     const link = screen.getByRole('link', { name: /Demo Event/i });
     expect(link).toHaveAttribute('href', '/events/e_test_001');
+  });
+
+  // T21 — every event card surfaces 6 labelled metadata rows so chefs
+  // can scan an event without opening it. Missing fields render an
+  // explicit "This info is not filled" placeholder rather than dropping
+  // silently, so empty events look obviously-empty rather than just-built.
+  it('fully populated event → all 6 metadata rows show their values, no "not filled" placeholder', () => {
+    renderCard({
+      ...baseEvent,
+      location: 'Home kitchen',
+      contactName: 'Priscilla Morgan',
+      numberOfGuests: 8,
+      budget: 600,
+    }, { onDelete: vi.fn() });
+    const meta = screen.getByTestId('event-card-meta');
+    // Each of the 6 rows shows its real value.
+    expect(meta.textContent).toContain('Home kitchen');
+    expect(meta.textContent).toContain('Priscilla Morgan');
+    expect(meta.textContent).toContain('8 guests');
+    expect(meta.textContent).toContain('£600');
+    expect(meta.textContent).toContain('1 dish');
+    // No placeholder anywhere on the card.
+    expect(screen.queryByText(/this info is not filled/i)).toBeNull();
+  });
+
+  it('sparse event (title + dishes only) → 5 placeholder rows + dish count row', () => {
+    renderCard({
+      ...baseEvent,
+      serveAt: undefined,
+      location: undefined,
+      contactName: undefined,
+      contactEmail: undefined,
+      contactPhone: undefined,
+      numberOfGuests: undefined,
+      budget: undefined,
+      dishes: [],
+      workflow: undefined,
+    }, { onDelete: vi.fn() });
+    // 5 missing fields → 5 placeholders (Date, Location, Contact, Guests, Budget).
+    expect(screen.getAllByText(/this info is not filled/i)).toHaveLength(5);
+    // Dishes is the one row that ALWAYS shows a value (events always
+    // have a dishes array; 0 dishes is meaningful, not missing).
+    const meta = screen.getByTestId('event-card-meta');
+    expect(meta.textContent).toContain('0 dishes');
   });
 });

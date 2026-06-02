@@ -82,6 +82,15 @@ async function seedDexie(page: Page) {
         userId,
         title: 'Demo Event',
         serveAt: '2026-05-14T18:00:00.000Z',
+        // T21 — populate all 6 EventCard metadata fields so the audit
+        // screenshot captures a fully-rendered card (matches the worker
+        // demoSeed shape a real chef sees).
+        location: 'Home kitchen',
+        budget: 600,
+        numberOfGuests: 8,
+        contactName: 'Priscilla Morgan',
+        contactEmail: 'priscilla.morgan@example.com',
+        contactPhone: '+44 7700 900456',
         notes: '8 guests for a birthday dinner. Anna and Ben are vegetarian (no meat or fish). Carla has a nut allergy.',
         dishes: [
           { id: 'd1', recipeId, name: 'Crème Brûlée', portions: 8, startAt: '2026-05-14T17:00:00.000Z' },
