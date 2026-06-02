@@ -122,7 +122,7 @@ describe('provisionDemosForUser', () => {
     const { db } = makeStubDb();
     const { kv, store } = makeStubKv();
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
-    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v6:user_alice')).toBe('1');
     const second = await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(second.alreadyProvisioned).toBe(true);
     expect(second.recipesInserted).toBe(0);
@@ -138,7 +138,7 @@ describe('provisionDemosForUser', () => {
     // First sign-in: full provision happens. All 14 demos present, marker set.
     await provisionDemosForUser({ DB: db, RATE_LIMIT: kv }, 'user_alice');
     expect(rows.get('recipes::user_alice::r_demo_ribeye')?.is_deleted).toBe(0);
-    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v6:user_alice')).toBe('1');
 
     // Chef deletes one of the demos (sync writes a tombstone).
     rows.set('recipes::user_alice::r_demo_ribeye', {
@@ -156,7 +156,7 @@ describe('provisionDemosForUser', () => {
 
     // Settings → Restore demo content: route deletes marker, then calls
     // with force=true. The un-tombstone pass revives the row.
-    store.delete('demos:provisioned:v5:user_alice');
+    store.delete('demos:provisioned:v6:user_alice');
     const restored = await provisionDemosForUser(
       { DB: db, RATE_LIMIT: kv },
       'user_alice',
@@ -184,7 +184,7 @@ describe('provisionDemosForUser', () => {
       payload: JSON.stringify({ id: 'r_demo_ribeye', title: 'My Custom Ribeye' }),
     });
 
-    store.delete('demos:provisioned:v5:user_alice');
+    store.delete('demos:provisioned:v6:user_alice');
     const restored = await provisionDemosForUser(
       { DB: db, RATE_LIMIT: kv },
       'user_alice',
@@ -258,7 +258,7 @@ describe('provisionDemosForUser', () => {
     expect(out.recipesTombstoned).toBe(1);
     expect(out.recipesUpdated).toBe(1);
     // V3 marker is now set.
-    expect(store.get('demos:provisioned:v5:user_alice')).toBe('1');
+    expect(store.get('demos:provisioned:v6:user_alice')).toBe('1');
 
     // Mango sorbet → tombstoned.
     const mango = rows.get('recipes::user_alice::r_demo_mango_sorbet');
@@ -282,7 +282,9 @@ describe('provisionDemosForUser', () => {
   it('cleanup is a no-op on fields that are already clean (idempotent if run twice somehow)', async () => {
     const { db, rows } = makeStubDb();
     const { kv } = makeStubKv();
-    // Pre-seed a ribeye with NO allergens / NO allergenFlags — already clean.
+    // Pre-seed a ribeye with NO allergens / NO allergenFlags AND with
+    // a non-empty description — already clean per BOTH v5 (allergen) and
+    // v6 (description-fill) cleanup passes, so neither should touch it.
     rows.set('recipes::user_alice::r_demo_ribeye', {
       id: 'r_demo_ribeye',
       user_id: 'user_alice',
@@ -291,6 +293,7 @@ describe('provisionDemosForUser', () => {
       payload: JSON.stringify({
         id: 'r_demo_ribeye',
         title: '(Demo) Ribeye',
+        description: 'chef-edited description that should NOT be overwritten',
         ingredients: [{ id: 'i1', name: 'Butter' }],
         analysis: { caloriesPerPortion: 880, keyIngredientTags: ['beef'] },
       }),

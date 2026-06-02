@@ -167,6 +167,7 @@ export function buildDemoRecipes(now: number): DemoRecipe[] {
       ],
       pricePerPortion: 15,
       analysis: { caloriesPerPortion: 880, caloriesTotal: 1760, keyIngredientTags: ['beef', 'butter', 'garlic'] },
+      description: '🥩 Thick-cut ribeye seared to a deep crust, basted in foaming butter with garlic and thyme — the classic Sunday-roast steak finish.',
       now,
     }),
     buildRecipe({
@@ -189,6 +190,7 @@ export function buildDemoRecipes(now: number): DemoRecipe[] {
       ],
       pricePerPortion: 2.5,
       analysis: { caloriesPerPortion: 90, caloriesTotal: 360, keyIngredientTags: ['lettuce', 'tomato', 'cucumber'] },
+      description: '🥗 Crisp seasonal leaves, sweet cherry tomatoes, and cool cucumber — finished with a sharp lemon-olive-oil dressing that lifts everything on the plate.',
       now,
     }),
     buildRecipe({
@@ -214,6 +216,7 @@ export function buildDemoRecipes(now: number): DemoRecipe[] {
       ],
       pricePerPortion: 2,
       analysis: { caloriesPerPortion: 200, caloriesTotal: 800, keyIngredientTags: ['tomato', 'basil', 'cream'] },
+      description: '🍅 Velvety tomato soup simmered with sweet onion and garlic, finished with a swirl of cream and torn fresh basil — the bowl that feels like a warm jumper.',
       now,
     }),
     buildRecipe({
@@ -237,6 +240,7 @@ export function buildDemoRecipes(now: number): DemoRecipe[] {
       ],
       pricePerPortion: 2,
       analysis: { caloriesPerPortion: 220, caloriesTotal: 880, keyIngredientTags: ['black pepper', 'cream', 'shallot'] },
+      description: '🌶 A classic French steak sauce — brandy-flamed peppercorns, beef stock, double cream, glossy enough to coat a spoon. Link this from any steak recipe with #.',
       now,
     }),
     buildRecipe({

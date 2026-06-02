@@ -1,6 +1,6 @@
 // Idempotent demo provisioning: writes the canonical demo recipes + event
 // into D1 under the caller's user_id on first sign-in. Behavior:
-//   - KV marker `demos:provisioned:v5:<userId>` fast-skips repeat callers.
+//   - KV marker `demos:provisioned:v6:<userId>` fast-skips repeat callers.
 //   - On v5 first-touch (existing v2/v3/v4 users + brand-new users) we run
 //     a one-shot cleanup pass BEFORE the INSERT loop:
 //       1. Tombstone every id in RETIRED_DEMO_RECIPE_IDS (e.g. the
@@ -25,11 +25,16 @@
 // v5 (2026-05-28): demo event gains a `notesOriginal` field so the
 // notes-provenance hover popover demos out-of-the-box (existing v4 users
 // re-provision via the standard event UPSERT in the loop below).
+// v6 (2026-06-02): every demo recipe gains a `description` field so the
+// new combined "Recipe details" section renders with content out-of-the-
+// box (T17). A new cleanup pass (fillMissingDescriptionIfExists) patches
+// existing demo rows that lack a description WITHOUT trampling chef edits
+// — if the chef typed their own description, it's preserved.
 
 import { buildDemoRecipes, buildDemoEvents } from './demoSeed';
 
 const MARKER_TTL_SECONDS = 60 * 60 * 24 * 365 * 5; // 5y — effectively forever.
-const MARKER_KEY_PREFIX = 'demos:provisioned:v5:';
+const MARKER_KEY_PREFIX = 'demos:provisioned:v6:';
 
 // Demo recipe ids that USED to be in buildDemoRecipes() but are no longer
 // shipped. The cleanup pass tombstones any existing rows so users who
@@ -103,11 +108,16 @@ export async function provisionDemosForUser(
     recipesTombstoned += changes;
   }
 
-  // 2. Strip allergens from any existing copies of currently-active demo recipes.
+  // 2. Strip allergens from any existing copies of currently-active demo
+  //    recipes. v6 (T17 follow-up): ALSO patch in the canonical
+  //    description on rows that don't have one yet — chefs who arrived
+  //    pre-v6 have demos missing the new description field; the patch
+  //    leaves chef-edited descriptions alone.
   let recipesUpdated = 0;
   for (const r of recipes) {
-    const updated = await stripAllergensIfExists(env.DB, userId, r.id, now);
-    if (updated) recipesUpdated += 1;
+    const allergensStripped = await stripAllergensIfExists(env.DB, userId, r.id, now);
+    const descriptionFilled = await fillMissingDescriptionIfExists(env.DB, userId, r.id, r.description, now);
+    if (allergensStripped || descriptionFilled) recipesUpdated += 1;
   }
 
   // 3. Force-mode only: un-tombstone any demo recipes the chef previously
@@ -210,6 +220,45 @@ async function stripAllergensIfExists(
   }
   if (!dirty) return false;
 
+  await db
+    .prepare(`UPDATE recipes SET payload = ?, updated_at = ? WHERE user_id = ? AND id = ?`)
+    .bind(JSON.stringify(parsed), now, userId, recipeId)
+    .run();
+  return true;
+}
+
+/**
+ * v6 (T17 follow-up): if an existing demo row has NO description (chef
+ * never added one), patch in the canonical description from the seed.
+ * If the chef typed their own description, leave it alone. Mirrors the
+ * surgical pattern of stripAllergensIfExists.
+ */
+async function fillMissingDescriptionIfExists(
+  db: D1Database,
+  userId: string,
+  recipeId: string,
+  canonicalDescription: string | undefined,
+  now: number,
+): Promise<boolean> {
+  if (!canonicalDescription) return false;
+  const row = await db
+    .prepare(`SELECT payload FROM recipes WHERE user_id = ? AND id = ? AND is_deleted = 0`)
+    .bind(userId, recipeId)
+    .first<{ payload: string }>();
+  if (!row) return false;
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(row.payload) as Record<string, unknown>;
+  } catch {
+    return false;
+  }
+
+  const existing = parsed.description;
+  // Chef-edited description: any non-empty string wins, we leave alone.
+  if (typeof existing === 'string' && existing.trim().length > 0) return false;
+
+  parsed.description = canonicalDescription;
   await db
     .prepare(`UPDATE recipes SET payload = ?, updated_at = ? WHERE user_id = ? AND id = ?`)
     .bind(JSON.stringify(parsed), now, userId, recipeId)

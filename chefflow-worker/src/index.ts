@@ -470,7 +470,7 @@ export async function handleRequest(
       if (force) {
         // The marker key format is owned by demos.ts; mirror its v5
         // prefix here. (Kept in sync via tests.)
-        await env.RATE_LIMIT.delete(`demos:provisioned:v5:${userId}`);
+        await env.RATE_LIMIT.delete(`demos:provisioned:v6:${userId}`);
       }
       const result = await provisionDemosForUser(
         { DB: env.DB, RATE_LIMIT: env.RATE_LIMIT },

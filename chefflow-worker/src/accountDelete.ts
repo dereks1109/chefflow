@@ -41,7 +41,7 @@ const TABLES: SyncTable[] = ['recipes', 'events', 'menus', 'allergen_audits'];
 // this was 'v2:' (a stale leftover), so a deleted-then-resigned-up
 // user wouldn't get fresh demos because the v5 marker still pointed
 // at "already provisioned". Bumped to match.
-const DEMOS_MARKER_PREFIX = 'demos:provisioned:v5:';
+const DEMOS_MARKER_PREFIX = 'demos:provisioned:v6:';
 
 async function deleteTable(db: D1Database, userId: string, table: SyncTable): Promise<number> {
   // T7 — runtime guard even though `table: SyncTable` is type-safe.

@@ -52,7 +52,7 @@ describe('deleteAccount', () => {
     const kv = makeFakeKv();
     await communityPublish(kv, 'u_alice', 'Alice', { id: 'r1', title: 'A', originalYield: 1, ingredients: [], steps: [] } as never, 100);
     await communityPublish(kv, 'u_bob',   'Bob',   { id: 'r2', title: 'B', originalYield: 1, ingredients: [], steps: [] } as never, 200);
-    await kv.put('demos:provisioned:v5:u_alice', '1');
+    await kv.put('demos:provisioned:v6:u_alice', '1');
 
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       expect(url).toBe('https://api.clerk.com/v1/users/u_alice');
@@ -65,7 +65,7 @@ describe('deleteAccount', () => {
     expect(out.deleted).toEqual({ recipes: 5, events: 2, menus: 1, allergen_audits: 3 });
     expect(out.communityRecipesUnpublished).toBe(1); // alice's only
     expect(out.clerkDeleted).toBe(true);
-    expect(await kv.get('demos:provisioned:v5:u_alice')).toBeNull();
+    expect(await kv.get('demos:provisioned:v6:u_alice')).toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
