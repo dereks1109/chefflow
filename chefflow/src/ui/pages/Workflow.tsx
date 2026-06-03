@@ -594,7 +594,7 @@ export default function Workflow() {
         {workflowStatus.kind === 'generating' && (
           <div className="mb-3 flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-4 text-sm text-slate-600 dark:text-slate-400">
             <Sparkles className="h-4 w-4 animate-pulse text-accent" aria-hidden="true" />
-            Asking {model} to build your workflow…
+            AI is building your workflow…
           </div>
         )}
 
