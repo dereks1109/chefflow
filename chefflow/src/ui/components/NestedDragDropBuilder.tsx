@@ -356,8 +356,8 @@ export default function NestedDragDropBuilder({
                             const isChecked = checkedStepIds.has(step.id);
                             const stepBody = (leadingControl: ReactNode): ReactNode => (
                               <>
-                                <div className="flex items-start gap-2">
-                                  <span className="shrink-0 pt-0.5">{leadingControl}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="shrink-0">{leadingControl}</span>
                                   {allowStepEdit ? (
                                     <input
                                       type="text"
@@ -388,7 +388,7 @@ export default function NestedDragDropBuilder({
                                     />
                                   ) : step.meta?.colorTag ? (
                                     <span
-                                      className={`h-3 w-3 rounded-full shrink-0 mt-1.5 ${swatchClassFor(step.meta.colorTag)}`}
+                                      className={`h-3 w-3 rounded-full shrink-0 ${swatchClassFor(step.meta.colorTag)}`}
                                       aria-label={`Color: ${step.meta.colorTag}`}
                                       title={`Color: ${step.meta.colorTag}`}
                                     />
