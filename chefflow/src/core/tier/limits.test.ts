@@ -94,14 +94,19 @@ describe('parseTier', () => {
     expect(parseTier('business')).toBe('business');
   });
 
-  it('defaults to free for unknown / missing values', () => {
-    expect(parseTier(undefined)).toBe('free');
-    expect(parseTier(null)).toBe('free');
-    expect(parseTier('not-a-tier')).toBe('free');
-    expect(parseTier(42)).toBe('free');
-  });
-
   it('passes the enterprise tier through (added v9 for hotels + large banquets)', () => {
     expect(parseTier('enterprise')).toBe('enterprise');
+  });
+
+  // While the FORCE_PRO_DURING_BETA constant in limits.ts is `true`,
+  // missing / unknown tier values default to 'pro' instead of 'free' so
+  // beta testers without explicit Clerk metadata get full features.
+  // When the constant flips to `false` at public launch, the default
+  // returns to 'free' — update this spec then.
+  it('defaults missing / unknown values to "pro" during the private-beta override', () => {
+    expect(parseTier(undefined)).toBe('pro');
+    expect(parseTier(null)).toBe('pro');
+    expect(parseTier('not-a-tier')).toBe('pro');
+    expect(parseTier(42)).toBe('pro');
   });
 });

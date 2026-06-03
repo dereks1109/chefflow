@@ -124,8 +124,18 @@ export function meetsTier(actual: Tier, required: Tier): boolean {
   return TIER_RANK[actual] >= TIER_RANK[required];
 }
 
+/** TEMPORARY — private-beta override. While the webapp is in testing,
+ *  every signed-in user *without* an explicit Clerk publicMetadata.tier
+ *  resolves as 'pro' so beta testers get full features without a Stripe
+ *  purchase. Users with an explicit tier (e.g. real Stripe customers
+ *  or QA fixtures) still pass through unchanged. Flip to `false` (or
+ *  delete the constant + the conditional in parseTier) before public
+ *  launch. No Clerk / D1 state is written, so reverting is a one-line
+ *  change. */
+export const FORCE_PRO_DURING_BETA = true;
+
 /** Coerce an unknown string (e.g. from Clerk publicMetadata) to a valid Tier. */
 export function parseTier(raw: unknown): Tier {
   if (raw === 'pro' || raw === 'business' || raw === 'free' || raw === 'enterprise') return raw;
-  return 'free';
+  return FORCE_PRO_DURING_BETA ? 'pro' : 'free';
 }
