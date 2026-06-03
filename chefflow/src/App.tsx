@@ -48,6 +48,10 @@ function LazyFallback() {
 }
 // Bootstrap dark mode from localStorage before first render (default: dark)
 import './ui/theme/useTheme';
+// Bootstrap the root font-size from localStorage before first render so
+// chefs who picked Small/Large don't see a flash of the default 16px
+// before the React hook applies their preference.
+import './ui/theme/useTextSize';
 
 // Guest-browseable app shell. The chef wanted the site to be visible
 // signed-out so unfamiliar visitors can preview the demos, the

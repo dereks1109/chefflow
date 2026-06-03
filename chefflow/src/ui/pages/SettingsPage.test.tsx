@@ -33,6 +33,10 @@ beforeEach(() => {
   useTierStore.setState({ tier: 'free' });
   useUpgradeSheetStore.setState({ open: false, reason: null });
   useProfileStore.setState({ displayName: '', avatarDataUrl: null });
+  // Text-size preference persists via localStorage + sets a style on
+  // <html>. Reset both so each test starts from the medium default.
+  localStorage.removeItem('chefflow-text-size');
+  document.documentElement.style.fontSize = '';
   cleanup();
 });
 
@@ -179,6 +183,38 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('radiogroup', { name: /theme/i })).toBeInTheDocument();
     expect(screen.getByTestId('settings-theme-light')).toBeInTheDocument();
     expect(screen.getByTestId('settings-theme-dark')).toBeInTheDocument();
+  });
+
+  // Text-size preference. Why we test the side-effect (html font-size +
+  // localStorage) rather than just the button state: the whole purpose
+  // of the feature is to scale the entire app via the root rem unit, so
+  // a regression where the buttons render but don't apply the change is
+  // the exact failure we want to catch.
+  it('renders the Text size section as a Small/Medium/Large radiogroup', () => {
+    renderPage(['/settings?tab=preferences']);
+    expect(screen.getByRole('heading', { name: /^text size$/i })).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: /text size/i })).toBeInTheDocument();
+    expect(screen.getByTestId('settings-textsize-small')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-textsize-medium')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-textsize-large')).toBeInTheDocument();
+  });
+
+  it('clicking Large sets the root font-size to 18px and persists "large" to localStorage', async () => {
+    const user = userEvent.setup();
+    renderPage(['/settings?tab=preferences']);
+    await user.click(screen.getByTestId('settings-textsize-large'));
+    await waitFor(() => {
+      expect(document.documentElement.style.fontSize).toBe('18px');
+      expect(localStorage.getItem('chefflow-text-size')).toBe('large');
+    });
+  });
+
+  it('initial render reflects a stored "small" preference (applied on cold load)', () => {
+    localStorage.setItem('chefflow-text-size', 'small');
+    renderPage(['/settings?tab=preferences']);
+    expect(screen.getByTestId('settings-textsize-small')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('settings-textsize-medium')).toHaveAttribute('aria-checked', 'false');
+    expect(document.documentElement.style.fontSize).toBe('14px');
   });
 
   it('tab nav renders 5 tabs and selects Profile by default', () => {

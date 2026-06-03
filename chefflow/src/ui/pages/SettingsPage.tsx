@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ArrowUpRight, CheckCircle2, ChevronDown, LogIn, LogOut, Lock, Moon, Sparkles, Sun, UserRound, XCircle } from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, ChevronDown, LogIn, LogOut, Lock, Moon, Sparkles, Sun, Type, UserRound, XCircle } from 'lucide-react';
 import { useAuth, useClerk, useUser } from '@clerk/clerk-react';
 import { provisionDemos } from '../../core/demos/provisionClient';
 import LocationAutocomplete from '../components/LocationAutocomplete';
@@ -21,6 +21,7 @@ import {
 } from '../../core/tier/quotaClient';
 import { downscaleToDataUrl } from '../../core/util/image';
 import { useTheme } from '../theme/useTheme';
+import { useTextSize } from '../theme/useTextSize';
 import AccountDataPanel from '../components/AccountDataPanel';
 // Team management moved out of Settings in T5 — see /teams (TeamsList +
 // TeamDetail pages). SettingsPage no longer imports from teamsClient.
@@ -42,6 +43,7 @@ function isSettingsTab(v: string | null): v is SettingsTab {
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
+  const { textSize, setTextSize } = useTextSize();
   const tier = useTierStore((s) => s.tier);
   const { isSignedIn, user } = useUser();
   const clerk = useClerk();
@@ -536,6 +538,72 @@ export default function SettingsPage() {
           >
             <Moon className="h-4 w-4" aria-hidden="true" />
             Dark
+          </button>
+        </div>
+      </section>
+      )}
+
+      {activeTab === 'preferences' && (
+      <section
+        aria-labelledby="settings-textsize-heading"
+        className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-kitchen-ink p-4 md:p-5"
+      >
+        <h2 id="settings-textsize-heading" className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Text size</h2>
+        {/* Three-button segmented control mirroring the Theme one above.
+            useTextSize sets <html>.style.fontSize — every Tailwind font
+            class is rem-based so this scales the whole app uniformly. */}
+        <div
+          role="radiogroup"
+          aria-label="Text size"
+          className="mt-3 inline-flex rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-surface-2 p-1"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked={textSize === 'small'}
+            onClick={() => setTextSize('small')}
+            data-testid="settings-textsize-small"
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              textSize === 'small'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100',
+            ].join(' ')}
+          >
+            <Type className="h-3 w-3" aria-hidden="true" />
+            Small
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={textSize === 'medium'}
+            onClick={() => setTextSize('medium')}
+            data-testid="settings-textsize-medium"
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              textSize === 'medium'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100',
+            ].join(' ')}
+          >
+            <Type className="h-4 w-4" aria-hidden="true" />
+            Medium
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={textSize === 'large'}
+            onClick={() => setTextSize('large')}
+            data-testid="settings-textsize-large"
+            className={[
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+              textSize === 'large'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100',
+            ].join(' ')}
+          >
+            <Type className="h-5 w-5" aria-hidden="true" />
+            Large
           </button>
         </div>
       </section>
