@@ -135,7 +135,9 @@ test.describe('EventView — inline dish editing', () => {
     await goToEventView(page);
 
     // Act: click the Edit event details pencil icon
-    await page.getByTestId('event-view-edit-details').click();
+    // EventDetailCard renames `event-view-edit-details` → `event-detail-card-edit`
+    // when it was extracted into the shared component (see commit 1bc960d).
+    await page.getByTestId('event-detail-card-edit').click();
 
     // Assert: EventDetailsSheet opens
     const dialog = page.getByRole('dialog', { name: /event details/i });
