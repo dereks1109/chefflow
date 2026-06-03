@@ -418,8 +418,15 @@ export default function NestedDragDropBuilder({
                                   ].join(' ')}
                                 >
                                   {stepBody(
+                                    // Tighter than touch-target: the row itself
+                                    // already provides comfortable tap height
+                                    // via py-1 + the visible content; the 48px
+                                    // touch-target was pushing text ~48px away
+                                    // from the box. Keep px-1 so the label's
+                                    // hit area is still wider than the 16px
+                                    // input alone.
                                     <label
-                                      className="touch-target px-1 inline-flex items-center cursor-pointer"
+                                      className="inline-flex items-center px-1 cursor-pointer"
                                       aria-label={isChecked ? 'Mark step not done' : 'Mark step done'}
                                     >
                                       <input
@@ -603,7 +610,7 @@ function StepMetaLine({ meta }: { meta: DndStepMeta }) {
   const hasBreakdown = Array.isArray(meta.breakdown) && meta.breakdown.length > 0;
   if (!meta.time && !meta.dish && !hasTags && !hasBreakdown) return null;
   return (
-    <div className="mt-1 pl-9 text-xs text-slate-500">
+    <div className="mt-1 pl-10 text-xs text-slate-500">
       {(meta.time || meta.dish || hasTags) && (
         <div className="flex flex-wrap items-center gap-1.5">
           {meta.time && (
