@@ -300,6 +300,27 @@ export default function Workflow() {
       setIsFallback(result.source === 'local');
       setDirty(false);
       setWorkflowStatus({ kind: 'ready' });
+
+      // Persist the generated snapshot immediately so a refresh or a
+      // sign-in on another device picks it up via the sync engine
+      // instead of re-running the LLM. Skip empty results (no point
+      // saving nothing — keeps event.workflow undefined so the next
+      // mount still tries to generate). The repo write flips
+      // `synced: false`; the existing sync engine pushes it to D1's
+      // events.payload JSON blob — no schema change needed.
+      if (result.steps.length > 0) {
+        const snapshot: KitchenEvent = {
+          ...eventToSchedule,
+          workflow: result.steps,
+          workflowDishesHash: hashDishes(eventToSchedule.dishes),
+          updatedAt: Date.now(),
+        };
+        await saveEvent(snapshot);
+        // Mirror handleSave's trick: pre-set the version key so the
+        // mount effect doesn't re-adopt the snapshot we just wrote.
+        syncedVersionRef.current = `${snapshot.id}::snapshot`;
+        setLoadedFromSnapshot(true);
+      }
     } catch (err) {
       if (controller.signal.aborted) return;
       // Both LLM and local scheduler failed — strategy raised StrategyError.

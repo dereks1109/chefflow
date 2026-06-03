@@ -345,27 +345,34 @@ describe('Workflow page — persistence', () => {
     });
   });
 
-  it('after a fresh LLM generation, Save button reads "Save changes" + Unsaved pill is visible (chef notices the unsaved snapshot)', async () => {
+  it('after a fresh LLM generation, snapshot is auto-saved → Save button reads "Saved" + no Unsaved pill', async () => {
     // Event has dishes but NO saved workflow — runSchedule will fire and
-    // produce a fresh, unsaved snapshot. needsSave should flip true.
+    // the new auto-save path persists the snapshot to Dexie immediately,
+    // so the chef does NOT see an unsaved state. Replaces the prior
+    // contract (pre-auto-save) which asserted the opposite.
     await db.events.put(DEMO_EVENT);
     await db.recipes.bulkPut([RIBEYE_RECIPE, SALAD_RECIPE]);
     renderWorkflowAt(DEMO_EVENT.id);
 
-    // Wait for the schedule to render (proves workflowStatus → 'ready'
-    // and scheduled.length > 0, the preconditions for needsSave).
+    // Wait for the schedule to render (proves workflowStatus → 'ready').
     await waitFor(() => {
       expect(screen.getByText(/Rest steaks 5 minutes/)).toBeInTheDocument();
     });
 
-    // Loud-state assertions: orange "Save changes" + amber "Unsaved" pill.
-    // If a future change accidentally re-quiets the button (e.g. by removing
-    // !loadedFromSnapshot from needsSave), THIS is the test that fails.
+    // Auto-save assertion #1: Dexie row now contains the workflow array.
+    // This is the core invariant — without it, a refresh would re-trigger
+    // the LLM and the workflow would be lost on a new device.
+    await waitFor(async () => {
+      const persisted = await db.events.get(DEMO_EVENT.id);
+      expect(persisted?.workflow?.length ?? 0).toBeGreaterThan(0);
+      expect(persisted?.workflowDishesHash).toBeTruthy();
+    });
+
+    // Auto-save assertion #2: UI reflects the saved state.
     const saveBtn = screen.getByTestId('workflow-save-button');
-    expect(saveBtn).toHaveTextContent(/save changes/i);
-    expect(saveBtn).not.toBeDisabled();
-    expect(saveBtn.className).toContain('btn-primary');
-    expect(screen.getByTestId('workflow-unsaved-pill')).toBeInTheDocument();
+    expect(saveBtn).toHaveTextContent(/saved/i);
+    expect(saveBtn).toBeDisabled();
+    expect(screen.queryByTestId('workflow-unsaved-pill')).toBeNull();
   });
 
   it('when a saved snapshot loads cleanly, Save button reads "Saved" + no pill (no false alarm)', async () => {
@@ -441,21 +448,25 @@ describe('Workflow page — persistence', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /regenerate/i }));
 
-    // Saved snapshot should be cleared in Dexie.
-    await waitFor(async () => {
-      const updated = await db.events.get(DEMO_EVENT.id);
-      expect(updated?.workflow).toBeUndefined();
-      expect(updated?.workflowDishesHash).toBeUndefined();
-    });
     // After regeneration, the algorithm output should mount (real recipe text).
+    // The interactive list AND the hidden print-checklist both contain this
+    // text — `getAllByText` accepts both; presence is what matters.
     await waitFor(
       () => {
-        // The interactive list AND the hidden print-checklist both contain
-      // this text — `getAllByText` accepts both; presence is what matters.
-      expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
+        expect(screen.getAllByText(/Pat steaks dry/).length).toBeGreaterThan(0);
       },
       { timeout: 3000 },
     );
+
+    // The OLD saved snapshot is gone — replaced by the freshly generated
+    // one which the auto-save path persists. We assert on the END state
+    // rather than the brief "undefined" window between handleRegenerate's
+    // clear-save and runSchedule's auto-save, which races on fast CI.
+    await waitFor(async () => {
+      const updated = await db.events.get(DEMO_EVENT.id);
+      expect(updated?.workflow?.length ?? 0).toBeGreaterThan(0);
+      expect(updated?.workflow?.some((s) => s.text === 'OLD SAVED STEP')).toBe(false);
+    });
   });
 });
 
