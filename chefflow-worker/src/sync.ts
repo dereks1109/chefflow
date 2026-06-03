@@ -279,10 +279,27 @@ export async function pull(
 // row didn't satisfy validation/size limits and the client should surface
 // the error).
 // ---------------------------------------------------------------------------
+/** Callback fired AFTER a recipe/event upsert that adds new groupIds to
+ *  the row's `sharedWithGroupIds`. The route handler wraps it in
+ *  `ctx.waitUntil(...)` so emails fan out non-blockingly; tests pass a
+ *  plain spy. Kept purely synchronous in signature — implementations
+ *  can return a Promise that the route handler tracks. */
+export interface ShareNotificationContext {
+  table: 'recipes' | 'events';
+  rowId: string;
+  ownerUserId: string;
+  addedGroupIds: string[];
+  /** Serialized JSON of the row that was just upserted. Avoids the
+   *  notifier re-querying D1 to pull the title / dish list. */
+  newPayload: string;
+}
+export type ShareNotifier = (ctx: ShareNotificationContext) => void;
+
 export async function push(
   db: D1Database,
   userId: string,
   body: unknown,
+  notifier?: ShareNotifier,
 ): Promise<PushResult[]> {
   if (!body || typeof body !== 'object') {
     throw new SyncValidationError('Body must be JSON');
@@ -315,11 +332,23 @@ export async function push(
   // LWW guard requires a per-row read first, which is hard to batch safely.
   // At v1 scale (<200 rows/push) the sequential cost is acceptable.
   for (const { table, row } of inputs) {
-    const result = await upsertRow(db, userId, table, row);
+    const result = await upsertRow(db, userId, table, row, notifier);
     results.push(result);
   }
 
   return results;
+}
+
+function readSharedGroupIds(payloadStr: string | undefined | null): string[] {
+  if (!payloadStr) return [];
+  try {
+    const parsed = JSON.parse(payloadStr) as { sharedWithGroupIds?: unknown };
+    const ids = parsed?.sharedWithGroupIds;
+    if (!Array.isArray(ids)) return [];
+    return ids.filter((id): id is string => typeof id === 'string');
+  } catch {
+    return [];
+  }
 }
 
 async function upsertRow(
@@ -327,6 +356,7 @@ async function upsertRow(
   userId: string,
   table: SyncTable,
   row: PushRowInput,
+  notifier?: ShareNotifier,
 ): Promise<PushResult> {
   // T7 — runtime guard even though `table: SyncTable` is type-safe.
   // Belt-and-braces in case a future caller bypasses the type system.
@@ -341,11 +371,13 @@ async function upsertRow(
     };
   }
 
-  // Read existing row to enforce LWW.
+  // Read existing row to enforce LWW. Also pull `payload` so we can diff
+  // sharedWithGroupIds against the new payload below (fires the share
+  // notifier when the chef adds a new group to a recipe/event).
   const existing = await db
-    .prepare(`SELECT updated_at FROM ${table} WHERE user_id = ? AND id = ?`)
+    .prepare(`SELECT updated_at, payload FROM ${table} WHERE user_id = ? AND id = ?`)
     .bind(userId, row.id)
-    .first<{ updated_at: number } | null>();
+    .first<{ updated_at: number; payload: string } | null>();
 
   if (existing && row.updated_at <= existing.updated_at) {
     return { table, id: row.id, status: 'stale' };
@@ -364,6 +396,25 @@ async function upsertRow(
     )
     .bind(row.id, userId, row.updated_at, isDeleted, payloadStr)
     .run();
+
+  // Share notification — only recipes and events carry sharedWithGroupIds.
+  // Fire the notifier for groupIds that are newly present (first-share
+  // and re-share-after-unshare both count). Skip on deletes — we don't
+  // notify a team that a share was *removed*.
+  if (notifier && !isDeleted && (table === 'recipes' || table === 'events')) {
+    const oldGroupIds = readSharedGroupIds(existing?.payload);
+    const newGroupIds = readSharedGroupIds(payloadStr);
+    const addedGroupIds = newGroupIds.filter((g) => !oldGroupIds.includes(g));
+    if (addedGroupIds.length > 0) {
+      notifier({
+        table,
+        rowId: row.id,
+        ownerUserId: userId,
+        addedGroupIds,
+        newPayload: payloadStr,
+      });
+    }
+  }
 
   return { table, id: row.id, status: 'applied' };
 }

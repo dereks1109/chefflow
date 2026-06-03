@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { pull, push, type PushBody } from './sync';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { pull, push, type PushBody, type ShareNotificationContext } from './sync';
 
 // In-memory D1 stub — emulates the prepared-statement subset sync.ts uses.
 // Keyed by (table, user_id, id). Returns a D1Database-shaped object so we
@@ -26,7 +26,11 @@ function makeDb() {
         if (sql.startsWith('SELECT updated_at')) {
           const [userId, id] = boundArgs as [string, string];
           const row = store[table]?.find((r) => r.user_id === userId && r.id === id);
-          return (row ? { updated_at: row.updated_at } : null) as T;
+          // sync.ts now SELECTs `updated_at, payload` so the share
+          // notifier can diff sharedWithGroupIds. Return both columns
+          // here — tests that only care about updated_at ignore the
+          // extra field.
+          return (row ? { updated_at: row.updated_at, payload: row.payload } : null) as T;
         }
         return null as T;
       },
@@ -307,5 +311,101 @@ describe('sync.pull — Phase 3 team-share fan-in (T3c)', () => {
     expect(morning.team_name).toBe('Morning shift');
     expect(evening.team_id).toBe('grp_evening');
     expect(evening.team_name).toBe('Evening shift');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Share-notification hook — sync.push fires the injected notifier
+// EXACTLY when a recipe/event upsert newly adds a groupId to
+// sharedWithGroupIds. The notifier itself (Resend fan-out) lives in
+// shareMail.ts and has its own test file; here we pin the contract
+// between sync.ts and its caller so a future refactor can't silently
+// drop notifications.
+// ---------------------------------------------------------------------------
+describe('sync.push — share notifier', () => {
+  let db: D1Database & { store: Record<string, Row[]> };
+  let notifier: ReturnType<typeof vi.fn<(ctx: ShareNotificationContext) => void>>;
+  beforeEach(() => {
+    db = makeDb() as D1Database & { store: Record<string, Row[]> };
+    notifier = vi.fn();
+  });
+
+  it('first push of a recipe with sharedWithGroupIds → fires once, every group counted as newly added', async () => {
+    await push(db, 'user_owner', {
+      recipes: [{
+        id: 'r1',
+        updated_at: 100,
+        payload: { id: 'r1', title: 'Lemon tart', sharedWithGroupIds: ['grp_a', 'grp_b'] },
+      }],
+    }, notifier);
+    expect(notifier).toHaveBeenCalledTimes(1);
+    const call = notifier.mock.calls[0][0];
+    expect(call.table).toBe('recipes');
+    expect(call.rowId).toBe('r1');
+    expect(call.ownerUserId).toBe('user_owner');
+    expect(call.addedGroupIds.sort()).toEqual(['grp_a', 'grp_b']);
+  });
+
+  it('re-pushing same sharedWithGroupIds (no change) → notifier NOT fired (no spam on cosmetic re-saves)', async () => {
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 100, payload: { id: 'r1', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    notifier.mockClear();
+    // Newer updated_at, same shares → applied (LWW), but no notification.
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 200, payload: { id: 'r1', title: 'edited', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    expect(notifier).not.toHaveBeenCalled();
+  });
+
+  it('adding a new groupId to an existing share → notifier fires with only the NEW group', async () => {
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 100, payload: { id: 'r1', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    notifier.mockClear();
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 200, payload: { id: 'r1', sharedWithGroupIds: ['grp_a', 'grp_b'] } }],
+    }, notifier);
+    expect(notifier).toHaveBeenCalledTimes(1);
+    expect(notifier.mock.calls[0][0].addedGroupIds).toEqual(['grp_b']);
+  });
+
+  it('unshare (group removed) → notifier NOT fired (no "you lost access" emails)', async () => {
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 100, payload: { id: 'r1', sharedWithGroupIds: ['grp_a', 'grp_b'] } }],
+    }, notifier);
+    notifier.mockClear();
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 200, payload: { id: 'r1', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    expect(notifier).not.toHaveBeenCalled();
+  });
+
+  it('event share fires the notifier with table="events"', async () => {
+    await push(db, 'user_owner', {
+      events: [{ id: 'e1', updated_at: 100, payload: { id: 'e1', title: 'Dinner', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    expect(notifier).toHaveBeenCalledTimes(1);
+    expect(notifier.mock.calls[0][0].table).toBe('events');
+  });
+
+  it('menu share does NOT fire notifier (only recipes/events trigger notifications today)', async () => {
+    await push(db, 'user_owner', {
+      menus: [{ id: 'm1', updated_at: 100, payload: { id: 'm1', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    expect(notifier).not.toHaveBeenCalled();
+  });
+
+  it('stale push (older updated_at) → notifier NOT fired even when shares look new', async () => {
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 500, payload: { id: 'r1', sharedWithGroupIds: ['grp_a'] } }],
+    }, notifier);
+    notifier.mockClear();
+    // Stale push with a "new" group — should be rejected at LWW gate
+    // BEFORE reaching the notifier branch.
+    await push(db, 'user_owner', {
+      recipes: [{ id: 'r1', updated_at: 100, payload: { id: 'r1', sharedWithGroupIds: ['grp_a', 'grp_b'] } }],
+    }, notifier);
+    expect(notifier).not.toHaveBeenCalled();
   });
 });

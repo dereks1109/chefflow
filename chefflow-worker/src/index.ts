@@ -50,7 +50,9 @@ import {
   push as syncPush,
   parseSince,
   SyncValidationError,
+  type ShareNotifier,
 } from './sync';
+import { notifyTeamOnShare } from './shareMail';
 import { provisionDemosForUser } from './demos';
 import {
   handleInvite as teamsHandleInvite,
@@ -236,6 +238,7 @@ export async function handleRequest(
   env: Env,
   verify: Verifier = verifyToken as unknown as Verifier,
   fetchImpl: FetchLike = fetch,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -679,7 +682,29 @@ export async function handleRequest(
   if (req.method === 'POST' && url.pathname === '/api/sync/push') {
     const body = await readJson(req);
     try {
-      const results = await syncPush(env.DB, userId, body);
+      // Share notifier — fires emails when this push newly adds a
+      // groupId to a recipe/event's sharedWithGroupIds. Wrapped in
+      // ctx.waitUntil so a slow Resend round-trip doesn't extend the
+      // push response. When ctx is absent (tests calling handleRequest
+      // directly) the notifier is omitted entirely — share-mail
+      // delivery has its own dedicated test surface in shareMail.test.ts.
+      const notifier: ShareNotifier | undefined = ctx
+        ? (shareCtx) => {
+            ctx.waitUntil(
+              notifyTeamOnShare({
+                db: env.DB,
+                ctx: shareCtx,
+                apiKey: env.RESEND_API_KEY,
+              }).catch((err) => {
+                console.warn(
+                  '[sync] notifyTeamOnShare failed:',
+                  err instanceof Error ? err.message : String(err),
+                );
+              }),
+            );
+          }
+        : undefined;
+      const results = await syncPush(env.DB, userId, body, notifier);
       return json({ results, serverNow: Date.now() }, 200);
     } catch (err) {
       if (err instanceof SyncValidationError) {
@@ -1126,12 +1151,14 @@ function finiteOrNull(n: number): number | null {
 }
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // T7: post-process every response so its Access-Control-Allow-Origin
     // reflects the request's Origin (when in the allow-list) instead of
     // the bare `*` the handlers emit internally. Single chokepoint —
     // see applyCorsOrigin + isOriginAllowed for the policy.
-    const res = await handleRequest(req, env);
+    // ctx flows in for routes (e.g. /api/sync/push) that fan out
+    // background work via ctx.waitUntil — share notifications, etc.
+    const res = await handleRequest(req, env, undefined, undefined, ctx);
     return applyCorsOrigin(req, env, res);
   },
   /**
