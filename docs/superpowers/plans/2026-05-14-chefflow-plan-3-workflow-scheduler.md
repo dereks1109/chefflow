@@ -253,7 +253,7 @@ The whole plan is divided into **five tasks (A–E)**. Each one ships as its own
     "mcpServers": {
       "chefflow": {
         "command": "node",
-        "args": ["/Users/derekshek/vs code/chefflow-mcp/dist/server.js"]
+        "args": ["~/chefflow-workspace/chefflow-mcp/dist/server.js"]
       }
     }
   }

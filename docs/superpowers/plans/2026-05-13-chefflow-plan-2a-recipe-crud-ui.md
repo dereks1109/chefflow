@@ -85,14 +85,14 @@ Plan 1 file `parseRecipe.ts` is modified only to import the extracted `randomId`
 - [ ] **Step 1: Install runtime deps**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm install react-router-dom zustand dexie
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm install react-router-dom zustand dexie
 ```
 Expected: three packages added. Confirm with `cat package.json | grep -E "(react-router|zustand|dexie)"`.
 
 - [ ] **Step 2: Install dev deps**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm install -D fake-indexeddb
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm install -D fake-indexeddb
 ```
 Expected: dev dep added.
 
@@ -244,14 +244,14 @@ import 'fake-indexeddb/auto';
 - [ ] **Step 8: Verify it all compiles and serves**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npx tsc --noEmit && echo "TS OK" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npx tsc --noEmit && echo "TS OK" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
 ```
 Expected: `TS OK` followed by a line like `VITE v… ready in X ms`.
 
 - [ ] **Step 9: Verify tests still pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 55 passing (no regression from Plan 1).
 
@@ -259,7 +259,7 @@ Expected: 55 passing (no regression from Plan 1).
 
 From workspace root:
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/
+cd "~/chefflow-workspace" && git add chefflow/
 git commit -m "chore(ui): install router/zustand/dexie + Tailwind globals + router shell"
 ```
 
@@ -297,7 +297,7 @@ describe('randomId', () => {
 - [ ] **Step 2: Run — expect failure**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/core/util/id.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/core/util/id.test.ts
 ```
 Expected: FAIL — module not found.
 
@@ -313,7 +313,7 @@ export function randomId(): string {
 - [ ] **Step 4: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/core/util/id.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/core/util/id.test.ts
 ```
 Expected: 2 passing.
 
@@ -328,14 +328,14 @@ The single call site to `randomId()` remains unchanged.
 - [ ] **Step 6: Run full test suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 57 passing (55 prior + 2 new).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/core/util/ chefflow/src/core/parser/parseRecipe.ts
+cd "~/chefflow-workspace" && git add chefflow/src/core/util/ chefflow/src/core/parser/parseRecipe.ts
 git commit -m "refactor(core/util): extract randomId from parser"
 ```
 
@@ -415,7 +415,7 @@ describe('recipesRepo', () => {
 - [ ] **Step 2: Run — expect failure**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/db/recipesRepo.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/db/recipesRepo.test.ts
 ```
 Expected: FAIL — module not found.
 
@@ -468,21 +468,21 @@ export async function deleteRecipe(id: string): Promise<void> {
 - [ ] **Step 5: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/db/recipesRepo.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/db/recipesRepo.test.ts
 ```
 Expected: 5 passing.
 
 - [ ] **Step 6: Full suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 62 passing.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/db/
+cd "~/chefflow-workspace" && git add chefflow/src/db/
 git commit -m "feat(db): Dexie instance + recipes CRUD repo"
 ```
 
@@ -529,7 +529,7 @@ describe('unitSystemStore', () => {
 - [ ] **Step 2: Run — expect failure**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/state/unitSystemStore.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/state/unitSystemStore.test.ts
 ```
 Expected: FAIL — module not found.
 
@@ -562,21 +562,21 @@ export const useUnitSystemStore = create<UnitSystemState>()(
 - [ ] **Step 4: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/state/unitSystemStore.test.ts
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/state/unitSystemStore.test.ts
 ```
 Expected: 3 passing.
 
 - [ ] **Step 5: Full suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 65 passing.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/state/
+cd "~/chefflow-workspace" && git add chefflow/src/state/
 git commit -m "feat(state): unit-system Zustand store with localStorage persistence"
 ```
 
@@ -725,14 +725,14 @@ export default function App() {
 - [ ] **Step 6: Verify dev server renders the shell**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
 ```
 Expected: `VITE v… ready in X ms`. (Manual browser check optional; the next task will add smoke tests with React Testing Library.)
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/
+cd "~/chefflow-workspace" && git add chefflow/src/
 git commit -m "feat(ui): app layout + bottom nav + placeholder routes"
 ```
 
@@ -887,7 +887,7 @@ describe('RecipesLibrary', () => {
 - [ ] **Step 3: Run — expect failure**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipesLibrary.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipesLibrary.test.tsx
 ```
 Expected: FAIL — module not found.
 
@@ -1008,21 +1008,21 @@ Remove the now-unused `RecipesLibraryStub` function.
 - [ ] **Step 6: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipesLibrary.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipesLibrary.test.tsx
 ```
 Expected: 4 passing.
 
 - [ ] **Step 7: Full suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 69 passing (65 prior + 4 new).
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/
+cd "~/chefflow-workspace" && git add chefflow/src/
 git commit -m "feat(ui): recipes library page (list/create/duplicate/delete)"
 ```
 
@@ -1212,7 +1212,7 @@ describe('RecipeEditor — header + ingredients', () => {
 - [ ] **Step 3: Run — expect failure**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
 ```
 Expected: FAIL — module not found.
 
@@ -1399,21 +1399,21 @@ Remove the now-unused `RecipeEditorStub` function.
 - [ ] **Step 6: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
 ```
 Expected: 4 passing.
 
 - [ ] **Step 7: Full suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 73 passing.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/
+cd "~/chefflow-workspace" && git add chefflow/src/
 git commit -m "feat(ui): recipe editor header + ingredients"
 ```
 
@@ -1660,7 +1660,7 @@ describe('RecipeEditor — steps', () => {
 - [ ] **Step 3: Run — expect failures**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
 ```
 Expected: 4 passing (Task 6) + 2 failing (no Add step / Remove step buttons yet).
 
@@ -1718,21 +1718,21 @@ function removeStep(idx: number) {
 - [ ] **Step 5: Run — expect tests pass**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run -- src/ui/pages/RecipeEditor.test.tsx
 ```
 Expected: 6 passing.
 
 - [ ] **Step 6: Full suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 75 passing.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/src/
+cd "~/chefflow-workspace" && git add chefflow/src/
 git commit -m "feat(ui): recipe editor steps with advanced metadata"
 ```
 
@@ -1776,7 +1776,7 @@ export default function MarkdownPreview({ recipe }: { recipe: Recipe }) {
 - [ ] **Step 2: Install `@tailwindcss/typography` for the `prose` class**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm install -D @tailwindcss/typography
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm install -D @tailwindcss/typography
 ```
 
 Then update `chefflow/tailwind.config.ts` plugins array:
@@ -1823,21 +1823,21 @@ return (
 - [ ] **Step 4: Sanity-check the dev server renders the editor without crashing**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && ( timeout 10 npm run dev 2>&1 || true ) | grep -iE "(vite|ready|error)"
 ```
 Expected: `VITE v… ready`.
 
 - [ ] **Step 5: Full suite (no test changes — existing tests should still pass since the form is unchanged)**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 75 passing.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code" && git add chefflow/
+cd "~/chefflow-workspace" && git add chefflow/
 git commit -m "feat(ui): live markdown preview in recipe editor"
 ```
 
@@ -1848,28 +1848,28 @@ git commit -m "feat(ui): live markdown preview in recipe editor"
 - [ ] **Step 1: Type check**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npx tsc --noEmit
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npx tsc --noEmit
 ```
 Expected: no output.
 
 - [ ] **Step 2: Full test suite**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run test:run
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run test:run
 ```
 Expected: 75 passing.
 
 - [ ] **Step 3: Production build**
 
 ```bash
-. ~/.nvm/nvm.sh && cd "/Users/derekshek/vs code/chefflow" && npm run build
+. ~/.nvm/nvm.sh && cd "~/chefflow-workspace/chefflow" && npm run build
 ```
 Expected: `dist/` produced; no errors.
 
 - [ ] **Step 4: Manual smoke test instructions for the user**
 
 Document the smoke test in the commit message (since there's no automated E2E):
-1. `cd "/Users/derekshek/vs code/chefflow" && . ~/.nvm/nvm.sh && npm run dev`
+1. `cd "~/chefflow-workspace/chefflow" && . ~/.nvm/nvm.sh && npm run dev`
 2. Open `http://localhost:5173/` — should redirect to `/recipes`.
 3. Empty library → "Create your first recipe" → opens editor.
 4. Type a title, set yield = 4, add an ingredient (e.g. 800 g Beef Chuck), add a step "Sear the beef", click **Save**.
@@ -1882,7 +1882,7 @@ Document the smoke test in the commit message (since there's no automated E2E):
 - [ ] **Step 5: Commit any incidental fixes**
 
 ```bash
-cd "/Users/derekshek/vs code" && git status
+cd "~/chefflow-workspace" && git status
 ```
 If anything is unstaged, commit with a `chore:` message. Otherwise skip.
 

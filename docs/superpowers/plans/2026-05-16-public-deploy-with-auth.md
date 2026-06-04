@@ -196,7 +196,7 @@ Expected: no output, exit 0.
 - [ ] **Step 9: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/
 git commit -m "feat(worker): scaffold chefflow-llm-proxy Cloudflare Worker
 
@@ -338,7 +338,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/src/auth.ts chefflow-worker/src/auth.test.ts
 git commit -m "feat(worker): Clerk JWT verification with DI for tests
 
@@ -492,7 +492,7 @@ Expected: 5 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/src/rateLimit.ts chefflow-worker/src/rateLimit.test.ts
 git commit -m "feat(worker): per-user daily rate limit backed by Workers KV
 
@@ -664,7 +664,7 @@ Expected: 4 passed.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/src/types.ts chefflow-worker/src/aiCall.ts chefflow-worker/src/aiCall.test.ts
 git commit -m "feat(worker): shared types + runAi helper for Workers AI calls
 
@@ -806,7 +806,7 @@ Expected: 5 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/src/endpoints.ts chefflow-worker/src/endpoints.test.ts
 git commit -m "feat(worker): endpoint dispatcher (generate/analyze/photo/workflow)
 
@@ -1083,7 +1083,7 @@ Expected: no output, exit 0.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/src/index.ts chefflow-worker/src/index.test.ts chefflow-worker/wrangler.toml chefflow-worker/vitest.config.ts
 git commit -m "feat(worker): request router with auth + rate-limit + endpoint dispatch
 
@@ -1131,7 +1131,7 @@ Expected: `401`.
 - [ ] **Step 5: Commit the dry-run dotenv stub**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 # Confirm .dev.vars is gitignored (added in Task 1)
 git status chefflow-worker/.dev.vars
 # Expected: file not listed in `git status` output
@@ -1223,7 +1223,7 @@ Expected: no output.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/package.json chefflow/package-lock.json chefflow/src/main.tsx
 git commit -m "feat(auth): install Clerk SDK and wrap app in ClerkProvider
 
@@ -1320,7 +1320,7 @@ Expected: 2 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/ui/components/SignInScreen.tsx chefflow/src/ui/components/SignInScreen.test.tsx
 git commit -m "feat(auth): SignInScreen with ChefFlow branding + Clerk widget
 
@@ -1476,7 +1476,7 @@ Expected: no output.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/App.tsx chefflow/src/ui/layout/BottomNav.tsx chefflow/src/test-helpers/clerkMock.tsx chefflow/src/setupTests.ts chefflow/vite.config.ts
 git commit -m "feat(auth): gate app on Clerk sign-in + UserButton + test mocks
 
@@ -1688,7 +1688,7 @@ Expected: 4 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/core/llm/proxyClient.ts chefflow/src/core/llm/proxyClient.test.ts
 git commit -m "feat(llm): proxyClient — POST /api/llm/* with Clerk JWT
 
@@ -1845,7 +1845,7 @@ Expected: 2 passed.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/core/llm/llmClient.ts chefflow/src/core/llm/llmClient.test.ts
 git commit -m "feat(llm): llmClient.complete switches proxy vs Groq by env
 
@@ -1946,7 +1946,7 @@ Expected: no output.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/core/recipes/llm/recipeGen.ts
 git commit -m "refactor(recipes): route LLM calls through llmClient + endpoint tag
 
@@ -2015,7 +2015,7 @@ Expected: no output.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/core/scheduler/llm/llmScheduler.ts
 git commit -m "refactor(scheduler): route LLM calls through llmClient
 
@@ -2136,7 +2136,7 @@ Expected: no output.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/src/ui/pages/Workflow.tsx chefflow/src/ui/components/GenerateRecipeSheet.tsx chefflow/src/ui/components/AnalysisSection.tsx
 git commit -m "refactor(ui): bypass Groq-key gate when VITE_LLM_MODE=proxy
 
@@ -2309,7 +2309,7 @@ Expected: "Success! Uploaded secret CLERK_JWT_KEY".
 - [ ] **Step 7: Commit wrangler.toml updates**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow-worker/wrangler.toml
 git commit -m "chore(worker): wire real KV namespace + Clerk issuer
 
@@ -2445,7 +2445,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 - [ ] **Step 3: Push and redeploy**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git add chefflow/public/_routes.json chefflow/functions/api/llm/
 git commit -m "feat(pages): route /api/llm/* to chefflow-llm-proxy worker
 
@@ -2523,7 +2523,7 @@ Open https://chefflow.pages.dev in an incognito window and verify each:
 - [ ] **Step 3: Final commit if anything changed during verification**
 
 ```bash
-cd "/Users/derekshek/vs code"
+cd "~/chefflow-workspace"
 git status
 # If files changed, commit them
 git add <files>

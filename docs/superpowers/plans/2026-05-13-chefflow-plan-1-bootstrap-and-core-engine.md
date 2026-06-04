@@ -69,12 +69,12 @@ docs/superpowers/plans/...                 # this file
 ## Task 0: Workspace Git Init and Project Bootstrap
 
 **Files:**
-- Create: `/Users/derekshek/vs code/.gitignore`
-- Create: `/Users/derekshek/vs code/chefflow/` (entire Vite project)
+- Create: `~/chefflow-workspace/.gitignore`
+- Create: `~/chefflow-workspace/chefflow/` (entire Vite project)
 
 - [ ] **Step 1: Confirm working directory**
 
-Run from `/Users/derekshek/vs code/`:
+Run from `~/chefflow-workspace/`:
 ```bash
 pwd && ls
 ```
@@ -85,11 +85,11 @@ Expected output includes: `CLAUDE.md  CulinaryRule.md  DESIGN.md  README.md  doc
 ```bash
 git init
 ```
-Expected: "Initialized empty Git repository in /Users/derekshek/vs code/.git/"
+Expected: "Initialized empty Git repository in ~/chefflow-workspace/.git/"
 
 - [ ] **Step 3: Create workspace .gitignore**
 
-Create `/Users/derekshek/vs code/.gitignore`:
+Create `~/chefflow-workspace/.gitignore`:
 ```
 # Node
 node_modules/
@@ -117,7 +117,7 @@ coverage/
 
 - [ ] **Step 4: Scaffold the Vite project**
 
-From `/Users/derekshek/vs code/`:
+From `~/chefflow-workspace/`:
 ```bash
 npm create vite@latest chefflow -- --template react-ts
 ```
@@ -241,7 +241,7 @@ mkdir -p src/core/parser src/core/units src/core/scaler src/core/scheduler src/c
 
 - [ ] **Step 16: Commit project bootstrap**
 
-From workspace root `/Users/derekshek/vs code/`:
+From workspace root `~/chefflow-workspace/`:
 ```bash
 git add .gitignore docs/ chefflow/
 git commit -m "chore: workspace git init + scaffold ChefFlow Vite project
@@ -1367,7 +1367,7 @@ Expected: completes; `dist/` produced.
 - [ ] **Step 4: Final commit (clean up any incidental changes)**
 
 ```bash
-cd /Users/derekshek/vs\ code
+cd ~/vs\ code
 git status
 ```
 If any unstaged changes exist (e.g. lockfile updates), commit them:

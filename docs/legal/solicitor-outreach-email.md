@@ -101,7 +101,7 @@ Happy to share my current Terms / Disclaimer PDFs and a 15-minute
 walkthrough of the publish flow on Zoom if that helps you scope.
 
 Best,
-Derek Shek
+[Founder name]
 Founder, ChefFlow
 admin@chefflow.uk
 https://chefflow.uk
