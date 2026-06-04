@@ -24,7 +24,7 @@ DAILY_LIMIT = "30"
 # T7 — CORS allow-list. Comma-separated; the worker echoes the request
 # Origin if it matches one of these (or any localhost / *.chefflow
 # .pages.dev preview). Read by parseAllowedOrigins() in src/index.ts.
-ALLOWED_ORIGINS = "https://chefflow.uk,https://main.chefflow.pages.dev"
+ALLOWED_ORIGINS = "https://chefflow.uk"
 
 # ---------------------------------------------------------------------------
 # Secrets — set via `wrangler secret put <NAME>`. NEVER commit values here.
