@@ -275,22 +275,40 @@ export async function handleRequest(
   }
 
   // ---- Public community reads — anyone with the URL can browse. ----
+  // Wrapped in try/catch so a transient KV hiccup returns a chef-readable
+  // 503 instead of letting the worker crash → opaque "Community worker 500"
+  // → "Load failed" in the SPA (reported by Reddit, Jun 2026).
   if (req.method === 'GET' && url.pathname === '/community/list') {
-    const items = await communityListRecent(env.RATE_LIMIT);
-    return json({ items }, 200);
+    try {
+      const items = await communityListRecent(env.RATE_LIMIT);
+      return json({ items }, 200);
+    } catch (err) {
+      console.warn('[community] /list failed:', err instanceof Error ? err.message : String(err));
+      return json({ error: 'Community feed temporarily unavailable. Please try again in a moment.' }, 503);
+    }
   }
   // GET /community/by-author/:clerkId — public chef-profile listing.
   const communityByAuthorMatch = /^\/community\/by-author\/(.+)$/.exec(url.pathname);
   if (req.method === 'GET' && communityByAuthorMatch) {
     const clerkId = decodeURIComponent(communityByAuthorMatch[1]);
-    const items = await communityListByAuthor(env.RATE_LIMIT, clerkId);
-    return json({ items }, 200);
+    try {
+      const items = await communityListByAuthor(env.RATE_LIMIT, clerkId);
+      return json({ items }, 200);
+    } catch (err) {
+      console.warn('[community] /by-author failed:', err instanceof Error ? err.message : String(err));
+      return json({ error: 'Community feed temporarily unavailable. Please try again in a moment.' }, 503);
+    }
   }
   const communityGetMatch = /^\/community\/(cr_[A-Za-z0-9_]+)$/.exec(url.pathname);
   if (req.method === 'GET' && communityGetMatch) {
-    const record = await communityGet(env.RATE_LIMIT, communityGetMatch[1]);
-    if (!record) return json({ error: 'Not found' }, 404);
-    return json(record, 200);
+    try {
+      const record = await communityGet(env.RATE_LIMIT, communityGetMatch[1]);
+      if (!record) return json({ error: 'Not found' }, 404);
+      return json(record, 200);
+    } catch (err) {
+      console.warn('[community] /get failed:', err instanceof Error ? err.message : String(err));
+      return json({ error: 'Community feed temporarily unavailable. Please try again in a moment.' }, 503);
+    }
   }
 
   // ---- Public contact form — unauth, IP-rate-limited. ----

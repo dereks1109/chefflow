@@ -244,6 +244,24 @@ describe('worker router — community', () => {
     expect(body.items).toEqual([]);
   });
 
+  // Reddit feedback (Jun 2026) — chefs were seeing "Load failed" because
+  // a KV hiccup in /community/list crashed the worker → opaque 500 → the
+  // SPA passed Safari's verbatim "Load failed" through to the page. Now
+  // the route catches and returns a chef-readable 503 the SPA can
+  // distinguish from a network failure.
+  it('GET /community/list returns 503 with a chef-readable message when KV throws', async () => {
+    const brokenKv = {
+      ...env.RATE_LIMIT,
+      get: vi.fn(async () => { throw new Error('KV unreachable'); }),
+    } as unknown as KVNamespace;
+    const brokenEnv = makeEnv({ RATE_LIMIT: brokenKv });
+    const req = new Request('https://api.test/community/list', { method: 'GET' });
+    const res = await handleRequest(req, brokenEnv, verifyRejects, stubFetchClerkTier('free'));
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/temporarily unavailable/i);
+  });
+
   it('POST /community/publish requires auth', async () => {
     const req = new Request('https://api.test/community/publish', {
       method: 'POST',
