@@ -49,16 +49,59 @@ describe('CommunityLibrary', () => {
     expect(screen.getByText('5')).toBeInTheDocument();
   });
 
-  it('renders an error state when the worker fails', async () => {
-    listMock.mockRejectedValue(new Error('worker down'));
+  // Reddit feedback (Jun 2026): chefs saw Safari's verbatim "Load failed"
+  // string and read it as a bug. Now the raw fetch / worker error is
+  // translated through friendlyCommunityError(...) into chef-readable
+  // copy, AND the error state surfaces a Try-again button instead of
+  // dead-ending the chef.
+
+  it('network failure renders connection-prompt copy, not the raw "Load failed" string', async () => {
+    // Safari's TypeError shows "Load failed"; Chrome shows "Failed to fetch".
+    listMock.mockRejectedValue(new Error('Load failed'));
     render(
       <MemoryRouter>
         <CommunityLibrary />
       </MemoryRouter>,
     );
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent(/worker down/);
+      expect(screen.getByRole('alert')).toHaveTextContent(/check your connection/i);
     });
+    expect(screen.queryByText(/Load failed/)).toBeNull();
+  });
+
+  it('worker 5xx renders the temporarily-unavailable copy', async () => {
+    listMock.mockRejectedValue(new Error('Community worker 503'));
+    render(
+      <MemoryRouter>
+        <CommunityLibrary />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/temporarily unavailable/i);
+    });
+  });
+
+  it('Try again button re-fires the fetch and recovers when the next call succeeds', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    // First call fails, second resolves to empty list.
+    listMock
+      .mockRejectedValueOnce(new Error('Load failed'))
+      .mockResolvedValueOnce([]);
+    render(
+      <MemoryRouter>
+        <CommunityLibrary />
+      </MemoryRouter>,
+    );
+    // Error state appears first.
+    const retry = await screen.findByTestId('community-retry');
+    expect(retry).toBeInTheDocument();
+    // Clicking retry re-runs the effect → empty-state heading appears.
+    await user.click(retry);
+    await waitFor(() => {
+      expect(screen.getByText(/No shared recipes yet/i)).toBeInTheDocument();
+    });
+    expect(listMock).toHaveBeenCalledTimes(2);
   });
 
   it('renders the bundled demo cover photo when a community summary points back at a known demo via sourceLocalId', async () => {

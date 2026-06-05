@@ -12,11 +12,30 @@ type LoadState =
   | { kind: 'error'; message: string }
   | { kind: 'ready'; items: CommunityRecipeSummary[] };
 
+// Translate the raw fetch / worker error into copy a chef can act on.
+// Reddit feedback (Jun 2026): Safari's native "Load failed" leaked
+// through verbatim, reading as a bug instead of a transient network
+// blip. Pair categories with the worker's structured 503 so the chef
+// knows whether to retry or report.
+export function friendlyCommunityError(raw: string): string {
+  if (/load failed|failed to fetch|networkerror/i.test(raw)) {
+    return "Couldn't reach the community feed. Check your connection and try again.";
+  }
+  if (/community worker 5\d\d/i.test(raw)) {
+    return 'Community feed is temporarily unavailable. Please try again in a moment.';
+  }
+  return 'Something went wrong loading the community feed.';
+}
+
 export default function CommunityLibrary() {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  // Bumping `generation` re-fires the useEffect — the Retry button uses
+  // this instead of duplicating the fetch + cancellation pattern inline.
+  const [generation, setGeneration] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setState({ kind: 'loading' });
     listCommunityRecipes()
       .then((items) => {
         if (!cancelled) setState({ kind: 'ready', items });
@@ -29,7 +48,7 @@ export default function CommunityLibrary() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [generation]);
 
   if (state.kind === 'loading') {
     return <div className="p-6 text-slate-500">Loading community…</div>;
@@ -39,7 +58,17 @@ export default function CommunityLibrary() {
     return (
       <section className="p-6 max-w-md mx-auto text-center">
         <h1 className="text-xl font-bold">Community</h1>
-        <p className="mt-2 text-rose-600 dark:text-rose-400" role="alert">{state.message}</p>
+        <p className="mt-2 text-rose-600 dark:text-rose-400" role="alert">
+          {friendlyCommunityError(state.message)}
+        </p>
+        <button
+          type="button"
+          onClick={() => setGeneration((g) => g + 1)}
+          className="btn-secondary mt-4"
+          data-testid="community-retry"
+        >
+          Try again
+        </button>
       </section>
     );
   }
